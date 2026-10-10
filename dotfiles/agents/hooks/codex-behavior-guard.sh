@@ -40,6 +40,6 @@ type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 decider="$(dirname "$0")/lib/codex_behavior.py"
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-command -v -- "$python_bin" >/dev/null 2>&1 && [ -r "$decider" ] || exit 0
-printf '%s' "$payload" | "$python_bin" "$decider" 2>/dev/null
+[ -r "$decider" ] || exit 0
+hook_decide "$python_bin" "$decider"
 exit 0

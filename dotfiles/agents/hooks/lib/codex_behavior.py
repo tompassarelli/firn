@@ -1254,7 +1254,7 @@ def main():
     try:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError:
-        return 0
+        return 65
     decision = decide(event) if isinstance(event, dict) else None
     if decision:
         print(json.dumps(decision))

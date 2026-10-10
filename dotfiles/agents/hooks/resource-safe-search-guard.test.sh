@@ -7,6 +7,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/resource-safe-search-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/resource-safe-search-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
+export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
 ACTIVATION="$SCRATCH/activation.json"
 CONTAINER="$SCRATCH/project"

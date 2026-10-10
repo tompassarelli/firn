@@ -16,16 +16,16 @@ esac
 
 decider="$(dirname "$0")/lib/spawn_capacity.py"
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-command -v -- "$python_bin" >/dev/null 2>&1 && [ -r "$decider" ] || exit 0
-decision="$(printf '%s' "$payload" | "$python_bin" "$decider" 2>/dev/null)"
-[ -n "$decision" ] || exit 0
-
-# Only a refusal pays for the activation lookup behind the kill-switch.
+[ -r "$decider" ] || exit 0
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
 # shellcheck disable=SC1090,SC1091
 . "$authoring_killswitch" 2>/dev/null || true
+decision="$(hook_decide "$python_bin" "$decider")"
+[ -n "$decision" ] || exit 0
+
+# Only a refusal pays for the activation lookup behind the kill-switch.
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 printf '%s\n' "$decision"
 exit 0

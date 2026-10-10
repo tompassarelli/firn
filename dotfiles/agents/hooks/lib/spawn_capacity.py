@@ -223,7 +223,7 @@ def main():
     try:
         event = json.loads(sys.stdin.read() or "{}")
     except ValueError:
-        return 0
+        return 65
     reason = check(event) if isinstance(event, dict) else None
     if reason:
         print(json.dumps({

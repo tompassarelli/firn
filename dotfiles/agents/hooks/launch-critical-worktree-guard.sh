@@ -103,12 +103,10 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 . "$authoring_killswitch" 2>/dev/null || true
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
-command -v python3 >/dev/null 2>&1 || exit 0
-
 # The decision lives in lib/launch_critical_decide.py so it can be tested
 # directly (launch-critical-worktree-guard.test.py) rather than through a
 # heredoc. Fail-open on any error, as everywhere else in this guard.
-decision="$(printf '%s' "$payload" | python3 "$(dirname "$0")/lib/launch_critical_decide.py" 2>/dev/null)" || exit 0
+decision="$(hook_decide python3 "$(dirname "$0")/lib/launch_critical_decide.py")"
 [ -n "$decision" ] || exit 0
 
 # A GITIGNORED path can never make the tree tracked-dirty and holds no human

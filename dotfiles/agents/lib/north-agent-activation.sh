@@ -17,9 +17,13 @@ north_agent_unit_active() {
   activation="$(north_agent_activation_path)" || return 1
   python_bin="${NORTH_AGENT_PYTHON:-python3}"
   if [[ "$python_bin" != */* ]]; then
-    python_bin="$(command -v -- "$python_bin")" || return 1
+    python_bin="$(command -v -- "$python_bin")" || python_bin=''
   fi
-  [ -r "$activation" ] && [ -x "$python_bin" ] || return 1
+  [ -r "$activation" ] || return 1
+  if [ ! -x "$python_bin" ]; then
+    ! type hook_error >/dev/null 2>&1 || hook_error missing-interpreter
+    return 1
+  fi
 
   "$python_bin" - "$activation" "$wanted_kind" "$wanted_id" 2>/dev/null <<'PY'
 import json

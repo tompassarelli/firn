@@ -49,7 +49,7 @@ LIMIT_S = 60
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
-    sys.exit(0)
+    sys.exit(65)
 if not isinstance(data, dict) or data.get("tool_name") != "Bash":
     sys.exit(0)
 agent_type = data.get("agent_type")
@@ -146,5 +146,5 @@ print(json.dumps({
 }))
 PYEOF
 
-printf '%s' "$payload" | "${NORTH_AGENT_PYTHON:-python3}" -c "$PY"
+hook_decide "${NORTH_AGENT_PYTHON:-python3}" -c "$PY"
 exit 0

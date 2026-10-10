@@ -8,6 +8,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_GUARD="$HERE/modern-search-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/modern-search-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
+export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
 ACTIVATION="$SCRATCH/activation.json"
 CODE="$SCRATCH/code"

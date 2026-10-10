@@ -32,7 +32,7 @@ import calendar, json, os, re, sys, time
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
-    sys.exit(0)
+    sys.exit(65)
 if not isinstance(data, dict) or data.get("stop_hook_active") is True:
     sys.exit(0)
 path = data.get("agent_transcript_path")
@@ -150,6 +150,5 @@ print(json.dumps({
 PYEOF
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-command -v -- "$python_bin" >/dev/null 2>&1 || exit 0
-printf '%s' "$payload" | "$python_bin" -c "$PY" 2>/dev/null
+hook_decide "$python_bin" -c "$PY"
 exit 0

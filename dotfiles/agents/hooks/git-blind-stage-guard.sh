@@ -69,7 +69,7 @@ def allow():
 try:
     data = json.load(sys.stdin)
 except Exception:
-    allow()
+    sys.exit(65)
 
 if data.get("tool_name", "") != "Bash":
     allow()
@@ -211,4 +211,4 @@ print(json.dumps({
 sys.exit(0)
 PYEOF
 
-printf '%s' "$payload" | python3 -c "$PY"
+hook_decide python3 -c "$PY"

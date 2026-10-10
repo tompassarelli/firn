@@ -11,6 +11,8 @@ set -uo pipefail
 export PATH="/etc/codex/hooks/runtime:$PATH"
 
 HOOK="$(cd "$(dirname "$0")" && pwd)/launch-critical-worktree-guard.sh"
+ERRORS="$(mktemp)"
+export AGENT_HOOK_ERRORS="$ERRORS"
 pass=0 fail=0
 
 # Guards are OFF in harness.conf on this machine, so every case forces them live
@@ -454,6 +456,17 @@ if [ "$pins_ms" -le $((main_ms + 20)) ]; then pass=$((pass + 1)); else
   fail=$((fail + 1))
   echo "FAIL  pin deny ${pins_ms}ms/call vs main deny ${main_ms}ms/call — the pin path costs more than the rule it mirrors" >&2
 fi
+
+# Injected fault: a decider exception allows silently on the wire but must
+# leave exactly one errors.tsv row.
+: >"$ERRORS"
+out="$(printf '{"tool_name":"Edit","tool_input":["%s/code/x/main"]}' "$HOME" \
+  | AGENT_NO_AUTHORING_HOOKS=0 "$HOOK" 2>&1)"; rc=$?
+rows="$(grep -c $'\tlaunch-critical-worktree-guard\tdecider-exception$' "$ERRORS")"
+if [ "$rc" -eq 0 ] && [ -z "$out" ] && [ "$rows" -eq 1 ]; then pass=$((pass + 1)); else
+  fail=$((fail + 1)); echo "FAIL  forced decider exception: exit=$rc out=$out rows=$rows" >&2
+fi
+rm -f "$ERRORS"
 
 printf '%s\n' "launch-critical-worktree-guard: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

@@ -52,7 +52,7 @@ def allow():
 try:
     envelope = json.load(sys.stdin)
 except Exception:
-    allow()
+    sys.exit(65)
 
 tool = envelope.get("tool_name") or envelope.get("toolName")
 tool_input = envelope.get("tool_input") or envelope.get("toolInput")
@@ -634,4 +634,4 @@ print(json.dumps({
 }))
 PYEOF
 
-printf '%s' "$payload" | python3 -c "$PY" 2>/dev/null || exit 0
+hook_decide python3 -c "$PY"

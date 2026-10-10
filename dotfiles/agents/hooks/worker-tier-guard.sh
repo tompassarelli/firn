@@ -22,7 +22,7 @@ import json, re, sys
 try:
     data = json.loads(sys.stdin.read())
 except Exception:
-    sys.exit(0)
+    sys.exit(65)
 if not isinstance(data, dict) or data.get("tool_name") != "Agent":
     sys.exit(0)
 ti = data.get("tool_input") or {}
@@ -75,14 +75,13 @@ print(json.dumps({"hookSpecificOutput": {
 }}))
 PYEOF
 
-decision="$(printf '%s' "$payload" | "${NORTH_AGENT_PYTHON:-python3}" -c "$PY" 2>/dev/null)"
-[ -n "$decision" ] || exit 0
-
 authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 [ -r "$authoring_killswitch" ] \
   || authoring_killswitch="$(dirname "$0")/../lib/authoring-killswitch.sh"
 # shellcheck disable=SC1090,SC1091
 . "$authoring_killswitch" 2>/dev/null || true
+decision="$(hook_decide "${NORTH_AGENT_PYTHON:-python3}" -c "$PY")"
+[ -n "$decision" ] || exit 0
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 printf '%s\n' "$decision"
 exit 0

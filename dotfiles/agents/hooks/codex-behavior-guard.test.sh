@@ -7,6 +7,7 @@ set -uo pipefail
 HOOK="$(cd "$(dirname "$0")" && pwd)/codex-behavior-guard.sh"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
+export AGENT_HOOK_ERRORS="$scratch/errors.tsv"
 code="$scratch/code"
 game="$code/smashcraft/main"
 mkdir -p "$game" "$code/north/main" "$code/clients/acme/main" "$code/wake/main"

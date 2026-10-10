@@ -12,6 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/spawn-capacity-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/spawn-capacity-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
+export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
 ACTIVATION="$SCRATCH/activation.json"
 STATUS="$SCRATCH/probe.json"
 printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"spawn-capacity-guard","kind":"hook","category":"agents","permission":"on","active":true},{"id":"codex-behavior-guard","kind":"hook","category":"authoring","permission":"on","active":true}]}\n' >"$ACTIVATION"

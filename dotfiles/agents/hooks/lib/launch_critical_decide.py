@@ -1238,11 +1238,8 @@ def main():
     try:
         payload = json.load(sys.stdin)
     except Exception:
-        return 0
-    try:
-        reason = decide(payload)
-    except Exception:
-        return 0  # fail-open
+        return 65
+    reason = decide(payload)
     if reason:
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",

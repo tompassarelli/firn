@@ -49,7 +49,6 @@ case "$payload" in
 esac
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-command -v -- "$python_bin" >/dev/null 2>&1 || exit 0
 
 read -r -d '' PY <<'PYEOF' || true
 import json
@@ -79,7 +78,7 @@ try:
 except (Exception, SystemExit) as error:
     if isinstance(error, SystemExit):
         raise
-    allow()
+    sys.exit(65)
 
 
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
@@ -636,10 +635,7 @@ def inspect_command(text, base, depth=0):
     return inspect_segment(segment, base, depth)
 
 
-try:
-    hit = inspect_command(command, cwd)
-except Exception:
-    allow()
+hit = inspect_command(command, cwd)
 if not hit:
     allow()
 
@@ -665,4 +661,4 @@ print(json.dumps({
 }))
 PYEOF
 
-printf '%s' "$payload" | "$python_bin" -c "$PY" || exit 0
+hook_decide "$python_bin" -c "$PY"

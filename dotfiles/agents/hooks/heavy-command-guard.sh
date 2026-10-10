@@ -48,7 +48,7 @@ def allow():
 try:
     data = json.load(sys.stdin)
 except Exception:
-    allow()
+    sys.exit(65)
 if data.get("tool_name", "") != "Bash":
     allow()
 cmd = (data.get("tool_input", {}) or {}).get("command", "") or ""
@@ -127,6 +127,5 @@ allow()
 PYEOF
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-command -v -- "$python_bin" >/dev/null 2>&1 || exit 0
-printf '%s' "$payload" | "$python_bin" -c "$PY"
+hook_decide "$python_bin" -c "$PY"
 exit 0

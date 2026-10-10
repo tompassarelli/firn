@@ -161,8 +161,8 @@ case "$payload" in
   *) exit 0 ;;
 esac
 
-command -v jq >/dev/null 2>&1 || exit 0 # fail-open
-cmd="$(jq -r '.tool_input.command // empty' <<<"$payload" 2>/dev/null)" || exit 0
+command -v jq >/dev/null 2>&1 || { hook_error missing-interpreter; exit 0; }
+cmd="$(jq -r '.tool_input.command // empty' <<<"$payload" 2>/dev/null)" || { hook_error unparsable-payload; exit 0; }
 [ -n "$cmd" ] || exit 0
 
 # cwd is only needed by the deletion classes + the deny log — extract lazily
