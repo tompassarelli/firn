@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-runtime="$HOME/.local/lib/agy/current/bin/agy"
-[[ -x "$runtime" ]] || { printf 'agy: run agy-runtime-update latest\n' >&2; exit 127; }
-export AGY_CLI_DISABLE_AUTO_UPDATE=1
-exec "$runtime" "$@"

@@ -4,7 +4,7 @@ kind: systemd-timer
 schedule: every 15 min
 owner: modules/worker-ledger/default.bnix
 purpose: Record finished Claude and Codex workers as runs in threads and fill the landings of runs still waiting to land, every 15 minutes.
-relates-to: [dotfiles/bin/worker-ledger, dotfiles/bin/threads]
+relates-to: [north:bin/worker-ledger, north:bin/threads]
 expires: never
 placement: laptop
 ---

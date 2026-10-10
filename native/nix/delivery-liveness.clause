@@ -24,7 +24,7 @@ export delivery-liveness-module()
            services: {firn-delivery-liveness: {
              Unit: {Description: "Firn delivery liveness floor (non-switching)"},
              Service: {Type: "oneshot", ExecStart: "{?home.config.home.homeDirectory}/.local/bin/firn-liveness-floor",
-               Environment: ["NORTH_BIN={?home.config.home.homeDirectory}/.local/bin/north", "PATH={?home.config.home.homeDirectory}/.local/bin:{binary-path([package(path(bash)), package(path(coreutils)), package(path(gawk)), package(path(git)), package(path(nix)), package(path(python3)), package(path(util-linux))])}"],
+               Environment: ["NORTH_BIN={?home.config.home.homeDirectory}/.local/share/north/bin/north", "PATH={?home.config.home.homeDirectory}/.local/bin:{?home.config.home.homeDirectory}/.local/share/north/bin:{binary-path([package(path(bash)), package(path(coreutils)), package(path(gawk)), package(path(git)), package(path(nix)), package(path(python3)), package(path(util-linux))])}"],
                TimeoutStartSec: "30m"}}},
            timers: {firn-delivery-liveness: {Unit: {Description: "Run Firn delivery liveness floor"}, Timer: {OnCalendar: "*:0/30", Persistent: true, RandomizedDelaySec: "5m"}, Install: {WantedBy: ["timers.target"]}}},
            paths: {firn-delivery-liveness: {Unit: {Description: "Refresh Firn delivery liveness when main advances"}, Path: {PathChanged: "{?home.config.home.homeDirectory}/code/nixos-config/main/.git/logs/HEAD"}, Install: {WantedBy: ["paths.target"]}}}}}})}})

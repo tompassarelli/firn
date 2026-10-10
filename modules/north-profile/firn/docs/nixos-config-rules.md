@@ -90,10 +90,10 @@ owner source.
 
 ## CI validation
 
-**The agent config is CI-validated** — `.github/workflows/agent-config.yml`
-runs `scripts/agent-config-check.sh`: it checks the shared instructions, skills,
+**The agent config check lives in North** —
+`north:socrates/scripts/agent-config-check.sh` checks the shared instructions, skills,
 and hooks plus the Codex adapter. Run
-`scripts/agent-config-check.sh --local` to additionally verify live symlinks,
+`~/code/north/main/socrates/scripts/agent-config-check.sh --local` to additionally verify live symlinks,
 the MCP registration, North's SubagentStop provider adapter, and installed
 North's OpenAI provider readiness. Normal output is a grouped summary;
 `--verbose` prints every assertion. This is the anti-rot gate; keep it green.
@@ -175,13 +175,14 @@ paths, types, callers, exports, and targets; never trust a copied inventory.
 Native clients with measured smaller memory use may request an allowance
 through `machine-capacity`'s `--memory-gib` option; see the owning skill for
 admission and scope behavior. Its focused check is
-`nixos-config:dotfiles/agents/skills/machine-capacity/scripts/machine-capacity.test.sh`.
+`north:socrates/skills/machine-capacity/scripts/machine-capacity.test.sh`.
 
 Every dotfile has one source under `dotfiles/`. Prefer an out-of-store symlink
 for user-owned dotfiles, scripts, and live entrypoints. Use a store-managed copy
 only for a named immutability, publication, security, or rollback invariant.
 
-Custom commands are one executable shell file each under `dotfiles/bin/`.
+Machine commands are one executable shell file each under `dotfiles/bin/`;
+agent tools live in `north:bin/`.
 `firn` contains only commands that operate on this repository; general tools
 remain standalone commands. Its CLI is entity-first:
 `<node> <edge> [<leaf>]`.

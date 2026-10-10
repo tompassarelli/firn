@@ -4,7 +4,7 @@
 
 (nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
-        busy (s config.myConfig.modules.users.homeDir "/.local/bin/agents-busy")]
+        busy (s config.myConfig.modules.users.homeDir "/.local/share/north/bin/agents-busy")]
     {:config
       (lib.mkIf config.myConfig.modules.niri.enable
         {:home-manager.users

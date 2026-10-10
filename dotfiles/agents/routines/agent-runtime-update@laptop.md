@@ -10,4 +10,4 @@ placement: laptop
 deadline: 2d
 ---
 
-~/.local/bin/agent-runtime-update
+~/.local/share/north/bin/agent-runtime-update

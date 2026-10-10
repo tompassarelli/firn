@@ -280,8 +280,8 @@
                   (snapshot-revision snapshot) ".service")
        "--description" "Firn agent configuration advisory check"
        "--property=Type=oneshot"
-       (str (snapshot-root snapshot) "/scripts/agent-config-check.sh")
-       "--local"])))
+       "bash" "-c"
+       "exec \"$HOME/code/north/main/socrates/scripts/agent-config-check.sh\" --local"])))
 
 (defn starts-with?
   [text String

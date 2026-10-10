@@ -14,7 +14,7 @@
                    :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot" :Nice 10 :TimeoutStartSec "4min"
               :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.python3]))]
-              :ExecStart (s homeDir "/.local/bin/model-watch --alerts-only")}}
+              :ExecStart (s homeDir "/.local/share/north/bin/model-watch --alerts-only")}}
           :systemd.user.timers.watch-alerts
            {:Unit {:Description description}
             :Timer {:OnCalendar "*:0/5" :AccuracySec "30s" :Persistent true}

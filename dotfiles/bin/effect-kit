@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-# North owns the kit; this keeps a stable command name on PATH.
-set -euo pipefail
-exec bun "${NORTH_HOME:-$HOME/code/north/main}/agent-machinery/scripts/effect-kit.mjs" "$@" # hardcoded-repo-path:allow

@@ -2,9 +2,9 @@
 name: tick
 kind: session-cron
 schedule: 3,13,23,33,43,53 * * * *
-owner: dotfiles/agents/skills/workers/SKILL.md
+owner: north:socrates/skills/workers/SKILL.md
 purpose: Every 10 minutes the lead checks unowned work, worker flags and capacity incidents and acts only on flagged rows, so a quiet tick spawns nothing and rebuilds nothing.
-relates-to: [dotfiles/agents/skills/workers/SKILL.md, dotfiles/agents/skills/workers/references/notes.md, dotfiles/agents/skills/auto-wake/SKILL.md, dotfiles/agents/skills/cloud-workers/SKILL.md, dotfiles/agents/hooks/lead-regrounding.sh, dotfiles/bin/capacity-watchdog, dotfiles/bin/worker-sweep]
+relates-to: [north:socrates/skills/workers/SKILL.md, north:socrates/skills/workers/references/notes.md, north:socrates/skills/auto-wake/SKILL.md, north:socrates/skills/cloud-workers/SKILL.md, north:socrates/hooks/lead-regrounding.sh, north:bin/capacity-watchdog, north:bin/worker-sweep]
 expires: never
 placement: any
 ---

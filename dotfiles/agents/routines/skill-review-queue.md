@@ -10,5 +10,5 @@ placement: laptop
 deadline: 2d
 ---
 
-~/.local/bin/skill-review-queue
+~/.local/share/north/bin/skill-review-queue
 Stays on the laptop: nexus has no valid GitHub token (GH_TOKEN is rejected), so gh cannot update the issue there.

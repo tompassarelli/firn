@@ -20,4 +20,4 @@
       };
     });
   };
-}) "${config.myConfig.modules.users.homeDir}/.local/bin/agents-busy")) config.myConfig.modules.users.username)
+}) "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/agents-busy")) config.myConfig.modules.users.username)

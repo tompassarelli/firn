@@ -4,13 +4,11 @@
 # this file is the entire inventory — there is no separate total to drift.
 # `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
-nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.py	57
-nixos-config/dotfiles/agents/hooks/launch-critical-worktree-guard.test.sh	16
-nixos-config/dotfiles/agents/hooks/session-kill-guard.test.sh	1
-nixos-config/dotfiles/agents/hooks/tripwire-guard.test.sh	2
 nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7
+nixos-config/modules/north-profile/default.test.sh	1
 nixos-config/modules/theme-switcher/default.bnix	1
+nixos-config/native/rebuild.bjs	1
 north/bin/convo.test.sh	2
 north/bin/wc3-login-field.test.sh	1
 north/socrates/hooks/launch-critical-worktree-guard.test.py	57

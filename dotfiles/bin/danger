@@ -1,4 +1,0 @@
-#!/usr/bin/env bash
-# Run a command with --dangerously-skip-permissions appended.
-# Usage: danger <cmd> [args...]
-exec "$@" --dangerously-skip-permissions

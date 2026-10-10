@@ -1,4 +1,0 @@
-interface:
-  display_name: "Convo"
-  short_description: "Recall past agent work across Claude and Codex transcripts"
-  default_prompt: "Use $convo to find where past work, decisions or commands were recorded."

@@ -17,7 +17,7 @@
           Environment = [
             "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.python3 ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/model-watch";
+          ExecStart = "${homeDir}/.local/share/north/bin/model-watch";
         };
       };
       systemd.user.timers.model-watch = {

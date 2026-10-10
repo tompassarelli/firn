@@ -2,9 +2,9 @@
 name: wisp-cloud
 kind: cloud-routine
 schedule: on demand (the lead's tick runs it)
-owner: dotfiles/agents/skills/cloud-workers/SKILL.md
+owner: north:socrates/skills/cloud-workers/SKILL.md
 purpose: The one reusable cloud routine for wisp code-only worker tasks; the lead rewrites its brief per run.
-relates-to: [dotfiles/agents/skills/cloud-workers/SKILL.md, dotfiles/agents/skills/cloud-workers/references/remote-trigger.md, dotfiles/agents/routines/tick.md, https://github.com/tompassarelli/wisp]
+relates-to: [north:socrates/skills/cloud-workers/SKILL.md, north:socrates/skills/cloud-workers/references/remote-trigger.md, dotfiles/agents/routines/tick.md, https://github.com/tompassarelli/wisp]
 expires: never
 placement: any
 ---

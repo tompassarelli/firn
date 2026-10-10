@@ -72,7 +72,3 @@ jobs:
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
         run: bash native/activity_native.test.sh
-
-      - name: Test safe-push argument gate
-        working-directory: firn
-        run: ./dotfiles/bin/safe-push.test.sh

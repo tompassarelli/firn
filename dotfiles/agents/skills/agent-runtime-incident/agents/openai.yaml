@@ -1,4 +1,0 @@
-interface:
-  display_name: "Agent Runtime Incident"
-  short_description: "Contain and close agent runtime incidents"
-  default_prompt: "Use $agent-runtime-incident to contain, investigate, repair, and close this agent-runtime reliability incident."
