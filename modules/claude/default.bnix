@@ -26,4 +26,4 @@
                {:source
                 (config.lib.file.mkOutOfStoreSymlink
                   (s config.home.homeDirectory
-                     "/code/nixos-config/main/dotfiles/agents/claude/agents"))}}})}})}))
+                     "/code/north/main/socrates/claude/agents"))}}})}})}))

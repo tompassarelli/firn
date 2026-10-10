@@ -15,7 +15,7 @@
           CPUWeight = 200;
           MemoryMax = "512M";
           Environment = [ path ];
-          ExecStart = "${homeDir}/.local/bin/capacity-watchdog sample";
+          ExecStart = "${homeDir}/.local/share/north/bin/capacity-watchdog sample";
         };
         Install = {
           WantedBy = [ "default.target" ];
@@ -31,7 +31,7 @@
           Nice = 10;
           TimeoutStartSec = "4h";
           Environment = [ path ];
-          ExecStart = "${homeDir}/.local/bin/git-maintenance-nightly";
+          ExecStart = "${homeDir}/.local/share/north/bin/git-maintenance-nightly";
         };
       };
       systemd.user.timers.git-maintenance-nightly = {
@@ -48,4 +48,4 @@
       };
     });
   };
-}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}")) "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease")) "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}")) "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease")) "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)

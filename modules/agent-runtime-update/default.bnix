@@ -10,8 +10,8 @@
          {:systemd.user.services.agent-runtime-update
            {:Unit {:Description "Twice-daily agent runtime updates" :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot" :TimeoutStartSec "4h"
-              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.bun pkgs.coreutils pkgs.curl pkgs.git pkgs.gh pkgs.nix pkgs.python3 pkgs.zstd pkgs.gnutar pkgs.gzip pkgs.util-linux pkgs.libnotify pkgs.systemd]))]
-              :ExecStart (s homeDir "/.local/bin/agent-runtime-update")}}
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/north/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.bun pkgs.coreutils pkgs.curl pkgs.git pkgs.gh pkgs.nix pkgs.python3 pkgs.zstd pkgs.gnutar pkgs.gzip pkgs.util-linux pkgs.libnotify pkgs.systemd]))]
+              :ExecStart (s homeDir "/.local/share/north/bin/agent-runtime-update")}}
           :systemd.user.timers.agent-runtime-update
            {:Unit {:Description "Twice-daily agent runtime updates"}
             :Timer {:OnCalendar ["02:00" "13:00"] :Persistent true}

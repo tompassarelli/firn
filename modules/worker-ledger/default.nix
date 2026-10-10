@@ -14,7 +14,7 @@
           Nice = 10;
           TimeoutStartSec = "10min";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [
               pkgs.python3
               pkgs.jq
               pkgs.git
@@ -23,8 +23,8 @@
               pkgs.gnugrep
             ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/worker-ledger";
-          ExecStartPost = "${homeDir}/.local/bin/agents usage --refresh";
+          ExecStart = "${homeDir}/.local/share/north/bin/worker-ledger";
+          ExecStartPost = "${homeDir}/.local/share/north/bin/agents usage --refresh";
         };
       };
       systemd.user.timers.worker-ledger = {

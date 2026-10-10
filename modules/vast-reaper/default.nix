@@ -12,9 +12,9 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/vast-reaper";
+          ExecStart = "${homeDir}/.local/share/north/bin/vast-reaper";
         };
       };
       systemd.user.timers.vast-reaper = {

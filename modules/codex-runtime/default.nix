@@ -37,7 +37,7 @@
           Service = {
             Type = "oneshot";
             Environment = [ "PATH=${pkgs.patchelf}/bin:/run/current-system/sw/bin" ];
-            ExecStart = "${homeDir}/.local/bin/codex-runtime-gcroots";
+            ExecStart = "${homeDir}/.local/share/north/bin/codex-runtime-gcroots";
           };
           Install = {
             WantedBy = [ "default.target" ];

@@ -80,7 +80,7 @@
                   {:source
                     (config.lib.file.mkOutOfStoreSymlink
                       (s config.home.homeDirectory
-                        "/code/nixos-config/dotfiles/codex/prompts"))}}
+                        "/code/north/main/socrates/codex/prompts"))}}
                ;; A locked default secret collection stops Codex before a
                ;; session starts: it waits on an unlock prompt that a session
                ;; without a graphical prompter never answers. PAM unlocks only
@@ -99,5 +99,5 @@
                    :Environment
                     [(s "PATH=" pkgs.bash "/bin:" pkgs.systemd "/bin:"
                        pkgs.coreutils "/bin:" pkgs.gnugrep "/bin")]
-                   :ExecStart (s homeDir "/.local/bin/codex-keyring-default")}
+                   :ExecStart (s homeDir "/.local/share/north/bin/codex-keyring-default")}
                  :Install {:WantedBy ["default.target"]}}})}})}))

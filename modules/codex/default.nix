@@ -55,7 +55,7 @@
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md";
         ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
-        ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/codex/prompts";
+        ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/socrates/codex/prompts";
       };
       systemd.user.services.codex-keyring-default = {
         Unit = {
@@ -68,7 +68,7 @@
           Environment = [
             "PATH=${pkgs.bash}/bin:${pkgs.systemd}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin"
           ];
-          ExecStart = "${homeDir}/.local/bin/codex-keyring-default";
+          ExecStart = "${homeDir}/.local/share/north/bin/codex-keyring-default";
         };
         Install = {
           WantedBy = [ "default.target" ];

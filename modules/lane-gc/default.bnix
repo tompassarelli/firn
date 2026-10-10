@@ -12,8 +12,8 @@
             :Service {:Type "oneshot"
               :Nice 10
               :TimeoutStartSec "20min"
-              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils]))]
-              :ExecStart (s homeDir "/.local/bin/lane-gc")}}
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/north/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils]))]
+              :ExecStart (s homeDir "/.local/share/north/bin/lane-gc")}}
           :systemd.user.timers.lane-gc
            {:Unit {:Description description}
             :Timer {:OnBootSec "10min" :OnUnitActiveSec "1h"}

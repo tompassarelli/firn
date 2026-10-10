@@ -12,9 +12,9 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git ]}"
+            "PATH=${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/skill-review-queue";
+          ExecStart = "${homeDir}/.local/share/north/bin/skill-review-queue";
         };
       };
       systemd.user.timers.skill-review-queue = {

@@ -63,5 +63,5 @@
                      ;; not in the system profile. Pin it explicitly.
                      :Environment
                       [(s "PATH=" pkgs.patchelf "/bin:/run/current-system/sw/bin")]
-                     :ExecStart (s homeDir "/.local/bin/codex-runtime-gcroots")}
+                     :ExecStart (s homeDir "/.local/share/north/bin/codex-runtime-gcroots")}
                    :Install {:WantedBy ["default.target"]}}}})}})}))
