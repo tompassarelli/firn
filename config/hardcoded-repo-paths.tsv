@@ -11,3 +11,12 @@ nixos-config/dotfiles/agents/hooks/tripwire-guard.test.sh	2
 nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/theme-switcher/default.bnix	1
+north/bin/convo.test.sh	2
+north/bin/wc3-login-field.test.sh	1
+north/socrates/hooks/launch-critical-worktree-guard.test.py	57
+north/socrates/hooks/launch-critical-worktree-guard.test.sh	16
+north/socrates/hooks/session-kill-guard.test.sh	1
+north/socrates/hooks/tripwire-guard.test.sh	2
+north/socrates/lib/routing.test.sh	1
+north/socrates/scripts/agent-config-check.sh	1
+north/socrates/scripts/agent-config-check.test.sh	1
