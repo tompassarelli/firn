@@ -14,7 +14,7 @@ from pathlib import Path
 
 COMMAND = ["agy", "-p", "/usage", "--output-format", "json"]
 CONVERSATIONS = Path.home() / ".gemini/antigravity-cli/conversations"
-WINDOW_MIN = {"Five Hour": 300, "Weekly": 10080}
+WINDOW_MIN = {"5h": 300, "weekly": 10080}
 
 
 def utc(value):
