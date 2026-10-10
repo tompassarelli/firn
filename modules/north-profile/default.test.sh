@@ -29,11 +29,12 @@ grep -Fq 'native/nix/north-profile.clause' "$checker"
 grep -Fq 'projectNorthClaudeHooks' "$source_file"
 grep -Fq 'projectNorthClaudeHooks' "$generated_file"
 
-jq -e '
+hook_units=$(jq '[.. | objects | select(.kind? == "hook")] | length' "$repo/dotfiles/agents/catalog-config.json")
+jq -e --argjson hook_units "$hook_units" '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 21)
+  | ($commands | length == $hook_units)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin")
