@@ -4,6 +4,25 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/worker-ledger-test.XXXXXX")
 trap 'rm -rf "${scratch:?}"' EXIT
 export THREADS_DB=$scratch/threads.db CLAUDE_CONFIG_DIR=$scratch/claude CODEX_CONFIG_DIR=$scratch/codex
+export AGY_CONFIG_DIR=$scratch/agy LEDGER_HANDOFFS=$scratch/handoffs
+mkdir "$scratch/bin"
+cat >"$scratch/bin/gh" <<'GH'
+#!/usr/bin/env bash
+if [ "$1" = issue ]; then printf '%s\n' '[{"number":446,"labels":[{"name":"theme:balance"}]}]'; exit; fi
+printf '%s\n' '{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}'
+GH
+chmod +x "$scratch/bin/gh"
+export PATH="$scratch/bin:$PATH"
+mkdir -p "$LEDGER_HANDOFFS" "$AGY_CONFIG_DIR/log" "$AGY_CONFIG_DIR/brain/0a0a0a0a-0000-4000-8000-000000000001/.system_generated/logs"
+printf '%s\n' 'Running: #446 hinted Sol high, ETA 00:20Z, a status line the Smashcraft Codex lead already writes.' >"$LEDGER_HANDOFFS/smashcraft-codex-lead-status.md"
+printf '%s\n' 'I1008 printmode.go:202] Print mode: starting (promptLength=9, model="gemini-3.1-pro-high", conversationID="")' \
+  'I1008 server.go:1278] Created conversation 0a0a0a0a-0000-4000-8000-000000000001' >"$AGY_CONFIG_DIR/log/cli-20261008_000000.log"
+printf '%s\n' \
+  '{"type":"USER_INPUT","status":"DONE","created_at":"2026-10-08T00:00:00Z","content":"<USER_REQUEST>\nItem: wisp#71\nCategory: research\nLens: break it\n</USER_REQUEST>"}' \
+  '{"type":"PLANNER_RESPONSE","status":"DONE","created_at":"2026-10-08T00:00:00Z","content":"Accepted flaws: 2","input_tokens":800,"output_tokens":120,"cache_read_tokens":100}' \
+  >"$AGY_CONFIG_DIR/brain/0a0a0a0a-0000-4000-8000-000000000001/.system_generated/logs/transcript_full.jsonl"
+sqlite3 "$AGY_CONFIG_DIR/conversation_summaries.db" "create table conversation_summaries(conversation_id text, workspace_uris text, last_modified_time datetime);
+  insert into conversation_summaries values('0a0a0a0a-0000-4000-8000-000000000001', '[\"file:///tmp/claude-1000/p/5e55e55e-0000-4000-8000-000000000002/scratchpad\"]', '2026-10-08 00:07:00.123456789+00:00')"
 python3 - "$CODEX_CONFIG_DIR" <<'PY'
 import json,sys
 from pathlib import Path
@@ -25,6 +44,7 @@ def worker(name,brief='',finished=False):
 worker('finished',finished=True)
 worker('running','Item: wisp#70\nCategory: native-check\nETA: 20 minutes',finished=True)
 worker('untracked',finished=True)
+worker('hinted',finished=True)
 rs=[json.loads(l) for l in (directory/'rollout-untracked.jsonl').read_text().splitlines()]
 commit='text(await tools.exec_command({cmd:"git commit -m \\"Derive spawn (firn#9)\\"",workdir:"/w"}))'
 rs[2:2]=[row('response_item',dict(type='custom_tool_call',name='exec',call_id='u1',input=commit),1),
@@ -70,7 +90,7 @@ print('PASS a run expects a landing exactly when its transcript ran a git commit
 l=dict(c.execute("select agent,landed from runs where agent like 'commit%'").fetchall())
 assert l=={'commit1':1,'commit2':0},l
 print('PASS a commit whose subject is on origin/main counts as landed though the run never pushed')
-r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1','commit2')").fetchall()
+r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1','commit2','hinted') and tier like 'gpt%'").fetchall()
 want=[('finished','firn#5','prior','gpt-6.1-sol medium','tooling',5,10,321,900,'done'),
       ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done'),
       ('untracked','firn#9',None,'gpt-6.1-sol medium','unknown',5,None,321,900,'done'),
@@ -85,6 +105,17 @@ print('PASS a Codex worker that reran a passing farm check twice and pushed noth
 assert c.execute('select count(*) from claims').fetchone()[0]==0,'finished workers must release holds'
 print('PASS [spec #5] Codex plaintext spawn brief records fields, model/effort, timing and tokens exactly once')
 print('PASS [firn#11] a Codex worker with no readable brief is recorded, its Item taken from the issue its commit names')
+h=c.execute("select item,eta_min from runs where agent='hinted'").fetchone()
+assert h==('smashcraft#446',20),h
+assert c.execute("select category from runs where agent='hinted'").fetchone()==('balance-tuning',)
+print('PASS [firn#11] a Codex worker named in its lead status line takes that line Item and ETA')
+cols="item,session,tier,category,minutes,tokens,peak_ctx,flaws,lens,staffed,review_requested,turns"
+g=c.execute(f"select {cols} from runs where agent='0a0a0a0a-0000-4000-8000-000000000001'").fetchone()
+assert g==('wisp#71','5e55e55e-0000-4000-8000-000000000002','gemini-3.1-pro high','research',7,120,900,2,'break it',
+           '2026-10-08T00:00:00Z','2026-10-08T00:07:00Z',1),g
+k=c.execute(f"select {cols} from runs where agent='commit1'").fetchone()
+assert all(v is not None for v in k[2:6]+k[9:]),k
+print('PASS [firn#11] an agy run is recorded with the same fields as a Claude run: brief fields, parent session, model and effort, timing, tokens, stages')
 st=c.execute("select staffed,first_commit,review_requested,landed_at is not null,turns from runs where agent in ('commit1','untracked') order by agent").fetchall()
 assert st==[('2026-10-08T00:00:00Z','2026-10-08T00:02:00Z','2026-10-08T00:03:00Z',1,1),
             ('2026-10-08T00:00:00Z','2026-10-08T00:02:00Z','2026-10-08T00:05:00Z',0,0)],st
@@ -106,12 +137,6 @@ assert ('commit1','2026-10-08T00:00:00Z','turn') in ev and not [e for e in ev if
 print('PASS [firn#11] a tier set to profile gets per-turn events on its next run, still one run row; routine gets none')
 PY
 
-mkdir "$scratch/bin"
-cat >"$scratch/bin/gh" <<'GH'
-#!/usr/bin/env bash
-printf '%s\n' '{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}'
-GH
-chmod +x "$scratch/bin/gh"
 out=$(PATH="$scratch/bin:$PATH" "$repo/dotfiles/bin/worker-ledger" --summary)
 [[ "$out" =~ tooling[[:space:]]+gpt-6.1-sol[[:space:]]+medium[[:space:]]+1[[:space:]]+1 ]]
 [[ "$out" =~ native-check[[:space:]]+gpt-6.1-sol[[:space:]]+medium[[:space:]]+1[[:space:]]+1 ]]

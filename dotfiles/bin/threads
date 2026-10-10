@@ -556,6 +556,26 @@ def issue_ref(item):
         return None
 
 
+# Issue labels that name a category, first match wins, for runs whose brief is unreadable (Codex encrypts it).
+LABEL_CATEGORY = [("theme:balance", "balance-tuning"), ("theme:netplay", "netcode-determinism"),
+                  ("needs:native-pair", "native-check"), ("needs:native-single", "native-check"),
+                  ("native:running", "native-check"), ("documentation", "docs-policy"),
+                  ("bug", "bug-known-cause"), ("enhancement", "feature")]
+
+
+def label_category(db, item, cache={}):
+    """Category from the item's GitHub labels by LABEL_CATEGORY, one label listing per repo per ingest."""
+    repo, number = parse_ref(item)
+    if repo not in cache:
+        try:
+            cache[repo] = {i["number"]: {l["name"] for l in i["labels"]} for i in json.loads(gh(
+                "issue", "list", "-R", f"{OWNER}/{repo}", "--state", "all", "--limit", "1000", "--json", "number,labels"))}
+        except (Refused, ValueError, TypeError, KeyError):
+            cache[repo] = {}
+    labels = cache[repo].get(number, set())
+    return next((c for label, c in LABEL_CATEGORY if label in labels), None)
+
+
 def derived_item(f, r):
     """The brief's Item, else the issue its commits and issue commands name most (encrypted Codex briefs)."""
     return issue_ref(f.get("item") or r.get("item")) or next(filter(None, map(issue_ref, r.get("refs") or [])), None)
@@ -579,6 +599,7 @@ def cmd_ingest(db, a):
     """Read worker-ledger's JSON rows on stdin. A running worker holds its Item; a finished one
     releases it and becomes a run; a stale one (idle 2 h) releases it. Recorded runs are skipped."""
     added = backfilled = 0
+    unlabeled = []
     with Tx(db):
         for line in sys.stdin:
             if not line.strip():
@@ -613,6 +634,8 @@ def cmd_ingest(db, a):
             if status != "finished":
                 continue
             raw = f.get("category") or r.get("category") or "unknown"
+            if raw == "unknown" and item:
+                unlabeled.append((r["id"], item))
             category = raw if raw in CATEGORIES else "unknown"
             prev = None
             if item and not db.execute(
@@ -642,6 +665,9 @@ def cmd_ingest(db, a):
             event(db, item, "run", r["id"], r["tier"], category=category, brief_category=raw,
                   minutes=r["actual_min"], eta_min=eta, outcome=r["outcome"], note=r.get("note"))
             added += 1
+    labeled = [(c, agent) for agent, item in unlabeled if (c := label_category(db, item))]
+    with Tx(db):
+        db.executemany("UPDATE runs SET category = ? WHERE agent = ?", labeled)
     print(f"threads: {added} runs recorded" + (f", {backfilled} backfilled" if backfilled else "") + f" in {DB}",
           file=sys.stderr)
 

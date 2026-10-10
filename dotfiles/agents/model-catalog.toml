@@ -229,3 +229,121 @@ long_context = "Standard; prompts over 272K input tokens"
 currency = "USD"
 source = "https://developers.openai.com/api/docs/pricing"
 checked = 2026-10-11
+
+# Gemini runs through the Antigravity CLI `agy` on Tom's Google AI plan (gemini-review skill); it takes
+# no staffing band. Keys follow `agy models` (checked 2026-10-11); worker-ledger records its runs as
+# "<model> <effort>".
+
+[models."gemini:3.1-pro-high"]
+model = "gemini-3.1-pro"
+effort = "high"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["adversarial review from another model family", "design review"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.1 Pro; model-level, effort not stated)", rank = 63, score = 40.2, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.1-pro-low"]
+model = "gemini-3.1-pro"
+effort = "low"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["quick second opinion on a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.1 Pro; model-level, effort not stated)", rank = 63, score = 40.2, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.8-flash-high"]
+model = "gemini-3.8-flash"
+effort = "high"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.8-flash-medium"]
+model = "gemini-3.8-flash"
+effort = "medium"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.8-flash-low"]
+model = "gemini-3.8-flash"
+effort = "low"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.7-flash-high"]
+model = "gemini-3.7-flash"
+effort = "high"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.7-flash-medium"]
+model = "gemini-3.7-flash"
+effort = "medium"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.7-flash-low"]
+model = "gemini-3.7-flash"
+effort = "low"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.6-flash-high"]
+model = "gemini-3.6-flash"
+effort = "high"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.6-flash-medium"]
+model = "gemini-3.6-flash"
+effort = "medium"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+[models."gemini:3.6-flash-low"]
+model = "gemini-3.6-flash"
+effort = "low"
+restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+strengths = ["fast review of a public diff"]
+benchmarks = [
+  { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
+value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "USD", monthly_price_note = "Tom's plan per the gemini-review skill; Google publishes no US price on its plan page (aggregators list 19.99)", source = "https://www.cloudzero.com/blog/google-antigravity-pricing/", checked = 2026-10-11, discounts = "none", discount_expiry = "none", discount_source = "https://one.google.com/about/google-ai-plans/", discount_checked = 2026-10-11 }
+
+# Grok: Tom adds it when he signs in; one more worker-ledger adapter then records its runs.
+[models."grok"]
+note = "Tom adds the model, effort and plan when he signs in"

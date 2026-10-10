@@ -171,26 +171,24 @@ except sqlite3.Error as e:
     measured = None
     print(f"measured runs unavailable: {e}")
 
-print("catalog (hand-edited; API prices are comparison only, separate from plan usage):")
-for ref, t in tiers.items():
-    if ref.split(":")[0] not in usable:
-        continue
-    entry = models[ref]
-    value = entry["value"]
-    api = value["api"]
-    request = " (on request)" if ref in cfg.get("on_request", {}) else ""
-    print(f"  {ref}: {t["model"]} {t["effort"]}")
+def show(ref, entry, run_tier):
+    value = entry.get("value", {})
+    api = value.get("api")
+    print(f"  {ref}: {entry["model"]} {entry["effort"]}")
+    if entry.get("restriction"):
+        print(f"    restriction: {entry["restriction"]}")
     print("    strengths: " + "; ".join(entry["strengths"]))
-    options = "/".join(str(price) for price in value["monthly_price_options"])
+    options = "/".join(str(price) for price in value.get("monthly_price_options", []))
     price = value["monthly_price"]
     monthly = "monthly price unknown" if price == "unknown" else f"{value["currency"]} {price}/month"
     print(f"    value: {value["plan"]}; {monthly} "
-          f"({value["monthly_price_note"]}; public options {options} {value["currency"]}/month); "
+          f"({value["monthly_price_note"]}" + (f"; public options {options} {value["currency"]}/month" if options else "") + "); "
           f"{value["source"]}, checked {value["checked"]}")
-    print(f"    API list comparison: {api["currency"]} {api["input_per_million"]} input / "
-          f"{api["output_per_million"]} output per million tokens ({api["context"]}); "
-          f"{api["long_input_per_million"]} input / {api["long_output_per_million"]} output "
-          f"({api["long_context"]}); {api["source"]}, checked {api["checked"]}")
+    if api:
+        print(f"    API list comparison: {api["currency"]} {api["input_per_million"]} input / "
+              f"{api["output_per_million"]} output per million tokens ({api["context"]}); "
+              f"{api["long_input_per_million"]} input / {api["long_output_per_million"]} output "
+              f"({api["long_context"]}); {api["source"]}, checked {api["checked"]}")
     print(f"    discounts: {value["discounts"]}; expiry {value["discount_expiry"]}; "
           f"{value["discount_source"]}, checked {value["discount_checked"]}")
     benchmarks = entry["benchmarks"]
@@ -204,9 +202,32 @@ for ref, t in tiers.items():
     if measured is None:
         print("    measured: unavailable")
     else:
-        n, done = measured.get(run_tiers[ref], (0, 0))
+        n, done = measured.get(run_tier, (0, 0))
         share = f"{done / n:.1%}" if n else "n/a (zero samples)"
         print(f"    measured: {n} runs; {done} done; done share {share}")
+
+print("catalog (hand-edited; API prices are comparison only, separate from plan usage):")
+for ref, t in tiers.items():
+    if ref.split(":")[0] in usable:
+        show(ref, {**models[ref], "model": t["model"], "effort": t["effort"]}, run_tiers[ref])
+others = {}
+for ref, entry in models.items():
+    if ref.split(":")[0] not in providers:
+        others.setdefault(ref.split(":")[0], []).append(entry)
+for provider, entries in others.items():
+    first = entries[0]
+    if not first.get("model"):
+        print(f"{provider} (no staffing band): not set up ({first.get("note", "no model yet")})")
+        continue
+    value = first["value"]
+    print(f"{provider} (no staffing band): {value["plan"]}, {value["currency"]} {value["monthly_price"]}/month; {value["source"]}, checked {value["checked"]}")
+    if first.get("restriction"):
+        print(f"  restriction: {first["restriction"]}")
+    for entry in entries:
+        best = (entry["benchmarks"] or [{}])[0]
+        n, done = (measured or {}).get(f"{entry["model"]} {entry["effort"]}", (0, 0))
+        bench = f"{best["name"].split(" (")[0]} rank {best["rank"]}, checked {best["checked"]}" if best else "no benchmark"
+        print(f"  {entry["model"]} {entry["effort"]}: {bench}; measured {n} runs, {done} done")
 '
 }
 
