@@ -15,6 +15,7 @@
   myConfig.modules.wg-nexus = {
     enable = true;
     role = "hub";
+    phonePublicKey = "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE=";
   };
   myConfig.modules.networkd.staticSopsFile = ../../secrets/nexus/network.yaml;
   imports = [ ./_generated-enables.nix ];
