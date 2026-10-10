@@ -4,7 +4,6 @@
   "role": "operator",
   "rootOrder": [
     "agent-machinery",
-    "webdev",
     "importing-skills",
     "threejs",
     "clause-authoring",
@@ -690,31 +689,7 @@
         }
       ]
     },
-    "delegation": {
-      "distributions": [
-        {
-          "type": "projectPackage",
-          "targets": [
-            "north"
-          ],
-          "owner": {
-            "repo": "north",
-            "path": "agent-machinery/catalog.json"
-          }
-        }
-      ]
-    },
     "babashka-development": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "build-vs-reuse": {
       "distributions": [
         {
           "type": "skill",
@@ -885,16 +860,6 @@
           "targets": [
             "codex",
             "claude"
-          ]
-        }
-      ]
-    },
-    "greenfield": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
           ]
         }
       ]
@@ -1075,16 +1040,6 @@
         }
       ]
     },
-    "terse": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
     "threejs": {
       "distributions": [
         {
@@ -1140,26 +1095,6 @@
       ]
     },
     "verification": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "webdev": {
-      "distributions": [
-        {
-          "type": "skill",
-          "targets": [
-            "shared"
-          ]
-        }
-      ]
-    },
-    "work-ownership": {
       "distributions": [
         {
           "type": "skill",
