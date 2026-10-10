@@ -531,7 +531,7 @@
     "lead-regrounding": {
       "kind": "hook",
       "title": "Lead regrounding tick",
-      "triggerDescription": "Tell a Claude Code lead on its first worker spawn to schedule the 20-minute DAG regrounding CronCreate.",
+      "triggerDescription": "Tell a Claude Code lead on its first worker spawn to schedule the 10-minute tick CronCreate.",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
