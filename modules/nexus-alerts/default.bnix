@@ -13,7 +13,7 @@
         nexusAlert
          (pkgs.writeShellApplication
            {:name "nexus-alert"
-            :runtimeInputs [pkgs.curl pkgs.coreutils]
+            :runtimeInputs [pkgs.curl pkgs.coreutils pkgs.jq]
             :text
              (ms "usage() { echo 'usage: nexus-alert urgent|normal|socrates-test TEXT [TITLE] [CLICK]' >&2; exit 2; }"
                  "[ $# -ge 2 ] && [ $# -le 4 ] || usage"
@@ -21,8 +21,8 @@
                  "title=${3:-Nexus}"
                  "click=${4:-}"
                  (s "token=$(cat " config.sops.secrets.ntfy-publisher-token.path ")")
-                 "curl -fsS -o /dev/null -H @<(printf 'Authorization: Bearer %s\\nPriority: %s\\nTitle: %s\\n' \"$token\" \"$prio\" \"$title\"; [ -z \"$click\" ] || printf 'Click: %s\\n' \"$click\") \\"
-                 (s "  --data-binary \"$2\" \"" baseUrl "/$1\""))})
+                 "curl -fsS -H @<(printf 'Authorization: Bearer %s\\nPriority: %s\\nTitle: %s\\n' \"$token\" \"$prio\" \"$title\"; [ -z \"$click\" ] || printf 'Click: %s\\n' \"$click\") \\"
+                 (s "  --data-binary \"$2\" \"" baseUrl "/$1\" | jq -r .id"))})
         onFailureDropin
          (pkgs.writeTextDir "lib/systemd/system/service.d/10-nexus-notify.conf"
            (ms "[Unit]" "OnFailure=nexus-notify@%n.service" ""))

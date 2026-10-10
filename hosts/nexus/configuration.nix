@@ -20,6 +20,7 @@
     role = "hub";
     phonePublicKey = "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE=";
   };
+  myConfig.modules.checkout-sync.enable = true;
   myConfig.modules.nexus-backup = {
     enable = true;
     recipients = [
