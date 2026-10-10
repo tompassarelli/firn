@@ -21,6 +21,7 @@ written: 2026-10-10
 - Alternate each feature or native-check that Opus medium left unfinished between escalation to Opus high and the cheaper fix (split the feature into smaller boxes; fix the native-check's client, capacity or host cause), and compare closures on those leftovers only; Opus high's overall rates (feature 6/25, native-check 0/8) come from escalated hard cases and do not rank tiers.
 - Treat these ledger-derived rules as experiments: recheck `worker-ledger --summary` after every 10 new closures in a category and change the rule when the numbers move.
 - Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to Haiku first; never judged art, bisects or native checks.
+- Send every other tooling, balance-tuning and bug-known-cause item with a named file and a measured Done when to worker-haiku with `Arm: haiku-trial`, until that category has 5 Haiku closures or 2 Haiku failures; a failure goes to Opus medium with `Follows:`, and the ledger's haiku rows decide the category's default (Haiku 29/32 mechanical at a 1-minute median, 2026-10-10).
 - Use provider benchmarks only before 5 closed category issues at that tier.
 - Size each brief to one box with an ETA of 20 minutes or less, splitting larger work before staffing; set ETA to the category/tier's actual median and label missing evidence uncalibrated.
 - Expect a report at 45 minutes or twice ETA, whichever comes first.
