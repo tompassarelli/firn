@@ -45,8 +45,8 @@ benchmarks = [
 
 [models."codex:sol-medium".value]
 plan = "Tom's ChatGPT Pro via Codex"
-monthly_price = "unknown"
-monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
+monthly_price = 200
+monthly_price_note = "the $200 Pro tier (Tom, 11 Oct); limits under [accounts.codex]"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"
@@ -77,8 +77,8 @@ benchmarks = [
 
 [models."codex:sol-high".value]
 plan = "Tom's ChatGPT Pro via Codex"
-monthly_price = "unknown"
-monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
+monthly_price = 200
+monthly_price_note = "the $200 Pro tier (Tom, 11 Oct); limits under [accounts.codex]"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"
@@ -208,8 +208,8 @@ benchmarks = [
 
 [models."codex:astra".value]
 plan = "Tom's ChatGPT Pro via Codex"
-monthly_price = "unknown"
-monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
+monthly_price = 200
+monthly_price_note = "the $200 Pro tier (Tom, 11 Oct); limits under [accounts.codex]"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"
@@ -365,7 +365,13 @@ overflow_checked = 2026-10-11
 auto_purchase = "off"
 
 [accounts.codex]
-plan = "ChatGPT Pro"
+plan = "ChatGPT Pro $200/month"
+limits = "no five-hour limit; a weekly limit applies (agents usage reads one week window, no 5h bucket)"
+limits_source = "https://learn.chatgpt.com/docs/pricing"
+limits_checked = 2026-10-11
+limits_multiple = "20x Plus through 29 Oct 2026 for subscribers from before 29 Sep, then 10x from 30 Oct; secondary sources only, unconfirmed: OpenAI's Pro comparison article (help.openai.com/en/articles/9793128) answered 403"
+limits_multiple_source = "https://threatfrontier.com/articles/chatgpt-pro-100-vs-200-5-vs-20-usage-explained-2026; https://www.morphllm.com/codex-pricing"
+limits_multiple_checked = 2026-10-11
 standard = "plan"
 fast = "plan"
 fast_note = "Fast uses included subscription limits at 2.5x the Standard rate; purchased credits are billed at 2x. Enabled with service_tier = \"fast\" and [features].fast_mode = true; rollouts record service_tier priority"
