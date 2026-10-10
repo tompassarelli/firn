@@ -49,6 +49,7 @@
       (providerAdapter "codex-behavior-guard.sh")
       (providerAdapter "lib/codex_behavior.py")
       (providerAdapter "lib/spawn_capacity.py")
+      (providerAdapter "lib/shellcmd.py")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {

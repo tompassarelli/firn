@@ -112,6 +112,14 @@
         "path": "dotfiles/agents/hooks/lib/spawn_capacity.py"
       },
       "path": "lib/spawn_capacity.py"
+    },
+    {
+      "id": "hook-shell-parser",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/lib/shellcmd.py"
+      },
+      "path": "lib/shellcmd.py"
     }
   ],
   "registrations": {
