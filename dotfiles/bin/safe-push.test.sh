@@ -11,6 +11,10 @@ shim_main() {
 
   if [[ "$tool" == git && "${1:-}" == -C ]]; then shift 2; fi
 
+  if [[ "$tool" == gitleaks && -n "${SAFE_PUSH_TEST_REAL_GITLEAKS:-}" && " $* " == *" --config "* ]]; then
+    exec "$SAFE_PUSH_TEST_REAL_GITLEAKS" "$@"
+  fi
+
   if [[ "$tool" == gitleaks && -n "${SAFE_PUSH_TEST_REAL_RACE:-}" \
         && ! -s "${SAFE_PUSH_TEST_STATE:?}" ]]; then
     case "$SAFE_PUSH_TEST_REAL_RACE" in
@@ -188,6 +192,10 @@ shim_main() {
       ;;
     git:push|git:fetch|git:update-ref|git:ls-tree) ;;
     gitleaks:detect|gitleaks:dir) ;;
+    gh:repo)
+      [ "${SAFE_PUSH_TEST_VISIBILITY:-PUBLIC}" != fail ] || return 1
+      printf '%s\n' "${SAFE_PUSH_TEST_VISIBILITY:-PUBLIC}"
+      ;;
     *) return 2 ;;
   esac
 }
@@ -208,6 +216,8 @@ state="$scratch/state"
 : >"$state"
 ln -s "$(readlink -f "${BASH_SOURCE[0]}")" "$scratch/bin/git"
 ln -s "$(readlink -f "${BASH_SOURCE[0]}")" "$scratch/bin/gitleaks"
+# The real deny-list must not leak into the suite; cases opt in with a fixture.
+export SAFE_PUSH_DENYLIST="$scratch/absent-denylist.toml"
 
 case_output=''
 case_status=0
@@ -640,6 +650,68 @@ expect_status nonzero
 expect_output 'is symbolic'
 [ "$(real_remote_state)" = "$remote_before" ] \
   || fail 'symbolic destination refusal mutated the remote'
+
+# The public deny-list gate runs real gitleaks on a fake private term: a public
+# destination with a match is refused with redacted findings and nothing pushed;
+# a clean public push, a PRIVATE destination and an absent deny-list publish.
+fixture_denylist="$scratch/denylist.toml"
+cat >"$fixture_denylist" <<'TOML'
+title = "safe-push test deny-list"
+[[rules]]
+id = "fake-private-term"
+description = "fake private identity term"
+regex = '''zebra-quokka-7731'''
+TOML
+real_gitleaks="$(command -v gitleaks)"
+gh_bin="$scratch/gh-bin"
+mkdir -p "$gh_bin"
+ln -s "$(readlink -f "${BASH_SOURCE[0]}")" "$gh_bin/gh"
+commit_private_term() {
+  printf 'owner: zebra-quokka-7731\n' >"$real_repo/identity.txt"
+  "$real_git" -C "$real_repo" add identity.txt
+  "$real_git" -C "$real_repo" commit -qm 'add identity'
+}
+run_denylist_case() {
+  PATH="$gh_bin:$PATH" SAFE_PUSH_TEST_VISIBILITY="$1" \
+    SAFE_PUSH_TEST_REAL_GITLEAKS="$real_gitleaks" run_real_case ''
+}
+expect_published() {
+  [ "$("$real_git" -C "$real_repo" rev-parse main)" = "$("$real_git" --git-dir="$real_remote" rev-parse refs/heads/main)" ] \
+    || fail "$1"
+}
+
+make_real_fixture denylist-public-finding
+commit_private_term
+remote_before="$(real_remote_state)"
+SAFE_PUSH_DENYLIST="$fixture_denylist" run_denylist_case PUBLIC
+expect_status nonzero
+expect_output "matched the deny-list $fixture_denylist"
+expect_output 'belongs in south; NOT pushed'
+expect_output 'fake-private-term'
+expect_output 'identity.txt'
+if grep -Fq 'zebra-quokka-7731' <<<"$case_output"; then fail 'deny-list refusal printed the matched value'; fi
+grep -Fq "gh <repo> <view> <$real_remote>" "$real_trace" || fail 'deny-list gate did not ask gh for visibility'
+[ "$(real_remote_state)" = "$remote_before" ] || fail 'deny-list refusal mutated the remote'
+
+make_real_fixture denylist-public-clean
+SAFE_PUSH_DENYLIST="$fixture_denylist" run_denylist_case PUBLIC
+expect_status zero
+grep -Fq "<--config> <$fixture_denylist>" "$real_trace" || fail 'public destination skipped the deny-list scan'
+expect_published 'clean public push did not publish'
+
+make_real_fixture denylist-private
+commit_private_term
+SAFE_PUSH_DENYLIST="$fixture_denylist" run_denylist_case PRIVATE
+expect_status zero
+if grep -Fq -- '<--config>' "$real_trace"; then fail 'PRIVATE destination ran the deny-list scan'; fi
+expect_published 'PRIVATE destination push did not publish'
+
+make_real_fixture denylist-absent
+commit_private_term
+run_denylist_case PUBLIC
+expect_status zero
+if grep -Eq -- '^gh |<--config>' "$real_trace"; then fail 'absent deny-list still ran the gate'; fi
+expect_published 'absent deny-list push did not publish'
 
 # Each race is planted by the gitleaks process after the scan begins. The exact
 # real remote ref set must remain unchanged; a mocked "push was not called" is

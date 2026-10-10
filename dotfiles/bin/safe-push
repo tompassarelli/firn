@@ -188,6 +188,29 @@ check_instruction_limits() {
   "$helper" --repo "$repo_root" --ref "$1"
 }
 
+# Public deny-list: private identity values never reach a public repository.
+# Absent deny-list means no gate; an unknown visibility fails closed.
+denylist="${SAFE_PUSH_DENYLIST:-$HOME/code/south/main/privacy/public-denylist.toml}"
+origin_visibility=""
+resolve_origin_visibility() {
+  [ -f "$denylist" ] && [ -z "$origin_visibility" ] || return 0
+  origin_visibility=$(gh repo view "$1" --json visibility -q .visibility 2>/dev/null) || origin_visibility=""
+  [ -n "$origin_visibility" ] || origin_visibility=UNKNOWN
+}
+
+denylist_scan() {
+  [ -f "$denylist" ] || return 0
+  resolve_origin_visibility "$origin_url"
+  case "$origin_visibility" in PRIVATE|INTERNAL) return 0 ;; esac
+  local findings
+  if findings=$(gitleaks detect --no-banner --redact --verbose --config "$denylist" --log-opts="$1" 2>&1); then
+    return 0
+  fi
+  printf '%s\n' "$findings"
+  echo "safe-push: ✗ PRIVATE VALUE for a $origin_visibility repository matched the deny-list $denylist — it belongs in south; NOT pushed."
+  return 1
+}
+
 remote_destination_snapshot() {
   local output value ref extra count=0 oid=""
   output=$(git ls-remote --symref "$origin_url" "$destination_ref") \
@@ -466,6 +489,7 @@ if [ -n "$tag" ]; then
   if [ "$(git rev-list --count "${tag_scan_revs[@]}")" -gt 0 ]; then
     gitleaks detect --no-banner --redact --log-opts="$tag_scan_range" \
       || { echo "safe-push: ✗ SECRET DETECTED in tag commit history — fix it; NOT pushed."; exit 1; }
+    denylist_scan "$tag_scan_range" || exit 1
   fi
 
   git cat-file -p "$tag_oid" > "$tmpd/tag-object.txt"
@@ -705,6 +729,7 @@ check_candidate() {
   if sync_dependencies >>"$log" 2>&1 \
       && check_instruction_limits "$head" >>"$log" 2>&1 \
       && gitleaks detect --no-banner --redact --log-opts="$base..$head" >>"$log" 2>&1 \
+      && denylist_scan "$base..$head" >>"$log" 2>&1 \
       && (cd "$repo_root" && printf 'refs/heads/%s %s refs/heads/%s %s\n' "$train_branch" "$head" "$to" "$base" \
         | "$hook" origin "$lock_url") 2>&1 | tee -a "$log" >&2; then
     return 0
@@ -732,6 +757,7 @@ run_train() {
   [ -n "$base" ] || return 0
   printf 'safe-push: landing train of %s lanes onto origin %s@%s\n' "$n" "$to" "$base"
   capture_repository_state
+  resolve_origin_visibility "$origin_url"
   destination_ref="refs/heads/$to"
   train_branch="safe-push-train-$self_pid"
   local log="${XDG_STATE_HOME:-$HOME/.local/state}/safe-push/train-$self_pid.log"
@@ -1057,6 +1083,7 @@ fi
 echo "safe-push: scanning $scan_range for secrets ($branch_ref@$head_oid -> origin $destination_ref@${destination_oid:-absent})…"
 gitleaks detect --no-banner --redact --log-opts="$scan_range" \
   || { echo "safe-push: ✗ SECRET DETECTED — fix the leak; NOT pushed."; exit 1; }
+denylist_scan "$scan_range" || exit 1
 
 revalidate_repository_state
 publication="${head_oid}:${destination_ref}"
