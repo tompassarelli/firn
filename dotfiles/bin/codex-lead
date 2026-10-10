@@ -2,7 +2,7 @@
 # codex-lead: supervise a Codex lead session from outside, without touching
 # Tom's keyboard or focus. Every call resolves the live app-server daemon
 # socket, because the pooled control symlink can point at a dead daemon.
-#   codex-lead start BRIEF [codex args]  open the lead in a window that does not take focus; prints the thread id
+#   codex-lead start BRIEF [codex args]  open the lead on Sol high (Astra only when Tom names it, via codex args) in a window that does not take focus; prints the thread id
 #   codex-lead id                        newest user-started Codex TUI thread
 #   codex-lead send MESSAGE              deliver a message to the lead now (mid-turn if it is working)
 #   codex-lead goal OBJECTIVE            replace the lead's goal (status active)
@@ -73,7 +73,7 @@ case "$cmd" in
     brief=$(realpath -e "$1") || die "brief not found: $1"; shift
     command -v spawn-quiet >/dev/null || die "spawn-quiet is missing"
     since=$(( $(date +%s) - 1 ))
-    spawn-quiet ghostty --title="codex lead" -e codex "$@" "read $brief and follow it" >/dev/null
+    spawn-quiet ghostty --title="codex lead" -e codex -m gpt-6.1-sol -c model_reasoning_effort=high "$@" "read $brief and follow it" >/dev/null
     t=""
     for _ in $(seq 1 60); do
       t=$(newest_tui "$since"); [ -n "$t" ] && break; sleep 1
