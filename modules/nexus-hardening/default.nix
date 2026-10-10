@@ -75,13 +75,12 @@
     security.auditd.enable = true;
     security.audit.rules = [
       "-w /etc/ssh${creds}"
-      "-w /var/lib/sops-nix${creds}"
       "-w ${homeDir}/.ssh${creds}"
       "-w ${homeDir}/.claude/.credentials.json${creds}"
       "-w ${homeDir}/.codex/auth.json${creds}"
-      "-w /run/wrappers/bin/sudo -p x -k nexus-privesc"
-      "-w /run/wrappers/bin/su -p x -k nexus-privesc"
+      "-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k nexus-privesc"
     ];
+    services.resolved.llmnr = "false";
     systemd.tmpfiles.rules = [
       "d ${homeDir}/.ssh 0700 ${username} users -"
       "d ${homeDir}/.claude 0700 ${username} users -"
