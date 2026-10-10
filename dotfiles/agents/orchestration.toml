@@ -7,23 +7,9 @@
 # claude-only or codex-only: drop the other provider even when signed in.
 mode = "split"
 
-# balanced: the default split of work between tiers.
-# efficiency: weekly usage is running low, so stretch cheaper tiers further
-#   before paying for the next one.
-# performance: a deadline is close, so stronger tiers take work sooner.
-# `agents plan --posture X` tries one for a single run without editing this.
-posture = "balanced"
-
 # Thresholds `agents plan` derives each account's burn/even/conserve state
 # from, against the live `agents usage` snapshot (routing.py applies them).
 usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 95, fast_floor = 10, stale_min = 30, urgent = 1.2, shift = 15, late = 1.5 }
-
-# Per-provider override: that provider's tiers use its own posture column.
-# Example: Claude's weekly usage is low, so Claude gives work up to SOL.
-[claude]
-posture = "efficiency"   # Tom, 9 Oct night: preserve Claude usage, lean on Codex
-
-[codex]
 
 # Per-project intent, Tom's to set: priority (1 first), bar (prototype, solid
 # or critical), and optionally share (% of each plan window) and target (a

@@ -34,8 +34,6 @@ export AGENTS_CLAUDE_BIN="$scratch/bin/claude" AGENTS_CODEX_BIN="$scratch/bin/co
 fixture() {
   cat <<TOML
 mode = "split"
-posture = "balanced"
-[claude]
 ${1:-}
 [tiers."claude:haiku"]
 model = "claude-haiku-5-5"
@@ -74,28 +72,35 @@ export AGENTS_ORCHESTRATION="$scratch/orchestration.toml"
 fixture >"$AGENTS_ORCHESTRATION"
 bands() { grep '^  [0-9]' <<<"$1"; }
 
-# Balanced with both providers is Tom's table.
+# With no project (bar solid) and both providers it is Tom's table.
 out="$("$agents" plan)"
 expected='  0-20 mechanical: claude-haiku-5-5 high (worker-haiku)
   20-50 middle: gpt-6.1-sol medium
   50-75 middle, harder half: gpt-6.1-sol high
   75-95 top: claude-opus-5-5 medium (worker)
   95-100 planning and architecture: claude-opus-5-5 high (worker-high)'
-[[ "$(bands "$out")" == "$expected" ]] || fail "balanced plan: $out"
+[[ "$(bands "$out")" == "$expected" ]] || fail "solid plan: $out"
+grep -Fxq 'mode: split' <<<"$out" || fail "header: $out"
 grep -Fxq 'escalation: claude-haiku-5-5 high (worker-haiku), gpt-6.1-sol medium, gpt-6.1-sol high, claude-opus-5-5 medium (worker), claude-opus-5-5 high (worker-high), then recommend to Tom' <<<"$out" ||
-  fail "balanced escalation: $out"
+  fail "solid escalation: $out"
 
-# Performance widens Opus medium down to the 50th percentile.
-out="$("$agents" plan --posture performance)"
-grep -Fxq '  50-90 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "performance plan: $out"
-
-# Claude in efficiency gives SOL work up to the 85th; planning stays on Opus high.
-fixture 'posture = "efficiency"' >"$AGENTS_ORCHESTRATION"
+# A critical project widens Opus medium down to the 50th percentile; a solid one beside it keeps its own bands.
+fixture '[projects.a]
+bar = "critical"
+[projects.b]
+bar = "solid"' >"$AGENTS_ORCHESTRATION"
 out="$("$agents" plan)"
-grep -Fxq 'mode: split, posture: balanced (claude efficiency)' <<<"$out" || fail "override header: $out"
-grep -Fxq '  50-85 middle, harder half: gpt-6.1-sol high' <<<"$out" || fail "claude efficiency: $out"
+grep -Fxq 'bands for bar solid (b; difficulty percentile: start tier):' <<<"$out" || fail "solid header: $out"
+grep -Fxq 'bands for bar critical (a; difficulty percentile: start tier):' <<<"$out" || fail "critical header: $out"
+grep -Fxq '  50-90 top: claude-opus-5-5 medium (worker)' <<<"$out" || fail "critical plan: $out"
+
+# A prototype project gives SOL work up to the 85th; planning stays on Opus high.
+fixture '[projects.a]
+bar = "prototype"' >"$AGENTS_ORCHESTRATION"
+out="$("$agents" plan)"
+grep -Fxq '  55-85 middle, harder half: gpt-6.1-sol high' <<<"$out" || fail "prototype: $out"
 grep -Fxq '  98-100 planning and architecture: claude-opus-5-5 high (worker-high)' <<<"$out" ||
-  fail "claude efficiency planning: $out"
+  fail "prototype planning: $out"
 fixture >"$AGENTS_ORCHESTRATION"
 
 # Codex-only: every band is SOL, the dropped ranges say why, and escalation ends at Tom.
@@ -122,7 +127,7 @@ fi
 grep -Fq 'recommend to Tom' <<<"$out" || fail "no-provider plan: $out"
 
 # On-request tiers never appear.
-for args in "" "--posture performance" "--posture efficiency" "--mode codex-only"; do
+for args in "" "--mode codex-only"; do
   # shellcheck disable=SC2086
   ! "$agents" plan $args | grep -q astra || fail "plan $args names Astra"
 done
@@ -157,7 +162,6 @@ db.commit()
 PY
 cat >"$AGENTS_ORCHESTRATION" <<'TOML'
 mode = "split"
-posture = "balanced"
 usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 95, fast_floor = 10, stale_min = 30, urgent = 1.2, shift = 15, late = 1.5 }
 [projects.muove]
 priority = 1
@@ -183,4 +187,4 @@ out="$("$agents" plan --state codex=burn)"
 grep -Fq 'account codex: state burn (--state), ' <<<"$out" || fail "--state codex=burn: $out"
 [[ "$(grep '^account claude:' <<<"$out")" == "$base_claude" ]] || fail "--state codex changed claude: $out"
 
-printf 'ok: agents plan derives bands from tier starts, posture and sign-ins; account states from usage and overrides; scenarios replay\n'
+printf 'ok: agents plan derives bands from tier starts, project bars and sign-ins; account states from usage and overrides; scenarios replay\n'

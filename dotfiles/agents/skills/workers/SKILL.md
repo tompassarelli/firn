@@ -11,7 +11,7 @@ written: 2026-10-10
 ## Staff
 
 - The chain of command is `agents org show`: Tom's top-level session is his proxy (a SessionStart hook gives it the role), and each domain has a resident lead session started with `agents lead start` from [the lead brief template](references/lead-brief.md), which covers layering, escalation and finishing. Every brief you write begins with `Delegation: role=<worker|sub-lead> budget=<n>` below your own budget; the spawn gate refuses at budget 0.
-- Run `agents plan` for signed-in providers. `worker-ledger --recommend '<Category and facet lines>'` picks the tier; `worker-ledger --summary` shows category success.
+- Run `agents plan` for signed-in providers. `agents usage` for live headroom; `agents plan` applies it; never pick provider or fast by hand. `worker-ledger --recommend '<Category and facet lines>'` picks the tier; `worker-ledger --summary` shows category success.
 - Pick ready work with `threads ready`; read its Done when with `threads show repo#N`. Check `threads list` and open issues first, and never duplicate a held item.
 - Brief: Item, Category, goal, files, Done when, ETA (one box, 20 minutes or less), facet lines `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`, `Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and the state checked at spawn (main SHA and CI, lane SHAs, what landed).
 - Category: mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.

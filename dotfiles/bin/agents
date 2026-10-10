@@ -10,16 +10,15 @@ set -uo pipefail
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance] [--state ACCOUNT=burn|even|conserve]... [--at SCENARIO.json]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json] [--gate PROVIDER] [--fast PROVIDER [--domain D]]|org [show|add|remove]|lead start}\n' >&2
+  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--state ACCOUNT=burn|even|conserve]... [--at SCENARIO.json]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json] [--gate PROVIDER] [--fast PROVIDER [--domain D]]|org [show|add|remove]|lead start}\n' >&2
 }
 
 plan() {
   "$(dirname "$(readlink -f "$0")")/update-status"
-  local mode="" posture="" states="" at=""
+  local mode="" states="" at=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --mode) [ $# -ge 2 ] || { usage; exit 2; }; mode=$2; shift 2 ;;
-      --posture) [ $# -ge 2 ] || { usage; exit 2; }; posture=$2; shift 2 ;;
       --state) [ $# -ge 2 ] || { usage; exit 2; }; states="$states $2"; shift 2 ;;
       --at) [ $# -ge 2 ] || { usage; exit 2; }; at=$2; shift 2 ;;
       *) usage; exit 2 ;;
@@ -49,7 +48,7 @@ if bad:
     sys.exit(1)
 ' "$lib" "$at"
   fi
-  AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_POSTURE="$posture" AGENTS_PLAN_CONFIG="$config" \
+  AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_CONFIG="$config" \
     AGENTS_PLAN_CATALOG="$catalog" AGENTS_PLAN_STATES="$states" AGENTS_PLAN_LIB="$lib" \
     AGENTS_PLAN_SELF="$(readlink -f "$0")" \
     AGENTS_CLAUDE_BIN="${AGENTS_CLAUDE_BIN:-claude}" \
@@ -58,7 +57,7 @@ if bad:
 import json, os, sqlite3, subprocess, sys, tomllib
 from pathlib import Path
 
-POSTURES = ("efficiency", "balanced", "performance")
+BARS = ("prototype", "solid", "critical")
 
 def die(msg):
     print(f"agents plan: {msg}", file=sys.stderr)
@@ -86,14 +85,13 @@ elif mode.endswith("-only") and mode[:-5] in providers:
 else:
     die(f"unknown mode {mode!r}; use split, " + ", ".join(p + "-only" for p in providers))
 
-override = os.environ["AGENTS_PLAN_POSTURE"]
-posture = override or cfg.get("posture", "balanced")
-own = {p: cfg.get(p, {}).get("posture", posture) for p in providers}
-if override:
-    own = {p: override for p in providers}
-for p in [posture, *own.values()]:
-    if p not in POSTURES:
-        die(f"unknown posture {p!r}; use " + ", ".join(POSTURES))
+by_bar = {}
+for name, p in cfg.get("projects", {}).items():
+    bar = p.get("bar", "solid")
+    if bar not in BARS:
+        die(f"project {name}: unknown bar {bar!r}; use " + ", ".join(BARS))
+    by_bar.setdefault(bar, []).append(name)
+bars = [b for b in BARS if b in by_bar] or ["solid"]
 
 def run(cmd):
     try:
@@ -114,9 +112,7 @@ def signed_in(name):
         return code == 0 and "Logged in" in out, "codex login status"
     return False, "no sign-in check for this provider"
 
-head = f"mode: {mode}, posture: {posture}"
-moved = [f"{p} {own[p]}" for p in providers if own[p] != posture and p in wanted]
-print(head + (" (" + ", ".join(moved) + ")" if moved else ""))
+print(f"mode: {mode}")
 usable = []
 for name in providers:
     if name not in wanted:
@@ -132,10 +128,10 @@ if not usable:
     print("bands: none; recommend to Tom (no provider is usable)")
     sys.exit(1)
 
-def bands_of(refs):
+def bands_of(refs, bar):
     out, floor = [], 0
     for i, r in enumerate(refs):
-        lo = 0 if i == 0 else max(floor, tiers[r]["start"][POSTURES.index(own[r.split(":")[0]])])
+        lo = 0 if i == 0 else max(floor, tiers[r]["start"][BARS.index(bar)])
         floor = lo
         out.append([lo, 100, r])
     for i in range(len(out) - 1):
@@ -148,9 +144,8 @@ def label(r):
     return f"{t["model"]} {t["effort"]}{agent}"
 
 avail = [r for r in tiers if r.split(":")[0] in usable]
-full = bands_of(list(tiers))
 
-def resolve():
+def resolve(full):
     out, pending = [], None
     for lo, hi, r in full:
         if r in avail:
@@ -162,11 +157,13 @@ def resolve():
         out[-1][1] = 100
     return out
 
-print("bands (difficulty percentile: start tier):")
-for lo, hi, r in resolve():
-    took = [f"{x[2]} {x[0]}-{x[1]}" for x in full if x[2] not in avail and x[0] < hi and x[1] > lo]
-    note = f" (takes {", ".join(took)}: provider dropped)" if took else ""
-    print(f"  {lo}-{hi} {tiers[r].get("role", r)}: {label(r)}{note}")
+for bar in bars:
+    full = bands_of(list(tiers), bar)
+    print(f"bands for bar {bar} ({", ".join(by_bar.get(bar, ["no project"]))}; difficulty percentile: start tier):")
+    for lo, hi, r in resolve(full):
+        took = [f"{x[2]} {x[0]}-{x[1]}" for x in full if x[2] not in avail and x[0] < hi and x[1] > lo]
+        note = f" (takes {", ".join(took)}: provider dropped)" if took else ""
+        print(f"  {lo}-{hi} {tiers[r].get("role", r)}: {label(r)}{note}")
 print("escalation: " + ", ".join(label(r) for r in avail) + ", then recommend to Tom")
 
 catalog_path = os.environ["AGENTS_PLAN_CATALOG"]
