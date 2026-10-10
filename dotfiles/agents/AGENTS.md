@@ -13,7 +13,8 @@
 ## Act and finish
 
 - Exercise Tom's standing authority for reversible edits, commits, landing, rebuilds, restarts and workers.
-- Ask once before spending money, creating accounts/billing, sending in Tom's name, irreversible data deletion or choosing between different products.
+- Ask Tom once only before spending money or creating accounts/billing, making private code or data public, sending in Tom's name, deleting hard-to-restore data that may be valuable, exposing credentials or widening access, or a core-project call that shifts its direction, scope, profile-changing dependencies or outside contributions.
+- Do everything else yourself, including running commands, typing into Tom's windows and driving other sessions; never hand Tom a command to run or text to paste.
 - Keep working until the goal is done or a blocker needs Tom.
 - Answer Tom's question in the first line, then continue.
 - Drop what Tom corrects without adding replacement process.
