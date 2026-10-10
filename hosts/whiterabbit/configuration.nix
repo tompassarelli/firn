@@ -41,9 +41,7 @@
   myConfig.modules.neovim.enable = true;
   myConfig.modules.vscode.enable = true;
   myConfig.modules.mini-serve.enable = true;
-  myConfig.modules.awscli.enable = true;
   myConfig.modules.bitwarden-desktop.enable = true;
-  myConfig.modules.cloudflare-auth.enable = true;
   myConfig.modules.libsecret.enable = true;
   myConfig.modules.proton-autopurge.enable = true;
   myConfig.modules.parted.enable = true;
@@ -65,35 +63,6 @@
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";
   myConfig.modules.airplane.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
-  sops.secrets = {
-    "wireguard-laptop" = { };
-    "vastai-api-key" = {
-      key = "api_key";
-      owner = "tom";
-      mode = "0400";
-    };
-    "bnet" = {
-      key = "";
-      owner = "tom";
-      mode = "0400";
-    };
-  };
-  myConfig.modules.wg-nexus = {
-    enable = true;
-    role = "client";
-  };
   myConfig.modules.nexus-pull.enable = true;
-  networking.wireguard.interfaces.wg0 = {
-    ips = [ "10.8.0.2/24" ];
-    privateKeyFile = config.sops.secrets.wireguard-laptop.path;
-    peers = [
-      {
-        publicKey = "a7JDSXww46/FU458PmIAcHbGTqkwkMBahtmuFyku+z8=";
-        endpoint = "3.18.118.65:51820";
-        allowedIPs = [ "10.8.0.1/32" ];
-        persistentKeepalive = 25;
-      }
-    ];
-  };
   imports = [ ./_generated-enables.nix ];
 }
