@@ -13,7 +13,7 @@ written: 2026-10-09
 - Read `worker-ledger --summary` for category success, closed issues, actual median time and cost.
 - Pick ready work with `threads ready` and read its GitHub Done when through `threads show repo#N`.
 - Put Item, Category, goal, files, Done when and ETA in each brief.
-- Put `Follows: <earlier agent id and tier>` plus the failed evidence in retries, escalations and continuations.
+- Put `Follows: <earlier agent id and tier>` plus the failed evidence in a fresh worker for retries, escalations and continuations; never revive a finished or idle worker by message, because its expired cache makes the message re-read its whole context.
 - Require reports beginning `Done:`, `Not done:` or `Blocked:`.
 - Choose Category from mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.
 - Claim/release shared-resource work through `threads`; treat a running brief as its worker's claim.
