@@ -25,6 +25,7 @@ const sessionSeconds = policy['session-seconds'];
 const sizedClass = policy['sized-class'];
 const sizedResources = policy['sized-resources'];
 const sizingHeadroom = policy['sizing-headroom'];
+const chargedResources = policy['charged-resources'];
 const aggregateSlice = 'agent-capacity.slice';
 // Sibling of session.slice (300), app.slice (100) and agent.slice (20): game
 // clients outrank terminals and batch work but never the compositor.
@@ -456,6 +457,7 @@ function measureScope(root, lease, cgroup) {
   const startedAt = Date.now();
   const samples = [];
   const perClient = new Map();
+  const recent = [];
   const usage = { cpuSeconds: 0, meanCores: 0, peakCores: 0, recentCores: 0, peakMemoryMiB: 0, memoryMiB: 0, gpuSeconds: 0 };
   let count = 0;
   const sample = () => {
@@ -468,6 +470,7 @@ function measureScope(root, lease, cgroup) {
     if (now - then >= peakWindowMilliseconds / 2) {
       usage.recentCores = (usec - before) / 1000 / (now - then);
       usage.peakCores = Math.max(usage.peakCores, usage.recentCores);
+      recent.push(usage.recentCores);
     }
     usage.cpuSeconds = usec / 1e6;
     usage.meanCores = usage.cpuSeconds / Math.max((now - startedAt) / 1000, 1);
@@ -493,7 +496,7 @@ function measureScope(root, lease, cgroup) {
     finish() {
       clearInterval(timer);
       sample();
-      return { ...usage, wallSeconds: (Date.now() - startedAt) / 1000 };
+      return { ...usage, p90Cores: recent.length > 0 ? percentile(recent, 0.9) : null, wallSeconds: (Date.now() - startedAt) / 1000 };
     },
   };
 }
@@ -535,6 +538,29 @@ function sizeFromUsage(command, cores) {
   return {
     name: sizedClass(gpuShare, resources.cpus, resources.memoryMiB), ...resources,
     sizing: { shape, runs: runs.length, basis: 'p90', gpuShare: round(gpuShare) },
+  };
+}
+
+const ownerPrefix = owner => owner.match(/^[A-Za-z]*/)[0];
+
+// Admission charges a declared class what this owner prefix's runs of the command measured.
+function chargeFromUsage(requested, owner, command, cores) {
+  const shape = commandShape(command);
+  const prefix = ownerPrefix(owner);
+  const runs = (readText(usageLogPath()) ?? '').split('\n').slice(-5000).flatMap(line => {
+    try {
+      const entry = JSON.parse(line);
+      return entry.class === requested.name && entry.shape === shape && typeof entry.owner === 'string'
+        && ownerPrefix(entry.owner) === prefix && entry.wallSeconds > 0 ? [entry] : [];
+    } catch {
+      return [];
+    }
+  }).slice(-sizingRuns);
+  const charged = chargedResources(requested.name, cores,
+    runs.map(entry => entry.p90Cores ?? entry.peakCores), runs.map(entry => entry.peakMemoryMiB));
+  return {
+    ...requested, cpus: round(charged.cpus), memoryMiB: Math.ceil(charged.memoryMiB),
+    declared: { cpus: requested.cpus, memoryMiB: requested.memoryMiB }, evidence: { key: `${prefix} ${shape}`, runs: runs.length },
   };
 }
 
@@ -804,6 +830,7 @@ function decision(root, requested, create, ticket = null) {
       leasedCpuCeilings: leased.cpus,
       leasedBatchCpus: leased.batchCpus,
       ...(requested.sizing ? { sizing: requested.sizing } : {}),
+      ...(requested.declared ? { declaredCpus: requested.declared.cpus, declaredMemoryMiB: requested.declared.memoryMiB, evidence: requested.evidence } : {}),
       aggregateCpuLimit: aggregateCpus(profile, signals.cores),
       queuedAhead,
       exclusiveWaiting,
@@ -831,6 +858,7 @@ function decision(root, requested, create, ticket = null) {
       owner: create.owner,
       cpus: requested.cpus,
       memoryMiB: requested.memoryMiB,
+      ...(requested.declared ? { declared: requested.declared, evidence: requested.evidence } : {}),
       createdAt: now,
       expiresAt: create.timeoutSeconds === null ? null : now + create.timeoutSeconds * 1000
         + (create.kind === 'run' ? runLeaseGraceMilliseconds : 0),
@@ -900,6 +928,9 @@ function status(root) {
         kind: lease.kind,
         cpus: lease.cpus,
         memoryMiB: lease.memoryMiB,
+        declaredCpus: lease.declared?.cpus ?? lease.cpus,
+        declaredMemoryMiB: lease.declared?.memoryMiB ?? lease.memoryMiB,
+        evidenceRuns: lease.evidence?.runs ?? 0,
         measured: lease.kind === 'run' ? measuredView(readUsage(root, lease.id)) : null,
         heldSeconds: seconds(now - lease.createdAt),
         remainingSeconds: lease.expiresAt === null ? null : seconds(lease.expiresAt - now),
@@ -963,6 +994,7 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
     fail('cannot establish aggregate CPU limit and native weight', 75);
   }
   const native = requested.name === 'native';
+  const limits = requested.declared ?? requested;
   const admitted = await admit(root, requested, { kind: 'run', owner, timeoutSeconds });
   print(admitted, process.stderr);
   if (admitted.decision !== 'RESERVED') return 75;
@@ -978,8 +1010,8 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
       `--unit=${unit}`,
       `--slice=${leaseSlice(requested.name)}`,
       // A quota-throttled game client stalls for the rest of each period.
-      ...(native ? [] : [`--property=CPUQuota=${requested.cpus * 100}%`]),
-      `--property=MemoryHigh=${requested.memoryMiB}M`,
+      ...(native ? [] : [`--property=CPUQuota=${limits.cpus * 100}%`]),
+      `--property=MemoryHigh=${limits.memoryMiB}M`,
       `--property=RuntimeMaxSec=${timeoutSeconds === null ? 'infinity' : `${timeoutSeconds}s`}`,
       '--property=KillMode=control-group',
       '--', ...command,
@@ -995,9 +1027,11 @@ async function runScoped(root, requested, owner, timeoutSeconds, command) {
     try {
       recordUsage({
         at: new Date().toISOString(), owner, shape: commandShape(command), class: requested.name,
-        reservedCpus: requested.cpus, reservedMemoryMiB: requested.memoryMiB, exitCode,
+        reservedCpus: limits.cpus, reservedMemoryMiB: limits.memoryMiB,
+        chargedCpus: requested.cpus, chargedMemoryMiB: requested.memoryMiB, exitCode,
         wallSeconds: round(usage.wallSeconds), cpuSeconds: round(cpuSeconds),
         meanCores: round(cpuSeconds / Math.max(usage.wallSeconds, 0.001)),
+        p90Cores: round(usage.p90Cores ?? cpuSeconds / Math.max(usage.wallSeconds, 0.001)),
         peakCores: round(Math.max(usage.peakCores, cpuSeconds / Math.max(usage.wallSeconds, 0.001))),
         peakMemoryMiB: Math.round(Math.max(usage.peakMemoryMiB, (rusage?.maxRSS ?? 0) / 1024)),
         gpuSeconds: round(usage.gpuSeconds),
@@ -1145,15 +1179,16 @@ async function main(argv) {
     if (parsed.separator === argv.length || command.length === 0) fail(`${operation} requires -- COMMAND ARG...`);
     const signals = readSignals();
     if (!parsed.values.has('--class') && operation === 'session') fail('session requires --class');
-    const requested = parsed.values.has('--class') || parsed.values.has('--memory-gib')
-      ? parseClass(parsed.values, signals.cores)
-      : sizeFromUsage(command, signals.cores);
+    const owner = parseOwner(parsed.values);
+    const requested = parsed.values.has('--memory-gib') ? parseClass(parsed.values, signals.cores)
+      : parsed.values.has('--class') ? chargeFromUsage(parseClass(parsed.values, signals.cores), owner, command, signals.cores)
+        : sizeFromUsage(command, signals.cores);
     // A session without one takes its class's default deadline; native sessions have none.
     const timeoutSeconds = parsed.values.has('--timeout-seconds') || operation === 'run'
       ? parsePositiveInteger(required(parsed.values, '--timeout-seconds'), '--timeout-seconds',
         maximumSeconds(requested.name))
       : sessionSeconds(requested.name) || null;
-    return runScoped(root, requested, parseOwner(parsed.values), timeoutSeconds, command);
+    return runScoped(root, requested, owner, timeoutSeconds, command);
   }
   fail('usage: status|probe|mode|reserve|renew|release|run|session; see machine-capacity');
 }

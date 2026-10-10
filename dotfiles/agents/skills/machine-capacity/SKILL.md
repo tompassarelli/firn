@@ -14,6 +14,7 @@ written: 2026-10-09
 - Use critical (all cores minus the attended desktop reserve, 16 GiB, one-hour batch limits, front of the queue, no CPU-capacity or pressure wait) only as the landing-train holder or for a run with an explicit `--critical` release-blocker diagnostic.
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
 - Omit `--class` on `run` to size from the usage log: p90 peak cores and memory of the shape's last 20 runs plus 25%, gpu when GPU-busy over a fifth of the run, moderate until three runs exist; the admission line shows `sizing`.
+- Expect a declared moderate, heavy, native or gpu `run`/`session` to be charged, once three runs of its owner's leading letters plus command shape exist, the p90 of per-run p90 cores within 1 and 1.5x the class and p90 peak memory plus 20%; the scope keeps the declared CPUQuota/MemoryHigh, admission and the spawn gate count the charge, and `status` shows `cpus` beside `declaredCpus` and `evidenceRuns`.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
 - Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s with no gpu lease running, and attended DEFER_GPU_CLIENTS while four Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`/`gpuLeases`.
 - Expect gpu DEFER_GPU_SLOTS at two gpu leases and DEFER_NATIVE_WAITING for a minute after a native client was deferred; native clients outrank renders.

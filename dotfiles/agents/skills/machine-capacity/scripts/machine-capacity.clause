@@ -114,3 +114,28 @@ export sized-resources(?cpus: F64, ?memory-mib: F64, ?cores: F64): Resources
   ?ceiling: resource-class("heavy", ?cores).cpus
   {cpus: if(?cpus < 1, 1, if(?cpus > ?ceiling, ?ceiling, ?cpus)),
    memoryMiB: if(?memory-mib < 512, 512, ?memory-mib)}
+
+# The smallest value at or above which nine tenths of the values lie; -1 when empty.
+export p90(?values: Sequence<F64>): F64
+  fold(?values, -1, ?best, ?value,
+    if(fold(?values, 0, ?below, ?other, if(?other <= ?value, ?below + 1, ?below)) * 10 >= count(?values) * 9
+        and (?best < 0 or ?value < ?best), ?value, ?best))
+
+export learned-class(?kind: Text): Bool
+  ?kind = "moderate" or ?kind = "heavy" or ?kind = "native" or ?kind = "gpu"
+
+export learned-minimum-runs(): F64
+  3
+
+# Admission charges a declared class what its owner and command measured once
+# three runs exist: the p90 of per-run p90 cores within 1 and half again the
+# class's CPUs, and the p90 peak memory plus a fifth. The scope keeps the
+# declared limits.
+export charged-resources(?kind: Text, ?cores: F64, ?run-cores: Sequence<F64>, ?run-memory-mib: Sequence<F64>): Resources
+  ?declared: resource-class(?kind, ?cores)
+  ?ceiling: ?declared.cpus * 1.5
+  ?cpus: p90(?run-cores)
+  if(learned-class(?kind) and count(?run-cores) >= learned-minimum-runs() and count(?run-memory-mib) >= learned-minimum-runs(),
+    {cpus: if(?cpus < 1, 1, if(?cpus > ?ceiling, ?ceiling, ?cpus)),
+     memoryMiB: p90(?run-memory-mib) * 1.2},
+    ?declared)
