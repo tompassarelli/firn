@@ -16,9 +16,12 @@ smaller SQLite FTS5 index of extracted message text, answers queries without
 opening transcripts, and retains exact `path:line` locations. This also permits
 closed transcript files to be compressed beneath the index.
 Discovery covers the canonical `~/code/north-data/accounts` tree plus
-configured `CODEX_HOME`, `NORTH_CODEX_POOLED_HOME`, and the default pooled
-runtime home. Symlinked North projections are canonicalized, so each
-transcript is indexed once.
+configured `CODEX_HOME`, `NORTH_CODEX_POOLED_HOME`, the default pooled
+runtime home, and Claude Code's `~/.claude/projects` (or
+`$CLAUDE_CONFIG_DIR/projects`). In a Claude projects tree only
+`<project>/<session>.jsonl` and `<project>/<session>/subagents/*.jsonl` are
+transcripts; a subagent file carries its parent's session id. Symlinked North
+projections are canonicalized, so each transcript is indexed once.
 
 `~/.local/state/north` points to `~/code/north-data`; searching both scans the
 same corpus twice, while `--hidden` can add Git objects. A raw hit may also be
@@ -68,13 +71,37 @@ inspection of the named source.
 
 ## Compression and resume
 
-Compression rewrites transcripts untouched for 48 hours as `.jsonl.zst`, while
-skipping open files and coordinator-named sessions. Indexed search still works.
+Compression rewrites Codex rollouts untouched for 48 hours as `.jsonl.zst`,
+while skipping open files and coordinator-named sessions. Claude Code
+transcripts are index-only and never compressed: every `projects` tree is
+excluded by its layout, and `compress` reports how many it left alone. Indexed search still works.
 Provider resume does not: `codex resume <uuid>` needs plain JSONL, so restore
 the selected rollout first.
 
 The corpus is local-only and indexes conversations, not repository code,
 configuration, commits, or objective truth.
+
+## Skill usage
+
+Tool calls are indexed as `<tool> <key>=<value>`, so a Claude Skill load is the
+`tool` message `Skill skill=<name>`. Count loads and distinct sessions over a
+frozen window straight from the index (`sqlite3 -readonly
+~/.local/state/convo/index.db`, after one `convo index`):
+
+```sql
+SELECT substr(m.content, 13) AS skill, COUNT(*) AS loads,
+       COUNT(DISTINCT f.session_id) AS sessions
+FROM msg m JOIN files f ON f.id = m.file_id
+WHERE f.provider = 'anthropic' AND m.role = 'tool'
+  AND m.content LIKE 'Skill skill=%'
+  AND m.ts >= '2026-09-26' AND m.ts < '2026-10-10T17:00'
+GROUP BY skill ORDER BY loads DESC;
+```
+
+Codex has no Skill tool; it reads the file, so count `tool` messages whose
+content matches `skills/<name>/SKILL.md` with `f.provider = 'openai'`.
+Loads include retries and re-reads: use the counts to find unused skills,
+never to rank value.
 
 ## Interpreting a result
 
