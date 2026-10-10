@@ -53,6 +53,7 @@ Repeat the consumer argument for every recorded consumer. The helper checks
 cleanliness, detachment, naming, publication, registration, agreement, and
 remaining references before removal. Git history recovers committed content;
 it does not recover untracked work or prove live consumers are finished.
+A pin with no `.pin` sidecar is retired by the agent, never handed to Tom, with `pin-retire --unconsumed -- ~/code/<project>/pins/NAME`; it proves naming, reachability, no references and cleanliness, then removes it.
 
 ## Destructive operations and denials
 

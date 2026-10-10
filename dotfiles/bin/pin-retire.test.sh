@@ -161,6 +161,34 @@ printf 'Consumer: unstructured fixture.\n' >"$pin6.pin"
 if HOME="$test_home" "$target" --consumer-main "$consumer" -- "$pin6" >/dev/null 2>&1; then fail 'unstructured legacy sidecar was accepted'; else ok; fi
 [ -d "$pin6" ] && [ -f "$pin6.pin" ] || fail 'legacy-sidecar refusal mutated the pin'
 
+git -C "$main" push -qu origin main
+u_ref="$(new_pin unconsumed-referenced)"
+rm -- "$u_ref.pin"
+git -C "$main" push -qu origin main
+printf 'pin %s\n' "$(basename "$u_ref")" >"$consumer/unconsumed.ref"
+if HOME="$test_home" "$target" --unconsumed -- "$u_ref" 2>"$scratch/u-ref-error" >/dev/null; then
+  fail 'referenced unconsumed pin was retired'
+elif grep -Fq "$consumer/unconsumed.ref" "$scratch/u-ref-error"; then ok
+else fail 'referenced unconsumed refusal did not name the referencing file'; fi
+[ -d "$u_ref" ] || fail 'referenced unconsumed refusal mutated the pin'
+rm -- "$consumer/unconsumed.ref"
+
+u_lost_oid="$(git -C "$main" commit-tree -m unreachable "HEAD^{tree}")"
+u_lost="$container/pins/$u_lost_oid"
+git -C "$main" worktree add -q --detach "$u_lost" "$u_lost_oid"
+if HOME="$test_home" "$target" --unconsumed -- "$u_lost" 2>"$scratch/u-lost-error" >/dev/null; then
+  fail 'unreachable unconsumed pin was retired'
+elif grep -Fq 'is not reachable' "$scratch/u-lost-error"; then ok
+else fail 'unreachable unconsumed refusal gave the wrong reason'; fi
+[ -d "$u_lost" ] || fail 'unreachable unconsumed refusal mutated the pin'
+
+if HOME="$test_home" "$target" --unconsumed -- "$u_ref" >"$scratch/u-ok-out"; then
+  grep -Fq '(b) reachable from: refs/heads/main refs/remotes/origin/main' "$scratch/u-ok-out" \
+    && grep -Fq '(c) references: none' "$scratch/u-ok-out" && ok \
+    || fail 'unconsumed retirement did not print its proof'
+else fail 'unconsumed reachable pin was refused'; fi
+[ ! -e "$u_ref" ] || fail 'unconsumed retirement left the pin'
+
 if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "$target" && ok || fail 'shellcheck rejected pin-retire'
 else

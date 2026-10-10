@@ -7,6 +7,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage: pin-retire [--dry-run] --consumer-main PATH [--consumer-main PATH...] -- PIN_PATH
+       pin-retire [--dry-run] --unconsumed -- PIN_PATH
 
 Retire one clean detached pin after read-only checks prove every repository
 consumer named by PIN_PATH.pin has moved. The sidecar must contain one exact
@@ -15,6 +16,11 @@ consumer named by PIN_PATH.pin has moved. The sidecar must contain one exact
 ~/code/.../pins/<40-hex-object-id>.
 
   --consumer-main    name every consumer repository's clean, published main
+  --unconsumed       retire a pin with no .pin sidecar after proving its HEAD
+                     matches its name (or a valid pin holds that HEAD), the
+                     commit is reachable from origin/main, refs/archive/* or a
+                     local branch, no ~/code main or lane references it, and
+                     its tree is clean; prints the proof
   --dry-run          validate and print the retirement without changing files
 USAGE
 }
@@ -24,7 +30,93 @@ die() {
   exit 1
 }
 
+registered_detached_head() {
+  git -C "$1" worktree list --porcelain | awk -v target="$2" '
+    BEGIN { RS=""; FS="\n" }
+    {
+      path=""; head=""; detached=0
+      for (i=1; i<=NF; i++) {
+        if ($i ~ /^worktree /) path=substr($i, 10)
+        else if ($i ~ /^HEAD /) head=substr($i, 6)
+        else if ($i == "detached") detached=1
+      }
+      if (path == target && detached) print head
+    }
+  '
+}
+
+retire_unconsumed() {
+  local leaf="$oid" head naming other reach status
+  [[ "$leaf" =~ ^[0-9a-f]{7,40}$ ]] \
+    || die "pin leaf is not a lowercase hex object name: $leaf"
+  [ -e "$main/.git" ] || die "container has no main checkout: $container"
+  [ ! -e "$pin.pin" ] && [ ! -L "$pin.pin" ] \
+    || die "pin has a consumer sidecar; retire it with --consumer-main: $pin.pin"
+  head="$(registered_detached_head "$main" "$pin")"
+  [[ "$head" =~ ^[0-9a-f]{40}$ ]] \
+    || die "pin is not a detached registered worktree of $main: $pin"
+  [ "$(git -C "$pin" rev-parse --verify HEAD)" = "$head" ] \
+    || die "pin HEAD differs from its registration: $pin"
+
+  if [ "$head" = "$leaf" ]; then
+    naming="HEAD $head equals the pin name"
+  elif [ "${#leaf}" -lt 40 ] && [ "${head#"$leaf"}" != "$head" ]; then
+    naming="short-named pin; HEAD $head extends the name $leaf"
+  else
+    other="$pins_dir/$head"
+    [ "$(registered_detached_head "$main" "$other")" = "$head" ] \
+      && [ -f "$other.pin" ] && [ ! -L "$other.pin" ] \
+      || die "pin HEAD $head differs from its name and has no valid pin at $other"
+    naming="misnamed pin; HEAD $head already has valid pin $other"
+  fi
+
+  local refs=()
+  git -C "$main" rev-parse --verify -q refs/remotes/origin/main >/dev/null \
+    && refs+=(refs/remotes/origin/main)
+  reach="$(git -C "$main" for-each-ref --format='%(refname)' --contains "$head" \
+    "${refs[@]}" refs/archive/ refs/heads/)"
+  [ -n "$reach" ] \
+    || die "HEAD $head is not reachable from origin/main, refs/archive/* or a local branch"
+
+  local roots=() root hits rg_status=0
+  for root in "$code_root"/*/main "$code_root"/*/worktrees/*; do
+    [ -d "$root" ] && [ ! -L "$root" ] && roots+=("$root")
+  done
+  hits="$(timeout 300 rg -l --hidden --fixed-strings --max-filesize 4M \
+    --glob '!.git' --glob '!**/target/**' --glob '!**/node_modules/**' \
+    --glob '!**/result' --glob '!**/dist/**' --glob '!**/build/**' \
+    -e "$leaf" -e "$pin" -- "${roots[@]}" 2>/dev/null)" || rg_status=$?
+  if [ -n "$hits" ]; then
+    printf '%s\n' "$hits" | head -20 >&2
+    die "mains or lanes under $code_root still reference $leaf or $pin"
+  fi
+  [ "$rg_status" -eq 1 ] \
+    || die "reference search over $code_root failed (rg status $rg_status)"
+
+  status="$(git -C "$pin" status --porcelain --untracked-files=all)"
+  [ -z "$status" ] \
+    || die "pin has tracked or untracked changes; refusing retirement: $pin"
+
+  printf 'pin-retire --unconsumed proof for %s\n' "$pin"
+  printf '  (a) naming: %s\n' "$naming"
+  printf '  (b) reachable from: %s\n' "$(printf '%s\n' "$reach" | head -5 | tr '\n' ' ')"
+  printf '  (c) references: none in %d mains/lanes under %s\n' "${#roots[@]}" "$code_root"
+  printf '  (d) worktree: clean apart from ignored output\n'
+  if [ "$dry_run" -eq 1 ]; then
+    printf 'pin-retire: DRY RUN — not removed\n'
+    return 0
+  fi
+  [ "$(git -C "$pin" rev-parse --verify HEAD)" = "$head" ] \
+    || die "pin HEAD changed during retirement proof: $pin"
+  [ ! -e "$pin.pin" ] || die "a sidecar appeared during retirement proof: $pin.pin"
+  git -C "$main" worktree remove "$pin"
+  [ ! -e "$pin" ] && [ ! -L "$pin" ] \
+    || die "worktree removal left the pin path present: $pin"
+  printf 'retired pin %s\n' "$pin"
+}
+
 dry_run=0
+unconsumed=0
 pin_arg=""
 consumer_args=()
 while [ "$#" -gt 0 ]; do
@@ -35,6 +127,7 @@ while [ "$#" -gt 0 ]; do
       shift
       ;;
     --dry-run) dry_run=1 ;;
+    --unconsumed) unconsumed=1 ;;
     --)
       shift
       [ "$#" -eq 1 ] || die 'exactly one pin path must follow --'
@@ -53,8 +146,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 [ -n "$pin_arg" ] || die 'a pin path is required'
-[ "${#consumer_args[@]}" -gt 0 ] \
-  || die 'name every manifest consumer with --consumer-main'
+if [ "$unconsumed" -eq 1 ]; then
+  [ "${#consumer_args[@]}" -eq 0 ] \
+    || die '--unconsumed and --consumer-main are exclusive'
+else
+  [ "${#consumer_args[@]}" -gt 0 ] \
+    || die 'name every manifest consumer with --consumer-main'
+fi
 
 case "$pin_arg" in
   \~/*) pin_arg="$HOME/${pin_arg#\~/}" ;;
@@ -75,6 +173,10 @@ pins_dir="$(dirname "$pin")"
 container="$(dirname "$pins_dir")"
 main="$container/main"
 oid="$(basename "$pin")"
+if [ "$unconsumed" -eq 1 ]; then
+  retire_unconsumed
+  exit 0
+fi
 [[ "$oid" =~ ^[0-9a-f]{40}$ ]] \
   || die "pin leaf is not one lowercase full object ID: $oid"
 [ -e "$main/.git" ] || die "container has no main checkout: $container"
