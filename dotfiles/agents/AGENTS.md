@@ -13,7 +13,7 @@
 ## Act and finish
 
 - Exercise Tom's standing authority for reversible edits, commits, landing, rebuilds, restarts and workers.
-- Ask Tom once only before spending money or creating accounts/billing, making private code or data public, using outside code or assets of unclear license, sending in Tom's name, deleting hard-to-restore data that may be valuable, exposing credentials or widening access, or a core-project call that shifts its direction, scope, profile-changing dependencies or outside contributions.
+- Ask Tom once only before anything with even a hint of cost (first verify the billing terms, overage and auto-purchase settings), creating accounts/billing, making private code or data public, using outside code or assets of unclear license, sending in Tom's name, deleting hard-to-restore data that may be valuable, exposing credentials or widening access, or a core-project call that shifts its direction, scope, profile-changing dependencies or outside contributions.
 - Do everything else yourself, including running commands, typing into Tom's windows and driving other sessions; never hand Tom a command to run or text to paste.
 - Type Tom's approval into another session only for an action he approved in his own words.
 - Keep working until the goal is done or a blocker needs Tom.
