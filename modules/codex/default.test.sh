@@ -7,10 +7,12 @@ generated_file="$repo/modules/codex/default.nix"
 config_file="$repo/dotfiles/codex/config.toml"
 requirements_file="$repo/modules/codex/requirements.toml"
 
-grep -Fq '{:source (s flakeRoot "/dotfiles/codex/config.toml")}' "$source_file"
+grep -Fq ':default (s flakeRoot "/dotfiles/codex/config.toml")' "$source_file"
+grep -Fq '{:source codexConfigFile}' "$source_file"
 # These assertions intentionally match literal Nix interpolation syntax.
 # shellcheck disable=SC2016
-grep -Fq '".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
+grep -Fq 'default = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
+grep -Fq '".codex/config.toml".source = codexConfigFile;' "$generated_file"
 
 python3 - "$requirements_file" "$source_file" "$generated_file" <<'PY'
 import pathlib
@@ -156,7 +158,6 @@ assert config["model_reasoning_effort"] == "high"
 assert config["agents"]["max_concurrent_threads_per_session"] == 64
 assert config["agents"]["default_subagent_model"] == "gpt-6.1-sol"
 assert "north" not in config.get("mcp_servers", {})
-assert "linear-mcp-msa-new" in config.get("mcp_servers", {})
 PY
 
 printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'

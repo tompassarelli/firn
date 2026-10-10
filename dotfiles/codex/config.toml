@@ -12,38 +12,12 @@ max_concurrent_threads_per_session = 64
 default_subagent_model = "gpt-6.1-sol"
 default_subagent_reasoning_effort = "high"
 
-[projects."/home/tom"]
-trust_level = "trusted"
-
-[projects."/home/tom/code"]
-trust_level = "trusted"
-
-[projects."/home/tom/code/clients/msa/kea/main"]
-trust_level = "trusted"
-
-[projects."/home/tom/code/nixos-config"]
-trust_level = "trusted"
-
-[projects."/home/tom/code/north"]
-trust_level = "trusted"
-
-[projects."/tmp"]
-trust_level = "trusted"
-
-[projects."/home/tom/code/clause"]
-trust_level = "trusted"
-
 [tui.model_availability_nux]
 "gpt-5.6-terra" = 1
 "gpt-6-sol" = 1
 
 [features]
 hooks = true
-
-[mcp_servers.linear-mcp-msa-new]
-url = "https://mcp.linear.app/mcp"
-auth = "oauth"
-enabled_tools = ["get_issue", "list_issues", "save_issue", "list_comments", "save_comment"]
 
 [notice]
 hide_full_access_warning = true

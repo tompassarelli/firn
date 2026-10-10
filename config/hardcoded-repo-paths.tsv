@@ -4,7 +4,6 @@
 # this file is the entire inventory — there is no separate total to drift.
 # `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
-nixos-config/dotfiles/codex/config.toml	4
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/north-profile/default.test.sh	1
 nixos-config/modules/theme-switcher/default.bnix	1

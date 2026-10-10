@@ -1,7 +1,12 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-((username: ((homeDir: ((agentGeneration: ((providerAdapter: {
+((username: ((homeDir: ((codexConfigFile: ((agentGeneration: ((providerAdapter: {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
+  options.myConfig.modules.codex.configFile = lib.mkOption {
+    type = lib.types.path;
+    default = "${flakeRoot}/dotfiles/codex/config.toml";
+    description = "Codex config.toml linked at ~/.codex/config.toml";
+  };
   config = lib.mkIf config.myConfig.modules.codex.enable {
     environment.etc = {
       "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
@@ -55,7 +60,7 @@
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md";
-        ".codex/config.toml".source = "${flakeRoot}/dotfiles/codex/config.toml";
+        ".codex/config.toml".source = codexConfigFile;
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/socrates/codex/prompts";
       };
       systemd.user.services.codex-keyring-default = {
@@ -77,4 +82,4 @@
       };
     });
   };
-}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) "${homeDir}/.local/state/north/agents/current")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) "${homeDir}/.local/state/north/agents/current")) config.myConfig.modules.codex.configFile)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
