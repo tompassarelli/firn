@@ -29,6 +29,7 @@
   };
   myConfig.modules.networkd.staticSopsFile = ../../secrets/nexus/network.yaml;
   myConfig.modules.claude.enable = true;
+  myConfig.modules.plato.enable = true;
   myConfig.modules.codex.enable = true;
   myConfig.modules.codex-runtime.enable = true;
   myConfig.modules.agent-runtime-update.enable = true;

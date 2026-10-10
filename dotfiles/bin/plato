@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Attach to Plato, Tom's proxy Claude session on nexus (plato.service, tmux -L plato).
+exec ssh -t nexus tmux -L plato attach -t plato

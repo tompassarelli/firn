@@ -22,6 +22,7 @@
      :recipients ["age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0" "age17ttquzyuxeystegvartakw2x5h0jp54v4xh83vm6qyr7kd505seq94swwf"]}
    :myConfig.modules.networkd.staticSopsFile (p "../../secrets/nexus/network.yaml")
    :myConfig.modules.claude.enable true
+   :myConfig.modules.plato.enable true
    :myConfig.modules.codex.enable true
    :myConfig.modules.codex-runtime.enable true
    :myConfig.modules.agent-runtime-update.enable true
