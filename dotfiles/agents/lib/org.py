@@ -292,6 +292,10 @@ def started(name, session):
 
 
 def main(argv):
+    help_args = argv[:argv.index("--")] if argv[:2] == ["lead", "start"] and "--" in argv else argv
+    if any(arg in ("-h", "--help") for arg in help_args):
+        print(USAGE)
+        return
     if argv[:1] == ["lead"]:
         sub = argv[1:2]
         if sub == ["start"]:
@@ -304,6 +308,10 @@ def main(argv):
     if cmd in ("-h", "--help", "help"):
         print(USAGE)
         return
+    if cmd == "priority":
+        for arg in args:
+            if arg.startswith("-"):
+                die(f"unknown option {arg}\n{USAGE}")
     with Org() as org:
         if cmd == "show" and not args:
             show(org)
