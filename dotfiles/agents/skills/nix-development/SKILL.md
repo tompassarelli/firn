@@ -4,6 +4,8 @@ description: >-
   Create or repair project-local Nix environments and consumed flake outputs outside nixos-config.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Project Nix

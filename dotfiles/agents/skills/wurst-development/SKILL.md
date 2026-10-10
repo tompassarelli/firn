@@ -7,6 +7,8 @@ description: >-
   require migrating existing Lua or Jass projects.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: domain
 ---
 
 # Wurst development

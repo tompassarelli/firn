@@ -4,6 +4,8 @@ description: >-
   Create or edit GitHub issues, including issue labels, using the repository's existing ticket and tagging conventions.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # GitHub issues

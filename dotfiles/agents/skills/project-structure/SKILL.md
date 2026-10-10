@@ -4,6 +4,8 @@ description: >-
   Organize project files by real authority, lifecycle, and retrieval needs, including data pipelines and handoff layouts.
 grounded: 2026-10-06
 written: 2026-10-06
+metadata:
+  kind: playbook
 ---
 
 # Project structure

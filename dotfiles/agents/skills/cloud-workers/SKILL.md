@@ -7,6 +7,8 @@ description: >-
   clients, private game assets, the LAN pool or unpushed local state.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Cloud workers

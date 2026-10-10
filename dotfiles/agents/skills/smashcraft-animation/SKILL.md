@@ -6,6 +6,8 @@ description: >-
   nine-way damage reactions. Use for animation quality and action coverage.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: domain
 ---
 
 # Smashcraft animation

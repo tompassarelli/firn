@@ -4,6 +4,8 @@ description: >-
   Access Tom's DigitalOcean account, or restore the destroyed greywrought-dev server, and run authorized remote development work.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # DigitalOcean

@@ -4,6 +4,8 @@ description: >-
   Author, locate, register, or activate source-owned agent instructions, skills, hooks, and modules.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Agent policy

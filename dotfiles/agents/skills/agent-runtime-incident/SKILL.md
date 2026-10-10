@@ -4,6 +4,8 @@ description: >-
   Investigate and close unexplained agent admission, startup, death, liveness, control, or reporting failures at their owning cause.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Agent runtime incidents

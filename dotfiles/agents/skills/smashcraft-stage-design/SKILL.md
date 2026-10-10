@@ -7,6 +7,8 @@ description: >-
   look issue, a new stage, or a stage review.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: domain
 ---
 
 # Smashcraft stage design

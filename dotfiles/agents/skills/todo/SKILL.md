@@ -4,6 +4,8 @@ description: >-
   Keep restart-grade records for cross-turn work, external waits, parked tasks, and handoffs. Also handles an explicit cross-supervisor protocol request.
 grounded: 2026-10-06
 written: 2026-10-06
+metadata:
+  kind: playbook
 ---
 
 # Todo continuity

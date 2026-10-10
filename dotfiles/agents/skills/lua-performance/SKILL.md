@@ -6,6 +6,8 @@ description: >-
   `bun wisp perf compare` failures, per-frame allocation and GC pressure.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: domain
 ---
 
 # Lua performance

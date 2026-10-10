@@ -4,6 +4,8 @@ description: >-
   Run GPU-accelerated Linux games and graphical development tools in a private desktop beside Niri, with remote input that never grabs the normal desktop.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Private desktop development

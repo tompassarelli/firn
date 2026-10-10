@@ -5,6 +5,8 @@ description: >-
   payloads in conversation history; recover from image-related request-size failures.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Image context

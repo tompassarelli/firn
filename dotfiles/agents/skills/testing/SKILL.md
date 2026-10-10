@@ -6,6 +6,8 @@ description: >-
   tests, CPU cost per test, flaky tests, and pruning a suite.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: playbook
 ---
 
 # Testing

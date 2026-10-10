@@ -7,6 +7,8 @@ description: >-
   Use for any Warcraft III map work, Smashcraft's ts/ included.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: domain
 ---
 
 # Warcraft modding

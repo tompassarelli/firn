@@ -4,6 +4,8 @@ description: >-
   Get a cheap extra adversarial review of a public diff or design from Gemini through the Antigravity CLI (`agy`) on a free Google-account sign-in.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # Gemini review

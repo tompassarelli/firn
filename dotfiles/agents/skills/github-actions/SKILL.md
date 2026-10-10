@@ -7,6 +7,8 @@ description: >-
   scratch branches.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # GitHub Actions

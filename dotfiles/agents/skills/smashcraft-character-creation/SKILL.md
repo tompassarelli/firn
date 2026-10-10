@@ -7,6 +7,8 @@ description: >-
   or a move change, not for other Warcraft maps.
 grounded: 2026-10-09
 written: 2026-10-09
+metadata:
+  kind: domain
 ---
 
 # Smashcraft character creation

@@ -4,6 +4,8 @@ description: >-
   Access Tom's personal Hetzner account (Robot dedicated servers), including the GEX45 GPU box.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # Personal Hetzner

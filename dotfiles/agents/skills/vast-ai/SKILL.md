@@ -4,6 +4,8 @@ description: >-
   Use Tom's vast.ai GPU rental account, and keep its prepaid credit from running out.
 grounded: 2026-10-10
 written: 2026-10-10
+metadata:
+  kind: playbook
 ---
 
 # vast.ai

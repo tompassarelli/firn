@@ -4,6 +4,8 @@ description: >-
   Select bounded filesystem roots before searching repository containers or virtual filesystems; use native process metadata for process discovery.
 grounded: 2026-10-06
 written: 2026-10-06
+metadata:
+  kind: playbook
 ---
 
 # Resource-safe search
