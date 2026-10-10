@@ -4,14 +4,12 @@
   myConfig.modules.system.stateVersion = "25.05";
   myConfig.modules.users.enable = true;
   myConfig.modules.users.username = "tom";
-  myConfig.modules.users.email = "6378995+tompassarelli@users.noreply.github.com";
   myConfig.modules.users.fullName = "tompassarelli";
   myConfig.modules.nix-settings.enable = true;
   myConfig.modules.boot.enable = true;
   myConfig.modules.networking.enable = true;
   myConfig.modules.remmina.enable = true;
   myConfig.modules.timezone.enable = true;
-  myConfig.modules.timezone.zone = "Asia/Taipei";
   myConfig.modules.ssh.enable = true;
   myConfig.modules.swap.enable = true;
   myConfig.modules.tmp-retention.enable = true;
@@ -30,11 +28,6 @@
     configFile = ../../dotfiles/kanata/kanata.kbd;
     port = 7070;
     extraArgs = [ "--log-layer-changes" ];
-    devices = [
-      "/dev/input/event0"
-      "/dev/input/by-id/usb-Kingsis_Peripherals_ZOWIE_Gaming_mouse-event-mouse"
-      "/dev/input/by-id/usb-Logitech_G102_LIGHTSYNC_Gaming_Mouse_2072387E5847-event-mouse"
-    ];
   };
   myConfig.modules.glide.enable = false;
   myConfig.modules.guix.enable = false;
@@ -43,7 +36,6 @@
   myConfig.modules.mini-serve.enable = true;
   myConfig.modules.bitwarden-desktop.enable = true;
   myConfig.modules.libsecret.enable = true;
-  myConfig.modules.proton-autopurge.enable = true;
   myConfig.modules.parted.enable = true;
   myConfig.modules.unixodbc.enable = true;
   myConfig.modules.nix-ld.enable = true;
