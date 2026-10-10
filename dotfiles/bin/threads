@@ -563,9 +563,7 @@ def cmd_ingest(db, a):
                     backfilled += db.execute(
                         "UPDATE runs SET spec = coalesce(spec, ?), scope = coalesce(scope, ?), surface = coalesce(surface, ?),"
                         " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?),"
-                        " expects_landing = coalesce(expects_landing, ?) WHERE agent = ?"
-                        " AND (spec IS NULL OR scope IS NULL OR surface IS NULL OR verify IS NULL OR lens IS NULL OR flaws IS NULL"
-                        " OR expects_landing IS NULL)",
+                        " expects_landing = coalesce(?, expects_landing) WHERE agent = ?",
                         (f.get("spec"), f.get("scope"), f.get("surface"), f.get("verify"), f.get("lens"),
                          r.get("flaws"), r.get("expects_landing"), r["id"])).rowcount
                 continue
@@ -715,7 +713,7 @@ def recommend(runs, asked, incumbent):
 
 
 def run_ok(db):
-    """Reported Done (ruled out included) with no later Follows: run on it, and landed when its brief expected a landing."""
+    """Reported Done (ruled out included) with no later Follows: run on it, and landed when the run made a commit."""
     escalated = {r["follows"] for r in db.execute("SELECT follows FROM runs WHERE follows IS NOT NULL")}
     return lambda r: (r["outcome"] == "done" and r["agent"] not in escalated
                       and not (r["expects_landing"] and r["landed"] == 0))
@@ -829,8 +827,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--since", help="only runs that ended on or after DATE")
     s.add_argument("--group", default="category", help=f"comma list of {', '.join(GROUPS)} (default category)")
     s = cmd("recommend", cmd_recommend,
-            f"cheapest tier whose first-assignment runs reported Done with no later Follows: run (and landed when the brief "
-            f"expected a landing) at >= {BAR}% in the finest "
+            f"cheapest tier whose first-assignment runs reported Done with no later Follows: run (and landed when it "
+            f"committed) at >= {BAR}% in the finest "
             f"cell holding a tier with >= {MIN_RUNS} runs, backing off {', '.join(BACKOFF)}; a pricier tier replaces the "
             f"cell's last recommendation only when it beats it by {MARGIN} points on >= {MIN_RUNS} runs each")
     s.add_argument("facets", help="brief facet lines, e.g. 'Category: tooling, Spec: measured, Scope: one-file'")

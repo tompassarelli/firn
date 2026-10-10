@@ -42,12 +42,22 @@ printf '%s\n' \
   '{"type":"user","timestamp":"2026-10-08T00:00:00Z","sessionId":"session","message":{"content":"Item: smashcraft#255\nCategory: mechanical\nETA: 15 minutes"}}' \
   '{"type":"assistant","timestamp":"2026-10-08T00:04:00Z","requestId":"r1","message":{"model":"claude-haiku-5-5","usage":{"output_tokens":50,"input_tokens":700},"content":[{"type":"text","text":"Done: landed."}]}}' \
   >"$subagents/agent-haiku1.jsonl"
+printf '%s\n' \
+  '{"type":"user","timestamp":"2026-10-08T00:00:00Z","sessionId":"session","message":{"content":"Item: smashcraft#256\nCategory: mechanical"}}' \
+  '{"type":"assistant","timestamp":"2026-10-08T00:01:00Z","requestId":"r1","message":{"model":"claude-haiku-5-5","usage":{"output_tokens":5},"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"cd /w && git -c gc.auto=0 commit -qm fix"}}]}}' \
+  '{"type":"user","timestamp":"2026-10-08T00:02:00Z","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}' \
+  '{"type":"assistant","timestamp":"2026-10-08T00:03:00Z","requestId":"r2","message":{"model":"claude-haiku-5-5","usage":{"output_tokens":5},"content":[{"type":"text","text":"Done: committed."}]}}' \
+  >"$subagents/agent-commit1.jsonl"
+printf '%s\n' '{"agentType":"worker"}' >"$subagents/agent-commit1.meta.json"
 "$repo/dotfiles/bin/worker-ledger" --since 2026-10-08 >/dev/null
 "$repo/dotfiles/bin/worker-ledger" --since 2026-10-08 >/dev/null
 python3 - "$THREADS_DB" <<'PY'
 import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
-r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent!='haiku1'").fetchall()
+e=dict(c.execute("select agent,expects_landing from runs").fetchall())
+assert (e['commit1'],e['haiku1'],e['repeater'])==(1,0,0),e
+print('PASS a run expects a landing exactly when its transcript ran a git commit or push')
+r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1')").fetchall()
 want=[('finished','firn#5','prior','gpt-6.1-sol medium','tooling',5,10,321,900,'done'),
       ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done'),
       ('repeater','smashcraft#250',None,'gpt-6.1-sol high','balance-tuning',5,20,0,0,'done')]

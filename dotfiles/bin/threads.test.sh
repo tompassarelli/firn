@@ -132,7 +132,7 @@ check '[spec] hysteresis: haiku at 80% wins, holds at 66% against medium 80%, an
   row '{id:"n6",ended:"2026-10-09T01:00:00Z",tier:"medium",actual_min:5,outcome:"done",landed:1,brief:"Category: native-check Follows: n5"}'
 } | "$threads" ingest 2>/dev/null
 out=$(t recommend 'Category: native-check')
-check '[spec] success is Done with no later Follows: run, and landed only when the brief expected a landing' \
+check '[spec] success is Done with no later Follows: run, and landed only when the run committed' \
   'grep -qx "  haiku   60% of 5" <<<"$out"'
 
 t claim smashcraft#11 --by alice --eta 30 >/dev/null
