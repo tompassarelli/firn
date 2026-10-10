@@ -40,4 +40,4 @@ run `firn repo upgrade now` in its owned worktree when the requested outcome
 includes advancing inputs, then must inspect and commit the exact result before
 rebuilding.
 
-Only verify whiterabbit. Skip thinkpad-x1e.
+Only verify whiterabbit.

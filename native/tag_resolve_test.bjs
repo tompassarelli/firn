@@ -204,7 +204,7 @@
          (make-module "libsecret" ["cli-tools"] [] [])]
         (darwin-host r/HostTags)
         (r/->HostTags
-          "ashashi" [(enabled "cli-tools")] [] "darwin" true ["git"])
+          "mac" [(enabled "cli-tools")] [] "darwin" true ["git"])
         (resolution r/Resolution) (r/resolve modules darwin-host)]
     (and
       (= (r/resolution-active resolution) ["git"])

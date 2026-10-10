@@ -161,19 +161,6 @@
           (str "schema input fingerprint differs from flake.lock or "
             "Beagle tool identity"))])))
 
-(defn case-darwin-cache-authority [] Bool
-  (and
-    (instance? transaction/CacheCurrent
-      (transaction/darwin-cache-assessment
-        (transaction/->DarwinCacheSnapshot "[1]" "fingerprint\n")
-        "fingerprint"))
-    (match (transaction/darwin-cache-assessment
-             (transaction/->DarwinCacheSnapshot "[]" "fingerprint\n")
-             "fingerprint")
-      [(CacheCurrent fingerprint) false]
-      [(CacheStale reason)
-       (= reason "Darwin schema JSON is partial or malformed")])))
-
 (defn case-extraction-plans [] Bool
   (let [(nixos (Vec transaction/ProcessSpec))
         (transaction/extraction-processes
@@ -208,10 +195,7 @@
       (= (transaction/select-bnix-inputs discovered ["z.bnix"])
          ["z.bnix"])
       (= (transaction/filter-sorted-nix discovered)
-         ["modules/a/default.nix"])
-      (transaction/validation-needs-darwin? ["flake.bnix"])
-      (not (transaction/validation-needs-darwin?
-             ["modules/a/default.bnix"])))))
+         ["modules/a/default.nix"]))))
 
 (defn case-argv-grammar [] Bool
   (and
@@ -238,7 +222,9 @@
       [(ExtractSchema mode host) false]
       [(InvalidSchemaTransaction argv) false])
     (instance? transaction/InvalidSchemaTransaction
-      (transaction/parse-schema-transaction-argv ["schema" "extract" "x" "y"]))))
+      (transaction/parse-schema-transaction-argv ["schema" "extract" "x" "y"]))
+    (instance? transaction/InvalidSchemaTransaction
+      (transaction/parse-schema-transaction-argv ["schema" "extract" "--darwin"]))))
 
 (defn case-native-error-rendering [] Bool
   (and
@@ -258,7 +244,6 @@
    (->TestResult "schema-and-policy-validation"
      (case-schema-and-policy-validation))
    (->TestResult "cache-authority" (case-cache-authority))
-   (->TestResult "darwin-cache-authority" (case-darwin-cache-authority))
    (->TestResult "extraction-plans" (case-extraction-plans))
    (->TestResult "exact-input-selection" (case-exact-input-selection))
    (->TestResult "argv-grammar" (case-argv-grammar))

@@ -408,22 +408,12 @@
             {:hostname       "whiterabbit"
              :hostConfig     (p "./hosts/whiterabbit/configuration.nix")
              :hardwareConfig (p "./hardware-configuration.nix")})
-         :thinkpad-x1e
-          (self.lib.mkSystem
-            {:hostname       "thinkpad-x1e"
-             :hostConfig     (p "./hosts/thinkpad-x1e/configuration.nix")
-             :hardwareConfig (p "./hardware-configuration.nix")})
          :nexus
           (self.lib.mkSystem
             {:hostname       "nexus"
              :hostConfig     (p "./hosts/nexus/configuration.nix")
              :hardwareConfig (p "./hosts/nexus/hardware.nix")
              :extraModules   [disko.nixosModules.disko]})}
-       :darwinConfigurations
-        {:ashashi
-          (self.lib.mkDarwinSystem
-            {:hostname   "ashashi"
-             :hostConfig (p "./hosts/ashashi/configuration.nix")})}
        :templates.default
         {:description "firn starter configuration" :path (p "./template")}
        :devShells.x86_64-linux.default

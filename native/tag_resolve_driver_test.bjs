@@ -90,11 +90,11 @@
     (parsed-action-matches?
       ["tag" "resolve"] "whiterabbit" false "whiterabbit" false false)
     (parsed-action-matches?
-      ["tag" "resolve" "ashashi"] "whiterabbit" false
-      "ashashi" false false)
+      ["tag" "resolve" "nexus"] "whiterabbit" false
+      "nexus" false false)
     (parsed-action-matches?
-      ["tag" "resolve" "ashashi+emit"] "whiterabbit" false
-      "ashashi" false true)
+      ["tag" "resolve" "nexus+emit"] "whiterabbit" false
+      "nexus" false true)
     (parsed-action-matches?
       ["tag" "resolve" "all"] "whiterabbit" false "all" true false)
     (parsed-action-matches?

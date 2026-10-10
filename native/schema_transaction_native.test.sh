@@ -77,7 +77,7 @@ timeout --foreground 30 bun --eval \
     sed -n '1,200p' "$scratch/pure.err" >&2
     die "focused pure policy fixtures failed"
   }
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "11" ]] \
+[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == "10" ]] \
   || die "focused pure policy fixture count changed"
 [[ ! -s "$scratch/pure.err" ]] \
   || die "focused pure policy fixtures wrote stderr"

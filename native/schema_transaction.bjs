@@ -66,11 +66,6 @@
      tracked-policy String]))
 
 (js/export
-  (defrecord DarwinCacheSnapshot
-    [schema (U String Nil)
-     fingerprint (U String Nil)]))
-
-(js/export
   (defunion CacheAssessment
   (CacheCurrent [fingerprint String])
   (CacheStale [reason String])))
@@ -758,24 +753,6 @@
           "schema input fingerprint differs from flake.lock or Beagle tool identity")
         :else (->CacheCurrent current-fingerprint)))))
 
-(js/export
-  (defn darwin-cache-assessment
-    [snapshot DarwinCacheSnapshot
-     current-fingerprint String] CacheAssessment
-    (let [schema (U String Nil) (darwincachesnapshot-schema snapshot)
-          fingerprint (U String Nil) (darwincachesnapshot-fingerprint snapshot)]
-      (cond
-        (nil? schema)
-        (->CacheStale "missing .beagle-cache/schema-darwin.json")
-        (nil? fingerprint)
-        (->CacheStale "missing .beagle-cache/schema-darwin.inputs.sha256")
-        (not (instance? JsonPolicyValid (json-array-nonempty schema)))
-        (->CacheStale "Darwin schema JSON is partial or malformed")
-        (not= (str/trim fingerprint) current-fingerprint)
-        (->CacheStale
-          "Darwin schema input fingerprint differs from flake.lock or Beagle tool identity")
-        :else (->CacheCurrent current-fingerprint)))))
-
 (defn path
   [root String
    relative String] String
@@ -879,15 +856,6 @@
     (if (empty? explicit) (filter-sorted-bnix discovered) explicit)))
 
 (js/export
-  (defn validation-needs-darwin? [inputs (Vec String)] Bool
-    (loop [index Int 0]
-      (if (>= index (count inputs))
-        false
-        (if (= "flake.bnix" (file-name (nth inputs index)))
-          true
-          (recur (+ index 1)))))))
-
-(js/export
   (defn parse-schema-transaction-argv [argv (Vec String)] SchemaTransactionAction
     (cond
       (and (>= (count argv) 2)
@@ -897,9 +865,7 @@
       (cond
         (= (count argv) 2)
         (->ExtractSchema (nixos-mode) "whiterabbit")
-        (and (= (count argv) 3) (= "--darwin" (nth argv 2)))
-        (->ExtractSchema (darwin-mode) "ashashi")
-        (= (count argv) 3)
+        (and (= (count argv) 3) (not= "--darwin" (nth argv 2)))
         (->ExtractSchema (nixos-mode) (nth argv 2))
         (and (= (count argv) 4) (= "--darwin" (nth argv 2)))
         (->ExtractSchema (darwin-mode) (nth argv 3))

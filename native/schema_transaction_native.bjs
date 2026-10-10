@@ -146,10 +146,6 @@
   (NixosCacheLoaded [snapshot transaction/NixosCacheSnapshot])
   (NixosCacheLoadRejected [message String]))
 
-(defunion DarwinCacheLoadResult
-  (DarwinCacheLoaded [snapshot transaction/DarwinCacheSnapshot])
-  (DarwinCacheLoadRejected [message String]))
-
 (defn path
   [root String
    relative String] String
@@ -571,22 +567,6 @@
                    (transaction/->NixosCacheSnapshot
                      schema hm fingerprint cached-policy policy))])])])])]))
 
-(defn load-darwin-cache [root String] DarwinCacheLoadResult
-  (match (read-text root ".beagle-cache/schema-darwin.json")
-    [(TextLoadRejected message) (->DarwinCacheLoadRejected message)]
-    [(TextMissing missing-relative)
-     (->DarwinCacheLoaded
-       (transaction/->DarwinCacheSnapshot nil nil))]
-    [(TextLoaded schema)
-     (match (read-text root ".beagle-cache/schema-darwin.inputs.sha256")
-       [(TextLoadRejected message) (->DarwinCacheLoadRejected message)]
-       [(TextMissing missing-relative)
-        (->DarwinCacheLoaded
-          (transaction/->DarwinCacheSnapshot schema nil))]
-       [(TextLoaded fingerprint)
-        (->DarwinCacheLoaded
-          (transaction/->DarwinCacheSnapshot schema fingerprint))])]))
-
 (defn ensure-nixos-cache
   [root String
    beagle-path String] OperationResult
@@ -624,46 +604,6 @@
                          (->OperationRejected
                            (str "firn repo validate: refreshed schema cache is "
                              "not valid: " refreshed-reason "\n"))])])])]))])])]))
-
-(defn ensure-darwin-cache
-  [root String
-   beagle-path String] OperationResult
-  (match (current-fingerprint root beagle-path (transaction/darwin-mode))
-    [(CurrentFingerprintRejected message) (->OperationRejected message)]
-    [(CurrentFingerprint current)
-     (match (load-darwin-cache root)
-       [(DarwinCacheLoadRejected message) (->OperationRejected message)]
-       [(DarwinCacheLoaded snapshot)
-        (match (transaction/darwin-cache-assessment snapshot current)
-          [(CacheCurrent fingerprint)
-           (->OperationOk "Darwin schema cache is current")]
-          [(CacheStale reason)
-           (do
-             (host-err
-               (str "firn repo validate: refreshing Darwin schema cache ("
-                 reason ")...\n"))
-             (match (extract-and-publish root beagle-path
-                      (transaction/darwin-mode) "ashashi")
-               [(OperationRejected message) (->OperationRejected message)]
-               [(OperationOk operation)
-                (match (current-fingerprint root beagle-path
-                         (transaction/darwin-mode))
-                  [(CurrentFingerprintRejected message)
-                   (->OperationRejected message)]
-                  [(CurrentFingerprint refreshed)
-                   (match (load-darwin-cache root)
-                     [(DarwinCacheLoadRejected message)
-                      (->OperationRejected message)]
-                     [(DarwinCacheLoaded refreshed-snapshot)
-                      (match (transaction/darwin-cache-assessment
-                               refreshed-snapshot refreshed)
-                        [(CacheCurrent fingerprint)
-                         (->OperationOk "refreshed Darwin schema cache")]
-                        [(CacheStale refreshed-reason)
-                         (->OperationRejected
-                           (str "firn repo validate: refreshed Darwin schema "
-                             "cache is not valid: " refreshed-reason
-                             "\n"))])])])]))])])]))
 
 (defn absolute-path? [value String] Bool
   (transaction/starts-with? value "/"))
@@ -792,13 +732,7 @@
                   [(OperationRejected message)
                    (do (host-err message) 1)]
                   [(OperationOk operation)
-                   (if (transaction/validation-needs-darwin? bnix-inputs)
-                     (match (ensure-darwin-cache root beagle-path)
-                       [(OperationRejected message)
-                        (do (host-err message) 1)]
-                       [(OperationOk operation)
-                        (validate-then-evaluate root beagle-path bnix-inputs)])
-                     (validate-then-evaluate root beagle-path bnix-inputs))])))])))]))
+                   (validate-then-evaluate root beagle-path bnix-inputs)])))])))]))
 
 (defn repository-root [] (U String Nil)
   (let [explicit (U String Nil) (host-env "FIRN_REPO")]

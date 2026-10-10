@@ -148,14 +148,14 @@
 (defn darwin-host-case [] Bool
   (match
     (inputs/host-tags-from-source
-      "ashashi"
+      "mac"
       darwin-host-source
       ["stylix" "chrome"])
     [(HostSourceRejected message offset) false]
     [(HostSourceParsed host)
      (let [(enabled (Vec r/EnabledTag)) (r/hosttags-enabled host)
            (browsers r/EnabledTag) (nth enabled 1)]
-       (and (= "ashashi" (r/hosttags-host host))
+       (and (= "mac" (r/hosttags-host host))
             (= "darwin" (r/hosttags-platform host))
             (r/hosttags-restrict-allowed host)
             (= ["stylix" "chrome"] (r/hosttags-allowed host))
@@ -220,7 +220,7 @@
     [(ModuleSourceParsed module)
      (match
        (inputs/host-tags-from-source
-         "ashashi"
+         "mac"
          "{:platform darwin :enabled [theming] :disabled []}"
          ["stylix"])
        [(HostSourceRejected message offset) false]

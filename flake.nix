@@ -328,22 +328,11 @@
         hostConfig = ./hosts/whiterabbit/configuration.nix;
         hardwareConfig = ./hardware-configuration.nix;
       };
-      thinkpad-x1e = self.lib.mkSystem {
-        hostname = "thinkpad-x1e";
-        hostConfig = ./hosts/thinkpad-x1e/configuration.nix;
-        hardwareConfig = ./hardware-configuration.nix;
-      };
       nexus = self.lib.mkSystem {
         hostname = "nexus";
         hostConfig = ./hosts/nexus/configuration.nix;
         hardwareConfig = ./hosts/nexus/hardware.nix;
         extraModules = [ disko.nixosModules.disko ];
-      };
-    };
-    darwinConfigurations = {
-      ashashi = self.lib.mkDarwinSystem {
-        hostname = "ashashi";
-        hostConfig = ./hosts/ashashi/configuration.nix;
       };
     };
     templates.default = {
