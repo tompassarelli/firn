@@ -603,8 +603,8 @@
       "triggerDescription": "Reject agent wl-copy and niri screenshot actions; they replace the screenshot Tom is about to paste.",
       "category": "authoring",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/hooks/clipboard-guard.sh"
+        "repo": "north",
+        "path": "socrates/hooks/clipboard-guard.sh"
       }
     }
   },
