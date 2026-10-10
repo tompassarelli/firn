@@ -2,9 +2,9 @@
 name: cloud-workers
 agents: [claude]
 description: >-
-  Run code-only worker tasks in Anthropic's cloud through Claude Code routines
-  with the RemoteTrigger tool: when local CPU is busy or the task needs no
-  local files, Warcraft or private inputs.
+  Run every code-only worker task in Anthropic's cloud first through Claude
+  Code routines with the RemoteTrigger tool; local workers take only Warcraft
+  clients, private game assets, the LAN pool or unpushed local state.
 grounded: 2026-10-09
 written: 2026-10-09
 ---

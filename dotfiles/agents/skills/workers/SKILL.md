@@ -41,7 +41,7 @@ written: 2026-10-09
 - Use no Codex low/max, Sonnet or Opus low.
 - Use Astra xhigh or Fable only when Tom asks by name.
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
-- Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).
+- Send every code-only Smashcraft/Wisp item to `cloud-workers` first (4 cores/run, no run cap); staff a local worker only for real-game clients, private game assets, the LAN pool or unpushed local state, and move a code-only local worker to the cloud when found. Run farm sweeps through `github-actions`.
 - Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
 - As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers per the recycle rule and closes passed issues, so Tom never has to prompt a regrounding.
 - Stop the parent's monitors/background shells when their work ends.
