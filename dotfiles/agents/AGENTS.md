@@ -57,7 +57,7 @@
 - Load the matching skill when its description applies.
 - Read references only for Tom's explicit request or a named unresolved question.
 - Route feature detail through CLI help, help TOPIC or indexed docs; keep skills to prerequisite knowledge.
-- Keep playbooks at most 60 body lines and all SKILL.md bodies at most 1,400 lines.
+- Keep all SKILL.md bodies at most 1,400 lines in total and each playbook body at most 60; a skill whose frontmatter sets `metadata.kind: domain` is not a playbook.
 - Keep repository AGENTS.md at 20–30 lines where possible, at most 100, with 3–6 unique rules/profile/routers.
 - Keep generated global policy at most 120 lines where possible, at most 200.
 - Use Bun for JS/TS unless the project requires Node.
@@ -83,7 +83,7 @@
 - Run each check once; fix a failure and run it once more.
 - Run a broader farm sweep once for a load-bearing rule.
 - Allow one confirming timing run under an exclusive lease.
-- Use `CASE=<letter> FACT="<new fact>"` only for the hook's one permitted extra run.
+- In Codex, use `CASE=<letter> FACT="<new fact>"` only for the behavior hook's one permitted extra run.
 - Keep a test only if it is one of the testing skill's five kinds; all other tests are scaffolding, deleted before landing.
 - Add no bug regression unless existing behavior was genuinely missed.
 - Put logic in a pure core and side effects in a thin typed shell, so properties and recorded scenarios replace most unit tests.
