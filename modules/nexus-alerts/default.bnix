@@ -42,7 +42,7 @@
          :sops.templates {"ntfy-auth.env"
            {:restartUnits ["ntfy-sh.service"]
             :content (ms (s "NTFY_AUTH_USERS='phone:" ph.ntfy-phone-hash ":user,nexus:" ph.ntfy-publisher-hash ":user'")
-                         "NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo'"
+                         "NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw'"
                          (s "NTFY_AUTH_TOKENS='phone:" ph.ntfy-phone-token ":phone,nexus:" ph.ntfy-publisher-token ":publisher'")
                          "")}}
 
