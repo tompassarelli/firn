@@ -1,0 +1,29 @@
+import "nixpkgs.clause"
+
+Symlink:
+  foreign: "home-manager"
+  type: "Path"
+
+HomeDirectory:
+  homeDirectory: Text
+
+HomeFiles:
+  mkOutOfStoreSymlink: Function<Text, Symlink>
+
+HomeLibrary:
+  file: HomeFiles
+
+HomeConfiguration:
+  home: HomeDirectory
+  lib: HomeLibrary
+
+HomeModuleArguments:
+  config: HomeConfiguration
+
+export bunfig-module()
+  configuration-module(path(myConfig.modules.bunfig.enable), "Global Bun settings: 7-day release cooldown, no auto-install",
+    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
+       (?home: Delayed<nix,HomeModuleArguments>) =>
+         {home: {file: dictionary(".bunfig.toml",
+           {source: ?home.config.lib.file.mkOutOfStoreSymlink(
+             "{?home.config.home.homeDirectory}/code/nixos-config/dotfiles/bun/bunfig.toml")})}})}})

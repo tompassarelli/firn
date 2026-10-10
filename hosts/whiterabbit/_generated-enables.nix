@@ -14,6 +14,7 @@
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
   myConfig.modules.bubblewrap.enable = lib.mkDefault true;
+  myConfig.modules.bunfig.enable = lib.mkDefault true;
   myConfig.modules.chrome.enable = lib.mkDefault true;
   myConfig.modules.claude.enable = lib.mkDefault true;
   myConfig.modules.clipboard-tools.enable = lib.mkDefault true;
