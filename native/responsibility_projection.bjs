@@ -1,8 +1,16 @@
 #lang beagle/js
 (ns firn.responsibility-projection
   (:require [beagle.datum-reader :as reader]
-            [firn.tag-inputs :as input]
-            [store.types :as t]))
+            [firn.tag-inputs :as input]))
+
+(defrecord Triple
+  [t1 Any
+   t2 Any
+   t3 Any])
+
+(js/export
+  (defn triple [t1 Any t2 Any t3 Any] Triple
+  (->Triple t1 t2 t3)))
 
 (def member-of Keyword :member_of)
 (def relationships Keyword :relationships)
@@ -19,12 +27,12 @@
 
 (defrecord TripleScan
   [ok Bool
-   value t/Triple?
+   value Triple?
    message String
    offset Int])
 
 (defunion ProjectionResult
-  (ProjectionParsed [propositions (Vec t/Triple)])
+  (ProjectionParsed [propositions (Vec Triple)])
   (ProjectionRejected
     [message String
      offset Int]))
@@ -80,31 +88,31 @@
         (let [subject Keyword t1
               relation Keyword t2
               object Keyword t3]
-          (->TripleScan true (t/triple subject relation object) "" -1))
+          (->TripleScan true (triple subject relation object) "" -1))
         (->TripleScan false nil
           "responsibility propositions currently admit Keyword Atoms only"
           (input/event-offset events start))))))
 
 (defn relationship-declared?
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    relation Any] Bool
   (some?
     (some
-      (fn [proposition t/Triple] t/Triple?
-        (if (and (= relation (t/triple-t1 proposition))
-                 (and (= member-of (t/triple-t2 proposition))
-                      (= relationships (t/triple-t3 proposition))))
+      (fn [proposition Triple] Triple?
+        (if (and (= relation (triple-t1 proposition))
+                 (and (= member-of (triple-t2 proposition))
+                      (= relationships (triple-t3 proposition))))
           proposition
           nil))
       propositions)))
 
 (defn fact-normal-form?
-  [propositions (Vec t/Triple)] Bool
+  [propositions (Vec Triple)] Bool
   (and
     (relationship-declared? propositions member-of)
     (every?
-      (fn [proposition t/Triple] Bool
-        (relationship-declared? propositions (t/triple-t2 proposition)))
+      (fn [proposition Triple] Bool
+        (relationship-declared? propositions (triple-t2 proposition)))
       propositions)))
 
 (defn read-proposition-vector
@@ -119,7 +127,7 @@
       (input/event-offset events start))
     (let [end Int (input/datum-end events start)]
       (loop [cursor Int (+ start 1)
-             propositions (Vec t/Triple) []]
+             propositions (Vec Triple) []]
         (if (= cursor (- end 1))
           (if (fact-normal-form? propositions)
             (->ProjectionParsed propositions)
@@ -128,9 +136,9 @@
               (input/event-offset events start)))
           (let [scan TripleScan (read-triple events cursor)]
             (if (triplescan-ok scan)
-              (let [value t/Triple? (triplescan-value scan)]
+              (let [value Triple? (triplescan-value scan)]
                 (if (some? value)
-                  (let [proposition t/Triple value]
+                  (let [proposition Triple value]
                     (recur (input/datum-end events cursor)
                            (conj propositions proposition)))
                   (->ProjectionRejected "missing projected Triple"
@@ -138,7 +146,8 @@
               (->ProjectionRejected (triplescan-message scan)
                                     (triplescan-offset scan)))))))))
 
-(defn project-source [source String] ProjectionResult
+(js/export
+  (defn project-source [source String] ProjectionResult
   (let [read reader/DatumRead (reader/read-events source)
         read-error String? (reader/datumread-error read)]
     (if (some? read-error)
@@ -170,7 +179,7 @@
           (read-proposition-vector
             events
             (input/container-child-start events
-              (input/spanscan-start form) 3)))))))
+              (input/spanscan-start form) 3))))))))
 
 (defn append-keyword
   [values (Vec Keyword)
@@ -222,16 +231,16 @@
     right))
 
 (defn objects
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    subject Keyword
    relation Keyword] (Vec Keyword)
   (reduce
     (fn
       [values (Vec Keyword)
-       proposition t/Triple] (Vec Keyword)
-      (let [object Any (t/triple-t3 proposition)]
-        (if (and (= subject (t/triple-t1 proposition))
-                 (and (= relation (t/triple-t2 proposition))
+       proposition Triple] (Vec Keyword)
+      (let [object Any (triple-t3 proposition)]
+        (if (and (= subject (triple-t1 proposition))
+                 (and (= relation (triple-t2 proposition))
                       (keyword? object)))
           (append-keyword values object)
           values)))
@@ -239,14 +248,14 @@
     propositions))
 
 (defn first-object
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    subject Keyword
    relation Keyword] Keyword?
   (let [values (Vec Keyword) (objects propositions subject relation)]
     (if (empty? values) nil (first values))))
 
 (defn dependency-closure
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    seeds (Vec Keyword)] (Vec Keyword)
   (loop [cursor Int 0
          reached (Vec Keyword) seeds]
@@ -258,13 +267,13 @@
           (objects propositions (nth reached cursor) depends-on))))))
 
 (defn responsibilities-for
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword] (Vec Keyword)
   (dependency-closure propositions
     (objects propositions machine has-responsibility)))
 
 (defn explanation-for-software
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword
    responsibility Keyword
    software Keyword] RealizationExplanation
@@ -278,8 +287,9 @@
     (first-object propositions responsibility has-criticality)
     (first-object propositions responsibility has-lifecycle)))
 
-(defn explain-machine
-  [propositions (Vec t/Triple)
+(js/export
+  (defn explain-machine
+  [propositions (Vec Triple)
    machine Keyword] (Vec RealizationExplanation)
   (reduce
     (fn
@@ -296,10 +306,10 @@
         (dependency-closure propositions
           (objects propositions responsibility requires-software))))
     []
-    (responsibilities-for propositions machine)))
+    (responsibilities-for propositions machine))))
 
 (defn environment-modules
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword] (Vec String)
   (reduce
     (fn
@@ -316,7 +326,7 @@
     (explain-machine propositions machine)))
 
 (defn environment-modules-in-boot
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword
    boot-modules (Vec String)] (Vec String)
   (reduce
@@ -330,13 +340,13 @@
     (environment-modules propositions machine)))
 
 (defn responsibility-has-domain?
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    responsibility Keyword
    domain Keyword] Bool
   (= domain (first-object propositions responsibility is-realized-in)))
 
 (defn reaches-domain?
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    responsibilities (Vec Keyword)
    domain Keyword] Bool
   (some?
@@ -348,7 +358,7 @@
       responsibilities)))
 
 (defn boot-environment-dependencies
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword] (Vec Keyword)
   (reduce
     (fn
@@ -367,7 +377,7 @@
     (responsibilities-for propositions machine)))
 
 (defn incomplete-software
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword] (Vec Keyword)
   (reduce
     (fn
@@ -391,14 +401,14 @@
   [explanation RealizationExplanation
    boot-modules (Vec String)] Bool
   (let [module Keyword? (realizationexplanation-module explanation)]
-    (and (= :long-lived-system-service
+    (and (= (keyword "long-lived-system-service")
             (realizationexplanation-lifecycle explanation))
          (and (some? module)
               (let [present Keyword module]
                 (string-member? boot-modules (module-name present)))))))
 
 (defn inadmissible-boot-software
-  [propositions (Vec t/Triple)
+  [propositions (Vec Triple)
    machine Keyword
    boot-modules (Vec String)] (Vec Keyword)
   (reduce
@@ -413,8 +423,9 @@
     []
     (explain-machine propositions machine)))
 
-(defn assess-boot-coupling
-  [propositions (Vec t/Triple)
+(js/export
+  (defn assess-boot-coupling
+  [propositions (Vec Triple)
    machine Keyword
    boot-modules (Vec String)] BootCouplingBudget
   (->BootCouplingBudget
@@ -422,36 +433,39 @@
     (boot-environment-dependencies propositions machine)
     (incomplete-software propositions machine)
     (uncovered-capabilities propositions machine)
-    (inadmissible-boot-software propositions machine boot-modules)))
+    (inadmissible-boot-software propositions machine boot-modules))))
 
-(defn boot-coupling-budget-passes? [budget BootCouplingBudget] Bool
+(js/export
+  (defn boot-coupling-budget-passes? [budget BootCouplingBudget] Bool
   (and
     (empty? (bootcouplingbudget-environment-modules-in-boot budget))
     (empty? (bootcouplingbudget-boot-environment-dependencies budget))
     (empty? (bootcouplingbudget-incomplete-software budget))
     (empty? (bootcouplingbudget-uncovered-capabilities budget))
-    (empty? (bootcouplingbudget-inadmissible-boot-software budget))))
+    (empty? (bootcouplingbudget-inadmissible-boot-software budget)))))
 
-(defn realization-obligations
-  [propositions (Vec t/Triple)
-   machine Keyword] (Vec t/Triple)
+(js/export
+  (defn realization-obligations
+  [propositions (Vec Triple)
+   machine Keyword] (Vec Triple)
   (reduce
-    (fn [obligations (Vec t/Triple)
-         explanation RealizationExplanation] (Vec t/Triple)
-      (let [candidate t/Triple (t/triple machine must-realize
+    (fn [obligations (Vec Triple)
+         explanation RealizationExplanation] (Vec Triple)
+      (let [candidate Triple (triple machine must-realize
               (realizationexplanation-software explanation))]
         (if (some?
               (some
-                (fn [existing t/Triple] t/Triple?
+                (fn [existing Triple] Triple?
                   (if (= existing candidate) existing nil))
                 obligations))
           obligations
           (conj obligations candidate))))
     []
-    (explain-machine propositions machine)))
+    (explain-machine propositions machine))))
 
-(defn uncovered-capabilities
-  [propositions (Vec t/Triple)
+(js/export
+  (defn uncovered-capabilities
+  [propositions (Vec Triple)
    machine Keyword] (Vec Keyword)
   (reduce
     (fn
@@ -482,4 +496,4 @@
           missing
           required)))
     []
-    (responsibilities-for propositions machine)))
+    (responsibilities-for propositions machine))))

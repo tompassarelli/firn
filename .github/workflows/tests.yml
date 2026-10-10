@@ -81,6 +81,7 @@ jobs:
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
+          FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: bash native/repo_build_native.test.sh
 
       - name: Test activity chooser behavior

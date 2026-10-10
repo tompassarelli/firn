@@ -53,30 +53,42 @@
    message String
    offset Int])
 
-(def input-begin-marker String
-  ";; --- GENERATED MODULE INPUTS (do not edit) ---")
-(def input-end-marker String
-  ";; --- END GENERATED MODULE INPUTS ---")
-(def args-begin-marker String
-  ";; --- GENERATED MODULE ARGS (do not edit) ---")
-(def args-end-marker String
-  ";; --- END GENERATED MODULE ARGS ---")
-(def special-begin-marker String
-  ";; --- GENERATED MODULE SPECIALARGS (do not edit) ---")
-(def special-end-marker String
-  ";; --- END GENERATED MODULE SPECIALARGS ---")
-(def hm-special-begin-marker String
-  ";; --- GENERATED HM SPECIALARGS (do not edit) ---")
-(def hm-special-end-marker String
-  ";; --- END GENERATED HM SPECIALARGS ---")
-(def darwin-special-begin-marker String
-  ";; --- GENERATED DARWIN SPECIALARGS (do not edit) ---")
-(def darwin-special-end-marker String
-  ";; --- END GENERATED DARWIN SPECIALARGS ---")
-(def darwin-hm-begin-marker String
-  ";; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---")
-(def darwin-hm-end-marker String
-  ";; --- END GENERATED DARWIN HM SPECIALARGS ---")
+(js/export
+  (def input-begin-marker String
+  ";; --- GENERATED MODULE INPUTS (do not edit) ---"))
+(js/export
+  (def input-end-marker String
+  ";; --- END GENERATED MODULE INPUTS ---"))
+(js/export
+  (def args-begin-marker String
+  ";; --- GENERATED MODULE ARGS (do not edit) ---"))
+(js/export
+  (def args-end-marker String
+  ";; --- END GENERATED MODULE ARGS ---"))
+(js/export
+  (def special-begin-marker String
+  ";; --- GENERATED MODULE SPECIALARGS (do not edit) ---"))
+(js/export
+  (def special-end-marker String
+  ";; --- END GENERATED MODULE SPECIALARGS ---"))
+(js/export
+  (def hm-special-begin-marker String
+  ";; --- GENERATED HM SPECIALARGS (do not edit) ---"))
+(js/export
+  (def hm-special-end-marker String
+  ";; --- END GENERATED HM SPECIALARGS ---"))
+(js/export
+  (def darwin-special-begin-marker String
+  ";; --- GENERATED DARWIN SPECIALARGS (do not edit) ---"))
+(js/export
+  (def darwin-special-end-marker String
+  ";; --- END GENERATED DARWIN SPECIALARGS ---"))
+(js/export
+  (def darwin-hm-begin-marker String
+  ";; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---"))
+(js/export
+  (def darwin-hm-end-marker String
+  ";; --- END GENERATED DARWIN HM SPECIALARGS ---"))
 
 (defn span-found [start Int] SpanScan
   (->SpanScan true true start "" -1))
@@ -621,11 +633,12 @@
         (flakeinputproperty-literal property)
         (render-property-pairs properties keys (+ index 1))))))
 
-(defn format-input-decl [input FlakeInput] String
+(js/export
+  (defn format-input-decl [input FlakeInput] String
   (let [properties (Vec FlakeInputProperty) (flakeinput-properties input)]
     (str "   :" (flakeinput-name input) " {"
       (render-property-pairs properties (sorted-property-keys properties) 0)
-      "}")))
+      "}"))))
 
 (defn join-input-lines
   [inputs (Vec FlakeInput)
@@ -654,14 +667,17 @@
       "                    :" (nth names index) " " (nth names index)
       (join-special-lines names (+ index 1)))))
 
-(defn input-block [inputs (Vec FlakeInput)] String
-  (str (join-input-lines inputs (sorted-input-names inputs) 0) "\n"))
+(js/export
+  (defn input-block [inputs (Vec FlakeInput)] String
+  (str (join-input-lines inputs (sorted-input-names inputs) 0) "\n")))
 
-(defn args-block [inputs (Vec FlakeInput)] String
-  (str (join-args-lines (sorted-input-names inputs) 0) "\n"))
+(js/export
+  (defn args-block [inputs (Vec FlakeInput)] String
+  (str (join-args-lines (sorted-input-names inputs) 0) "\n")))
 
-(defn special-block [inputs (Vec FlakeInput)] String
-  (str (join-special-lines (sorted-input-names inputs) 0) "\n"))
+(js/export
+  (defn special-block [inputs (Vec FlakeInput)] String
+  (str (join-special-lines (sorted-input-names inputs) 0) "\n")))
 
 (defn find-text
   [text String

@@ -4,6 +4,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 beagle="${BEAGLE_PATH:?BEAGLE_PATH must name the Beagle checkout}"
+workbench="${FIRN_CLAUSE_WORKBENCH:-${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/clause-workbench}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-build-family.XXXXXX")"
 
 cleanup() {
@@ -59,8 +60,6 @@ tag_family="$repo/native/tag_resolve_family.bjs"
 flake_input="$repo/native/flake_input.bjs"
 flake_driver="$repo/native/flake_input_driver.bjs"
 flake_family="$repo/native/flake_input_family.bjs"
-store_slots="$beagle/store/src/store/slots.bgl"
-store_types="$beagle/store/src/store/types.bgl"
 responsibility_projection="$repo/native/responsibility_projection.bjs"
 responsibility_test="$repo/native/responsibility_projection_test.bjs"
 inventory="$repo/native/inventory.bjs"
@@ -68,7 +67,7 @@ inventory_family="$repo/native/inventory_family.bjs"
 
 build_family \
   "$datum" "$json" "$tag_resolve" "$tag_inputs" "$tag_driver" \
-  "$tag_family" "$store_slots" "$store_types" \
+  "$tag_family" \
   "$flake_input" "$flake_driver" "$flake_family" \
   "$repo/native/flake_input_test.bjs" \
   "$repo/native/flake_input_driver_test.bjs" \
@@ -77,7 +76,7 @@ build_family \
   "$core" "$repo/native/repo_build_test.bjs" \
   "$repo/native/repo_build_family.bjs"
 
-timeout --foreground 30 bun \
+timeout --foreground 30 env FIRN_CLAUSE_WORKBENCH="$workbench" bun \
   "$scratch/build/repo_build_family_test_host.mjs" "$repo" \
   >"$scratch/responsibility.out" 2>"$scratch/responsibility.err" \
   || {

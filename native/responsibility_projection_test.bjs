@@ -4,8 +4,7 @@
             [firn.inventory-family :as inventory-family]
             [firn.responsibility-projection :as projection]
             [firn.tag-resolve :as tags]
-            [firn.tag-resolve-family :as tag-family]
-            [store.types :as t]))
+            [firn.tag-resolve-family :as tag-family]))
 
 (def max-source-bytes Int 1048576)
 
@@ -49,10 +48,10 @@
     "   [:remote-access-service :has_criticality :essential]\n"
     "   [:remote-access-service :has_lifecycle :long-lived-system-service]])\n"))
 
-(defn expected-obligations [] (Vec t/Triple)
-  [(t/triple :whiterabbit :must_realize :blender)
-   (t/triple :whiterabbit :must_realize :obsidian)
-   (t/triple :whiterabbit :must_realize :remote-access-runtime)])
+(defn expected-obligations [] (Vec projection/Triple)
+  [(projection/triple :whiterabbit :must_realize (keyword "remote-access-runtime"))
+   (projection/triple :whiterabbit :must_realize :blender)
+   (projection/triple :whiterabbit :must_realize :obsidian)])
 
 (defn projection-behavior? [] Bool
   (match (projection/project-source source)
@@ -63,30 +62,30 @@
              propositions :whiterabbit ["remote-access-runtime"])
            blender-coupled projection/BootCouplingBudget (projection/assess-boot-coupling
              propositions :whiterabbit ["remote-access-runtime" "blender"])
-           dev-lifecycle (Vec t/Triple) (into propositions
-             [(t/triple :whiterabbit :has_responsibility :project-build)
-              (t/triple :project-build :requires_software :project-toolchain)
-              (t/triple :project-build :is_realized_in :boot)
-              (t/triple :project-build :has_criticality :interactive)
-              (t/triple :project-build :has_lifecycle :development)
-              (t/triple :project-toolchain :is_realized_by
-                :project-toolchain-module)])
-           unowned (Vec t/Triple) (into propositions
-             [(t/triple :whiterabbit :has_responsibility :unowned-build)
-              (t/triple :unowned-build :requires_software :unowned-toolchain)
-              (t/triple :unowned-build :is_realized_in :boot)
-              (t/triple :unowned-build :has_criticality :interactive)
-              (t/triple :unowned-toolchain :is_realized_by
-                :unowned-toolchain-module)])
-           inverted (Vec t/Triple) (into propositions
-             [(t/triple :whiterabbit :has_responsibility :boot-workflow)
-              (t/triple :boot-workflow :is_realized_in :boot)
-              (t/triple :boot-workflow :depends_on :three-d-workflow)])
-           incomplete (Vec t/Triple) (conj propositions
-             (t/triple :three-d-workflow :requires_software :unrealized))
-           uncovered (Vec t/Triple) (conj propositions
-             (t/triple :three-d-workflow :requires_capability
-               :missing-capability))]
+           dev-lifecycle (Vec projection/Triple) (into propositions
+             [(projection/triple :whiterabbit :has_responsibility (keyword "project-build"))
+              (projection/triple (keyword "project-build") :requires_software (keyword "project-toolchain"))
+              (projection/triple (keyword "project-build") :is_realized_in :boot)
+              (projection/triple (keyword "project-build") :has_criticality :interactive)
+              (projection/triple (keyword "project-build") :has_lifecycle :development)
+              (projection/triple (keyword "project-toolchain") :is_realized_by
+                (keyword "project-toolchain-module"))])
+           unowned (Vec projection/Triple) (into propositions
+             [(projection/triple :whiterabbit :has_responsibility (keyword "unowned-build"))
+              (projection/triple (keyword "unowned-build") :requires_software (keyword "unowned-toolchain"))
+              (projection/triple (keyword "unowned-build") :is_realized_in :boot)
+              (projection/triple (keyword "unowned-build") :has_criticality :interactive)
+              (projection/triple (keyword "unowned-toolchain") :is_realized_by
+                (keyword "unowned-toolchain-module"))])
+           inverted (Vec projection/Triple) (into propositions
+             [(projection/triple :whiterabbit :has_responsibility (keyword "boot-workflow"))
+              (projection/triple (keyword "boot-workflow") :is_realized_in :boot)
+              (projection/triple (keyword "boot-workflow") :depends_on (keyword "three-d-workflow"))])
+           incomplete (Vec projection/Triple) (conj propositions
+             (projection/triple (keyword "three-d-workflow") :requires_software :unrealized))
+           uncovered (Vec projection/Triple) (conj propositions
+             (projection/triple (keyword "three-d-workflow") :requires_capability
+               (keyword "missing-capability")))]
        (and (= (projection/realization-obligations
                  propositions :whiterabbit)
                (expected-obligations))

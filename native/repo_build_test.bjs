@@ -2,7 +2,7 @@
 (ns firn.repo-build-test
   (:require [firn.repo-build :as build]))
 
-(defn assert!
+(defn expect
   [condition Bool
    message String] Int
   (if condition
@@ -12,8 +12,8 @@
 (defn source [relative String] build/SourceState
   (build/->SourceState relative (build/output-relative relative)))
 
-(defn test-path-contract! [] Int
-  (assert!
+(defn test-path-contract [] Int
+  (expect
     (and
       (build/source-path? "flake.bnix")
       (build/source-path? "modules/alpha/default.bnix")
@@ -29,20 +29,20 @@
          "modules/alpha/default.nix"))
     "source inventory path contract"))
 
-(defn test-plan-contract! [] Int
+(defn test-plan-contract [] Int
   (let [sources (Vec build/SourceState) [(source "a.bnix") (source "b.bnix")]
         plan build/RepoBuildPlan (build/build-plan
           (build/->SourceInventory sources ["hosts/a/enabled-tags.nix"]))]
-    (assert! (and (= (build/repobuildplan-sources plan) sources)
+    (expect (and (= (build/repobuildplan-sources plan) sources)
                   (= (build/repobuildplan-obsolete-outputs plan)
                      ["hosts/a/enabled-tags.nix"]))
       "every source is checked against compiler output")))
 
-(defn test-process-contract! [] Int
+(defn test-process-contract [] Int
   (let [state build/SourceState (source "modules/alpha/default.bnix")
         process build/CompilerProcess (build/compiler-process "/beagle/bin/beagle-build" "/repo"
           state "/repo/modules/alpha/.default.nix.tmp")]
-    (assert!
+    (expect
       (and
         (= (build/compilerprocess-source-relative process)
            "modules/alpha/default.bnix")
@@ -54,7 +54,7 @@
             "/repo/modules/alpha/.default.nix.tmp"]))
       "tokenized compiler process plan")))
 
-(defn test-cleanup-contract! [] Int
+(defn test-cleanup-contract [] Int
   (let [generated String (str
           "{\n"
           "  tags = [ desktop terminal ];\n"
@@ -73,30 +73,30 @@
           "  tags-extra = [ keep ];\n"
           "  config = { value = \"{keep}\"; };\n"
           "}\n")]
-    (assert!
+    (expect
       (= (build/strip-authoring-attributes generated) expected)
       "authoring attribute cleanup")))
 
-(defn test-command-contract! [] Int
-  (assert!
+(defn test-command-contract [] Int
+  (expect
     (and
-      (instance? ParsedRepoBuild
+      (instance? build/ParsedRepoBuild
         (build/parse-repo-build-argv ["repo" "build"]))
-      (instance? ParsedRepoBuild
+      (instance? build/ParsedRepoBuild
         (build/parse-repo-build-argv ["repo" "build" "all"]))
-      (instance? InvalidRepoBuildArgv
+      (instance? build/InvalidRepoBuildArgv
         (build/parse-repo-build-argv ["repo" "build" "host"]))
-      (instance? OtherRepoBuildCommand
+      (instance? build/OtherRepoBuildCommand
         (build/parse-repo-build-argv ["repo" "validate"])))
     "repo build argv contract"))
 
 (js/export
  (defn test [] Int
-  (let [results (Vec Int) [(test-path-contract!)
-         (test-plan-contract!)
-         (test-process-contract!)
-         (test-cleanup-contract!)
-         (test-command-contract!)]]
+  (let [results (Vec Int) [(test-path-contract)
+         (test-plan-contract)
+         (test-process-contract)
+         (test-cleanup-contract)
+         (test-command-contract)]]
     (if (= results [0 0 0 0 0])
       0
       1))))

@@ -155,8 +155,9 @@
       [(StderrText text) (outcome-stdout-from outcome (+ index 1) result)]
       [(WriteFlake path text) (outcome-stdout-from outcome (+ index 1) result)])))
 
-(defn outcome-stdout [outcome FlakeInputOutcome] String
-  (outcome-stdout-from outcome 0 ""))
+(js/export
+  (defn outcome-stdout [outcome FlakeInputOutcome] String
+  (outcome-stdout-from outcome 0 "")))
 
 (defn outcome-stderr-from
   [outcome FlakeInputOutcome index Int result String] String
@@ -167,8 +168,9 @@
       [(StderrText text) (outcome-stderr-from outcome (+ index 1) (str result text))]
       [(WriteFlake path text) (outcome-stderr-from outcome (+ index 1) result)])))
 
-(defn outcome-stderr [outcome FlakeInputOutcome] String
-  (outcome-stderr-from outcome 0 ""))
+(js/export
+  (defn outcome-stderr [outcome FlakeInputOutcome] String
+  (outcome-stderr-from outcome 0 "")))
 
 (defn outcome-effect-kinds-from
   [outcome FlakeInputOutcome index Int result (Vec String)] (Vec String)
@@ -182,5 +184,6 @@
       [(WriteFlake path text)
        (outcome-effect-kinds-from outcome (+ index 1) (conj result "write"))])))
 
-(defn outcome-effect-kinds [outcome FlakeInputOutcome] (Vec String)
-  (outcome-effect-kinds-from outcome 0 []))
+(js/export
+  (defn outcome-effect-kinds [outcome FlakeInputOutcome] (Vec String)
+  (outcome-effect-kinds-from outcome 0 [])))

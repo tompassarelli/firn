@@ -8,10 +8,11 @@
   [path String
    enabled Bool])
 
-(defrecord HostConfig
+(js/export
+  (defrecord HostConfig
   [host String
    references (Vec String)
-   states (Vec ModuleState)])
+   states (Vec ModuleState)]))
 
 (js/export
   (defunion HostConfigResult
@@ -87,7 +88,8 @@
   (and (>= (count text) (count suffix))
        (= (subs text (- (count text) (count suffix)) (count text)) suffix)))
 
-(defn module-name-from-path [path String] String
+(js/export
+  (defn module-name-from-path [path String] String
   (if (not (starts-with? path module-prefix))
     ""
     (let [start Int (count module-prefix)]
@@ -95,7 +97,7 @@
         (if (or (= end (count path))
                 (= (subs path end (+ end 1)) "."))
           (subs path start end)
-          (recur (+ end 1)))))))
+          (recur (+ end 1))))))))
 
 (defn module-path? [path String] Bool
   (> (count (module-name-from-path path)) 0))
@@ -275,14 +277,16 @@
           (inventory-host-name
             (nth (inventoryrepository-hosts repository) index)))))))
 
-(defn tag-active
+(js/export
+  (defn tag-active
   [repository InventoryRepository
    host InventoryHost] (Vec String)
   (r/resolution-active
     (r/resolve (inventoryrepository-modules repository)
-               (inventoryhost-tags host))))
+               (inventoryhost-tags host)))))
 
-(defn live-modules [repository InventoryRepository] (Vec String)
+(js/export
+  (defn live-modules [repository InventoryRepository] (Vec String)
   (loop [index Int 0
          live (Vec String) []]
     (if (>= index (count (inventoryrepository-hosts repository)))
@@ -302,9 +306,10 @@
                     (append-unique tag-combined
                       (nth tagged tag-index)))))
               (recur (+ direct-index 1)
-                (append-unique combined (nth direct direct-index))))))))))
+                (append-unique combined (nth direct direct-index)))))))))))
 
-(defn unused-modules [repository InventoryRepository] (Vec String)
+(js/export
+  (defn unused-modules [repository InventoryRepository] (Vec String)
   (let [live (Vec String) (live-modules repository)
         all (Vec String) (module-names repository)]
     (loop [index Int 0
@@ -313,9 +318,10 @@
         unused
         (let [name String (nth all index)]
           (recur (+ index 1)
-            (if (string-member? live name) unused (conj unused name))))))))
+            (if (string-member? live name) unused (conj unused name)))))))))
 
-(defn direct-hosts
+(js/export
+  (defn direct-hosts
   [repository InventoryRepository
    module String] (Vec String)
   (loop [index Int 0
@@ -327,9 +333,10 @@
           (if (string-member?
                 (hostconfig-references (inventoryhost-config host)) module)
             (conj hosts (inventory-host-name host))
-            hosts))))))
+            hosts)))))))
 
-(defn tag-hosts
+(js/export
+  (defn tag-hosts
   [repository InventoryRepository
    module String] (Vec String)
   (loop [index Int 0
@@ -340,7 +347,7 @@
         (recur (+ index 1)
           (if (string-member? (tag-active repository host) module)
             (conj hosts (inventory-host-name host))
-            hosts))))))
+            hosts)))))))
 
 (defn join-strings [values (Vec String)] String
   (loop [index Int 0
@@ -420,7 +427,8 @@
     "\nHosts (via tag resolution):\n"
     (render-host-section (tag-hosts repository module)))))
 
-(defn state-paths
+(js/export
+  (defn state-paths
   [config HostConfig
    enabled Bool] (Vec String)
   (loop [index Int 0
@@ -431,7 +439,7 @@
         (recur (+ index 1)
           (if (= enabled (modulestate-enabled state))
             (conj paths (strip-enable-suffix (modulestate-path state)))
-            paths))))))
+            paths)))))))
 
 (js/export
   (defn render-host-status [config HostConfig] String
