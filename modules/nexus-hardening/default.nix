@@ -50,7 +50,7 @@
     '';
     system.autoUpgrade = {
       flake = lib.mkForce "github:tompassarelli/firn#nexus";
-      flags = lib.mkForce [ ];
+      flags = lib.mkForce [ "--refresh" "--flake github:tompassarelli/firn#nexus" ];
       dates = lib.mkForce "03:30";
       allowReboot = lib.mkForce true;
       rebootWindow = {
