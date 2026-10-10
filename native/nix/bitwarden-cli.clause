@@ -1,0 +1,4 @@
+import "nixpkgs.clause"
+
+export bitwarden-cli-module()
+  module(path(myConfig.modules.bitwarden-cli.enable), "bw — Bitwarden vault CLI", package(path(bitwarden-cli)))

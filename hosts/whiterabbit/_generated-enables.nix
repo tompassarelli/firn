@@ -10,6 +10,7 @@
   myConfig.modules.bat.enable = lib.mkDefault true;
   myConfig.modules.bc.enable = lib.mkDefault true;
   myConfig.modules.bench-shield.enable = lib.mkDefault true;
+  myConfig.modules.bitwarden-cli.enable = lib.mkDefault true;
   myConfig.modules.blender.enable = lib.mkDefault true;
   myConfig.modules.brightnessctl.enable = lib.mkDefault true;
   myConfig.modules.btop.enable = lib.mkDefault true;
