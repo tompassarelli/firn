@@ -14,7 +14,7 @@ usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 
 # Per-project intent, Tom's to set: priority (1 first), bar (prototype, solid
 # or critical), and optionally share (% of each plan window) and target (a
 # date or boxes/day).
-[projects.muove]
+[projects.galileo]
 priority = 1
 bar = "solid"
 
