@@ -1,6 +1,6 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-((cfg: ((hubPublicKey: ((laptopPublicKey: ((template: {
+((cfg: ((hubPublicKey: ((laptopPublicKey: ((template: ((peerNames: ((peersHelper: {
   options.myConfig.modules.wg-nexus.enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3";
   options.myConfig.modules.wg-nexus.role = lib.mkOption {
     type = lib.types.enum [ "hub" "client" ];
@@ -17,6 +17,25 @@
     }
     (lib.mkIf (cfg.role == "hub") {
       sops.secrets.wireguard-nexus.sopsFile = "${flakeRoot}/secrets/nexus/wireguard.yaml";
+      systemd.services.nexus-peers = {
+        description = "Write the wg-nexus peers' latest handshakes and online-since times to /run/nexus/peers.json";
+        after = [ "wireguard-wg-nexus.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          RuntimeDirectory = "nexus";
+          RuntimeDirectoryMode = "0755";
+          RuntimeDirectoryPreserve = "yes";
+          ExecStart = "${peersHelper}/bin/nexus-peers";
+        };
+      };
+      systemd.timers.nexus-peers = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "1min";
+          OnUnitActiveSec = "1min";
+          AccuracySec = "5s";
+        };
+      };
       networking.wireguard.interfaces.wg-nexus = {
         ips = [ "10.77.0.1/24" ];
         listenPort = 51820;
@@ -69,4 +88,24 @@
       networking.firewall.extraCommands = "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP";
     })
   ]);
-}) (builtins.getAttr "wg-nexus.conf" config.sops.templates))) "ynrELQcn+uM+tllUWa/o5IpPbjHKPPJAStI3gq23EhI=")) "Dvmfg8eA5NBuadrl3CoEW1ZstHMxD7CT9r3l6HlMQx4=")) config.myConfig.modules.wg-nexus)
+}) (pkgs.writeShellApplication {
+    name = "nexus-peers";
+    runtimeInputs = [ pkgs.wireguard-tools pkgs.jq pkgs.coreutils ];
+    runtimeEnv = {
+      PEERS = peerNames;
+    };
+    text = ''
+      out=/run/nexus/peers.json
+      prev=$(cat "$out" 2>/dev/null || echo '{}')
+      wg show wg-nexus latest-handshakes | jq -R -n --argjson prev "$prev" --argjson now "$(date +%s)" --arg names "$PEERS" '
+        ($names | split(" ") | map(split(":") | {key: .[1], value: .[0]}) | from_entries) as $map
+        | [inputs | split("\t") | select($map[.[0]]) | {name: $map[.[0]], hs: (.[1] | tonumber)}]
+        | {updated: $now, peers: (map(. as $p | (($p.hs > 0) and ($now - $p.hs < 300)) as $on
+            | {key: $p.name, value: {handshake: (if $p.hs > 0 then $p.hs else null end), online: $on,
+               online_since: (if $on then ($prev.peers[$p.name].online_since // $p.hs) else null end)}}) | from_entries)}' >"$out.tmp"
+      mv "$out.tmp" "$out"
+    '';
+  }))) (lib.concatStringsSep " " (lib.concatLists [
+    [ "laptop:${laptopPublicKey}" ]
+    (lib.optional (cfg.phonePublicKey != null) "phone:${cfg.phonePublicKey}")
+  ])))) (builtins.getAttr "wg-nexus.conf" config.sops.templates))) "ynrELQcn+uM+tllUWa/o5IpPbjHKPPJAStI3gq23EhI=")) "Dvmfg8eA5NBuadrl3CoEW1ZstHMxD7CT9r3l6HlMQx4=")) config.myConfig.modules.wg-nexus)

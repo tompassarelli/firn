@@ -27,6 +27,7 @@
    :myConfig.modules.glow.enable (lib.mkDefault true)
    :myConfig.modules.hyperfine.enable (lib.mkDefault true)
    :myConfig.modules.imagemagick.enable (lib.mkDefault true)
+   :myConfig.modules.job-watch.enable (lib.mkDefault true)
    :myConfig.modules.jq.enable (lib.mkDefault true)
    :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.networkd.enable (lib.mkDefault true)
