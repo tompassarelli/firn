@@ -3,13 +3,9 @@
   "title": "Agent chain of command",
   "description": "~/.local/state/agents/org.json, written by `agents org` and `agents lead` (dotfiles/agents/lib/org.py). The proxy, Tom's top-level session, is implicit and is the root; a node whose parent is missing hangs under it.",
   "type": "object",
-  "required": ["version", "priority", "nodes"],
+  "required": ["version", "nodes"],
   "properties": {
     "version": {"const": 1},
-    "priority": {
-      "description": "Tom's domain priority order, first wins; the spawn capacity gate reserves headroom for the first domain.",
-      "type": "array", "items": {"type": "string"}
-    },
     "nodes": {
       "type": "array",
       "items": {

@@ -6,7 +6,7 @@
 # brief passes and is logged. The Codex spawn_agent path through the behavior
 # decider denies the same way. Delegation budget 0 (session env, or a subagent
 # brief without a Delegation line) denies with the do-it-yourself message and
-# budget 1 allows; a domain below the first in the org priority stops at 80%.
+# budget 1 allows; a domain below the first in the project priority stops at 80%.
 # A fresh usage-gate.json refusal (firn#12 money gate) denies with its own text.
 set -uo pipefail
 export PATH="/etc/codex/hooks/runtime:$PATH"
@@ -34,7 +34,7 @@ status() { printf '{"decision":"RUN","leasedBatchCpus":%s,"leasedNativeCpus":12,
 # call HOOK JSON: print the deny reason ("" when allowed).
 call() {
   printf '%s' "$2" | env -u AGENT_NO_AUTHORING_HOOKS -u AGENT_ROLE -u AGENT_DELEGATION_BUDGET -u AGENT_ORG_NAME \
-    AGENTS_ORG_FILE="$SCRATCH/org.json" "${CALL_ENV[@]}" HOME="$SCRATCH/home" SPAWN_CAPACITY_HOME="$SCRATCH/home" \
+    AGENTS_ORG_FILE="$SCRATCH/org.json" AGENTS_ORCHESTRATION="$SCRATCH/orchestration.toml" "${CALL_ENV[@]}" HOME="$SCRATCH/home" SPAWN_CAPACITY_HOME="$SCRATCH/home" \
     SPAWN_CAPACITY_STATUS="$STATUS" CODEX_BEHAVIOR_STATE="$SCRATCH/state" \
     CODEX_BEHAVIOR_CODE_ROOT="$SCRATCH/code" \
     NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
@@ -129,7 +129,13 @@ printf '{"type":"user","message":{"role":"user","content":"Delegation: role=sub-
 subagent() { printf '{"session_id":"s","transcript_path":"%s","agent_id":"%s","agent_type":"worker","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":%s}' "$SCRATCH/home/.claude/projects/p/s.jsonl" "$1" "$worker"; }
 dodeny "$(subagent w0)" 'a subagent whose brief has no Delegation line is a worker and is denied'
 expect_allow "$(subagent w1)" 'a subagent briefed with budget=1 may spawn'
-printf '{"version":1,"priority":["muove","smashcraft"],"nodes":[{"id":"sc","domain":"Smashcraft"},{"id":"mu","domain":"muove"}]}\n' >"$SCRATCH/org.json"
+printf '{"version":1,"nodes":[{"id":"sc","domain":"Smashcraft"},{"id":"mu","domain":"muove"}]}\n' >"$SCRATCH/org.json"
+cat >"$SCRATCH/orchestration.toml" <<'TOML'
+[projects.muove]
+priority = 1
+[projects.smashcraft]
+priority = 2
+TOML
 status 17 5
 out="$(CALL_ENV=(AGENT_ORG_NAME=sc); call "$HOOK" "$(agent "$worker")")"
 case "$out" in "Domain smashcraft ranks below muove"*) check ok 'a lower-priority domain stops at 80% of the limit' ;; *) check bad 'a lower-priority domain stops at 80% of the limit' "$out" ;; esac
@@ -145,7 +151,9 @@ out="$(call "$HOOK" "$(agent "$worker")")"
 gate null
 
 start=$(date +%s%N)
-printf '%s' "$input" | env -u AGENT_DELEGATION_BUDGET -u AGENT_ROLE SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
+printf '%s' "$input" | env -u AGENT_DELEGATION_BUDGET -u AGENT_ROLE AGENT_ORG_NAME=mu \
+  AGENTS_ORG_FILE="$SCRATCH/org.json" AGENTS_ORCHESTRATION="$SCRATCH/orchestration.toml" \
+  SPAWN_CAPACITY_HOME="$SCRATCH/home" SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
 ms=$(( ($(date +%s%N) - start) / 1000000 ))
 [ "$ms" -lt 100 ] && check ok "allow decision takes ${ms} ms (under 100)" || check bad 'allow decision under 100 ms' "${ms} ms"
 

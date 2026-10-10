@@ -5,7 +5,9 @@ import shlex
 import subprocess
 import sys
 import time
+import tomllib
 import uuid
+from pathlib import Path
 
 VERSION = 1
 BUDGETS = {"proxy": 3, "lead": 2, "sub-lead": 1, "worker": 0}
@@ -21,7 +23,7 @@ USAGE = """usage: agents org [show]
        agents org finish NAME     mark the workstream finished; the launcher deregisters it on exit
        agents org exit NAME       launcher exit hook: remove a finished node, flag an active one as died
        agents org remove NAME     remove the node and its subtree
-       agents org priority [DOMAIN...]   print or set Tom's domain priority order, first wins
+       agents org priority         print Tom's project priority order from orchestration.toml
        agents lead start --provider claude|codex --domain DOMAIN --brief FILE [--name NAME]
                       [--role lead|sub-lead] [--parent NAME] [--budget N] [--cwd DIR] [-- PROVIDER ARGS]
        agents lead restart NAME   reopen a lead that died while active, from its brief and status file
@@ -43,6 +45,17 @@ def org_file():
         os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"), "agents", "org.json")
 
 
+def priority():
+    path = os.environ.get("AGENTS_ORCHESTRATION") or Path(__file__).resolve().parent.parent / "orchestration.toml"
+    try:
+        with open(path, "rb") as f:
+            projects = tomllib.load(f).get("projects", {})
+        order = sorted(projects, key=lambda name: projects[name].get("priority", float("inf")))
+    except (OSError, ValueError, TypeError, AttributeError) as e:
+        die(f"cannot read project priority from {path}: {e}")
+    return "priority: " + (" > ".join(order) or "unset ([projects] in orchestration.toml)")
+
+
 class Org:
     def __enter__(self):
         path = org_file()
@@ -58,15 +71,16 @@ class Org:
             die(f"cannot read {path}: {e}")
         if data.get("version") != VERSION:
             die(f"{path} has schema version {data.get('version')!r}; this tool reads version {VERSION}")
+        self.data = data
         self.nodes = data.get("nodes", [])
-        self.priority = data.get("priority", [])
         return self
 
     def save(self):
         path = org_file()
         tmp = f"{path}.{os.getpid()}.tmp"
+        self.data["nodes"] = self.nodes
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"version": VERSION, "priority": self.priority, "nodes": self.nodes}, f, indent=1)
+            json.dump(self.data, f, indent=1)
             f.write("\n")
         os.replace(tmp, path)
 
@@ -198,7 +212,7 @@ def line(n):
 
 
 def show(org):
-    print("priority: " + (" > ".join(org.priority) if org.priority else "unset (agents org priority D1 D2 ...)"))
+    print(priority())
     names = {n["id"] for n in org.nodes}
     kids = {}
     for n in org.nodes:
@@ -310,9 +324,10 @@ def main(argv):
         print(USAGE)
         return
     if cmd == "priority":
-        for arg in args:
-            if arg.startswith("-"):
-                die(f"unknown option {arg}\n{USAGE}")
+        if args:
+            die(USAGE)
+        print(priority())
+        return
     with Org() as org:
         if cmd == "show" and not args:
             show(org)
@@ -345,11 +360,6 @@ def main(argv):
                 org.save()
         elif cmd == "remove" and len(args) == 1:
             print(f"removed {remove(org, args[0])} node(s)")
-        elif cmd == "priority":
-            if args:
-                org.priority = [d.lower() for d in args]
-                org.save()
-            print("priority: " + (" > ".join(org.priority) or "unset"))
         else:
             die(USAGE)
 

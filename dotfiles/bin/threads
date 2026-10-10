@@ -14,7 +14,9 @@ import sqlite3
 import subprocess
 import sys
 import time
+import tomllib
 from datetime import datetime, timezone
+from pathlib import Path
 
 DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
 CACHE_SECONDS = 60
@@ -756,15 +758,16 @@ def cmd_summary(db, a):
         print(f"threads: closure table needs GitHub: {e}", file=sys.stderr)
 
 
-BAR, MIN_RUNS, MARGIN = 80, 5, 15
+BAR = {"prototype": 60, "solid": 80, "critical": 90}
+MIN_RUNS, MARGIN = 5, 15
 BACKOFF = ["surface", "verify", "scope", "spec"]
 
 
-def recommend(runs, asked, incumbent):
+def recommend(runs, asked, incumbent, bar):
     """Pure core. runs: dicts with category, the facets, tier and ok (run_ok).
     asked: facet -> value, category required. incumbent: cell -> tier. Returns (cell, n, tier, rates) where
     cell is the finest one with a tier holding MIN_RUNS runs, backing off along BACKOFF; tier is the cheapest
-    reaching BAR, kept at the incumbent unless a pricier challenger beats it by MARGIN points on MIN_RUNS each."""
+    reaching bar, kept at the incumbent unless a pricier challenger beats it by MARGIN points on MIN_RUNS each."""
     keys = ["category", *(k for k in reversed(BACKOFF) if k in asked)]
     while True:
         cell = {k: asked[k] for k in keys}
@@ -778,7 +781,7 @@ def recommend(runs, asked, incumbent):
         keys.pop()
     name = ", ".join(f"{k.capitalize()}: {v}" for k, v in cell.items())
     sampled = {t: rn for t, rn in rates.items() if rn[1] >= MIN_RUNS}
-    passing = sorted((t for t, (rate, _) in sampled.items() if rate >= BAR), key=TIER_RANK.get)
+    passing = sorted((t for t, (rate, _) in sampled.items() if rate >= bar), key=TIER_RANK.get)
     best = passing[0] if passing else (max(sampled, key=lambda t: (sampled[t][0], -TIER_RANK[t])) if sampled else "medium")
     held = incumbent.get(name)
     if held and held != best and held in sampled and best in sampled:
@@ -799,17 +802,26 @@ def cmd_recommend(db, a):
     asked = brief_fields(a.facets)
     if "category" not in asked or asked["category"] not in CATEGORIES:
         raise Refused(f"recommend needs `Category: <one of {', '.join(CATEGORIES)}>` in {a.facets!r}")
+    repo = asked.get("item", "").partition("#")[0].removeprefix(f"{OWNER}/")
+    config = os.environ.get("AGENTS_ORCHESTRATION") or Path(__file__).resolve().parent.parent / "agents/orchestration.toml"
+    try:
+        with open(config, "rb") as f:
+            project = tomllib.load(f).get("projects", {}).get(repo, {})
+    except (OSError, ValueError) as e:
+        raise Refused(f"cannot read {config}: {e}") from e
+    bar = BAR.get(project.get("bar"), 80)
     asked = {k: v for k, v in asked.items() if k in GROUPS}
     ok = run_ok(db)
     runs = [{**{k: cell_value(r, k) for k in GROUPS}, "tier": r["tier"], "ok": ok(r)}
             for r in db.execute("SELECT * FROM runs WHERE follows IS NULL AND ended >= ?", (a.since or "",))]
     incumbent = dict(db.execute("SELECT cell, tier FROM tier_choice").fetchall())
-    cell, n, tier, rates = recommend(runs, asked, incumbent)
+    cell, n, tier, rates = recommend(runs, asked, incumbent, bar)
     if incumbent.get(cell) != tier:
         with Tx(db):
             db.execute("INSERT INTO tier_choice(cell, tier, since) VALUES (?,?,?) ON CONFLICT(cell) DO UPDATE SET"
                        " tier = excluded.tier, since = excluded.since", (cell, tier, now()))
     print(f"tier {tier}  cell [{cell}]  n {n}")
+    print(f"BAR {bar}")
     for t, (rate, k) in sorted(rates.items(), key=lambda kv: TIER_RANK[kv[0]]):
         print(f"  {t:<7} {rate}% of {k}")
 
@@ -907,10 +919,11 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--group", default="category", help=f"comma list of {', '.join(GROUPS)} (default category)")
     s = cmd("recommend", cmd_recommend,
             f"cheapest tier whose first-assignment runs reported Done with no later Follows: run (and landed when it "
-            f"committed) at >= {BAR}%% in the finest "
+            "committed) at the Item repo's project BAR from orchestration.toml (prototype 60%%, solid 80%%, critical 90%%; "
+            "unmatched repo 80%%) in the finest "
             f"cell holding a tier with >= {MIN_RUNS} runs, backing off {', '.join(BACKOFF)}; a pricier tier replaces the "
             f"cell's last recommendation only when it beats it by {MARGIN} points on >= {MIN_RUNS} runs each")
-    s.add_argument("facets", help="brief facet lines, e.g. 'Category: tooling, Spec: measured, Scope: one-file'")
+    s.add_argument("facets", help="brief facet lines, e.g. 'Item: firn#12, Category: tooling, Spec: measured, Scope: one-file'")
     s.add_argument("--since", help="only runs that ended on or after DATE")
     return p
 

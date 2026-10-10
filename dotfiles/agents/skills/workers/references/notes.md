@@ -8,7 +8,9 @@ arises.
 Treat these ledger-derived rules as experiments: recheck `worker-ledger --summary`
 after every 10 new closures in a category and change a rule when the numbers move.
 
-- `worker-ledger --recommend` names the cheapest tier at 80% Done without a later
+- `worker-ledger --recommend` uses the Item repo's [projects] bar in
+  orchestration.toml: prototype 60%, solid 80%, critical 90%, unmatched repo 80%.
+  It names the cheapest tier at that rate of Done without a later
   `Follows:` run (and landed when it committed) in the finest cell with 5 runs. It
   backs off Surface, Verify, Scope, then Spec, and changes a cell's pick only on a
   15-point lead.

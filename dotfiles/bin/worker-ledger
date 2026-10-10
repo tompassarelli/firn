@@ -36,7 +36,8 @@ reviewers `Lens: <lens>`; a reviewer report stating `Accepted flaws: N` counts N
 A run succeeds when it reports Done (ruled out included) with no later Follows: run, and landed when it made
 a commit (a git commit or push in its transcript), where a commit counts as landed when it, or one with
 its subject, is on origin/main of a repo in ${LEDGER_REPOS:-~/code/*/main}, whoever pushed it.
---recommend picks the cheapest tier at >= 80% success in the finest cell with >= 5 runs,
+--recommend uses the Item repo's project bar in orchestration.toml: prototype 60%, solid 80%, critical 90%
+(unmatched repo 80%); it picks the cheapest tier at that success rate in the finest cell with >= 5 runs,
 backing off Surface, Verify, Scope, then Spec; a pricier tier replaces a cell's last pick only when 15 points better.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF

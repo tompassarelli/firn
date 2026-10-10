@@ -26,16 +26,20 @@ bar = "solid"
 priority = 3
 bar = "solid"
 
-[projects.tooling]
+[projects.north]
 priority = 4
 bar = "solid"
 
-[projects.mail]
+[projects.tooling]
 priority = 5
 bar = "solid"
 
-[projects.wisp]
+[projects.mail]
 priority = 6
+bar = "solid"
+
+[projects.wisp]
+priority = 7
 bar = "solid"
 
 # An account state override carries an expiry and is ignored once it passes:
