@@ -75,8 +75,10 @@ const missingCoreTools = () => {
 if (args[0] === 'host' && args[1] === 'rebuild') {
   const previous = systemGeneration();
   const status = run(args);
-  const missing = status === 0 ? missingCoreTools() : [];
+  const switched = status === 0 || systemGeneration() !== previous;
+  const missing = switched ? missingCoreTools() : [];
   if (missing.length === 0) {
+    if (switched) process.stdout.write(`firn rebuild: core tools resolve in a login shell: ${coreTools.join(' ')}\n`);
     process.exitCode = status;
   } else {
     process.stderr.write(`\nfirn rebuild: !!! CORE TOOLS MISSING FROM A LOGIN SHELL'S PATH AFTER THE SWITCH: ${missing.join(' ')} !!!\n`);
