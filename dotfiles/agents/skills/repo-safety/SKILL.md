@@ -13,5 +13,6 @@ written: 2026-10-09
 - Keep ISO/disc images and proprietary extracted game files outside Git trees in private storage; publish only permitted authored tools/numerical facts.
 - Stage named paths, finish commit hooks, publish separately through `safe-push --to main` and fast-forward clean main.
 - Retire a worktree only as its owner/accountable parent after its work settles; preserve unknown ownership and live consumers.
+- Before starting an issue, check `lane-gc --unlanded` for an existing branch referencing it and continue that instead of starting over; an owner who abandons a lane deletes it in the same turn. The hourly `lane-gc` timer retires landed, clean, idle lanes.
 - Signal owned processes by exact PID or unique scoped pattern.
 - Resolve guard denials through the sanctioned route and preserve secret/private-data/destructive/live-consumer boundaries.

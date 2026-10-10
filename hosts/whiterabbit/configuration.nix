@@ -58,7 +58,7 @@
   myConfig.modules.nh.enable = true;
   myConfig.modules.agent-slice.enable = true;
   myConfig.modules.delivery-liveness.enable = true;
-  myConfig.modules.lane-sweep.enable = true;
+  myConfig.modules.lane-gc.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";

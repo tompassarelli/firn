@@ -61,6 +61,7 @@ written: 2026-10-10
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.
+- Before starting an issue, check `lane-gc --unlanded` for an existing branch referencing it and continue that instead of starting over; an owner who abandons a lane deletes it in the same turn.
 - While main is red, staff its fix first and keep queuing lanes behind it; never cancel an Autoland run, because a cancelled bisect half strands its lanes.
 - Before a playtest's last blocker lands, prebuild its map with the fix applied and run the frame-cost compare, so the build cannot fail at playtest time.
 - Promote a process idea to policy only after it produced a measured result; file unproven ideas as issues.

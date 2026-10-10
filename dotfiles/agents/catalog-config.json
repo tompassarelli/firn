@@ -589,6 +589,16 @@
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/vast-ai/SKILL.md"
       }
+    },
+    "unlanded-work": {
+      "kind": "hook",
+      "title": "Unlanded work notice",
+      "triggerDescription": "At session start, print how many unlanded lanes older than 24 h the hourly lane-gc report lists.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/unlanded-work.sh"
+      }
     }
   },
   "activation": {
@@ -1452,6 +1462,19 @@
           "type": "skill",
           "targets": [
             "shared"
+          ]
+        }
+      ]
+    },
+    "unlanded-work": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
           ]
         }
       ]

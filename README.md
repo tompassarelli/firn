@@ -61,6 +61,7 @@ claude-runtime-update [version|latest] # install verified official Claude binary
 claude                # launch the atomically selected Claude runtime
 vast-job --offer-query Q --max-hours H --run CMD --fetch P --to DIR # rent, run, fetch, destroy one capped vast.ai job
 vast-reaper [--dry-run]  # every 5 min: destroy vast-job instances past deadline or without a live supervisor
+lane-gc [--dry-run] [--unlanded] # hourly: retire landed clean idle worktrees/branches; report unlanded work
 update-status         # report successful automatic updates older than 36 hours
 update-notify SERVICE # desktop notification with the failed service's journal
 proton-log-watchdog   # strip PROTON_LOG from Wisp launch.sh, truncate clone logs over 1 GiB
@@ -81,9 +82,10 @@ host or `all` where the edge defines that default. `firn rebuild [host]` is the
 canonical build-and-switch shortcut; run `firn` with no args for the full grid
 or `firn <node>` for one entity's edges.
 
-`lane-sweep` (daily timer, module `lane-sweep`) archives each worktree lane idle
-for a day under `refs/archive/<date>/<slug>`, then removes it; the restore
-command is in `~/.local/state/agents/lane-archive/README.md`.
+`lane-gc` (hourly timer, module `lane-gc`) retires worktrees and branches already
+on origin/main that are clean, idle and not in use, and lists everything else in
+`~/.local/state/agents/lane-gc/unlanded.txt`; the `unlanded-work` SessionStart hook
+announces entries older than 24 h.
 
 ## Secrets
 

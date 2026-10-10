@@ -1,0 +1,203 @@
+#!/usr/bin/env bun
+import { existsSync, mkdirSync, readdirSync, readlinkSync, renameSync, statSync, writeFileSync, readFileSync, realpathSync } from "fs";
+import { basename, dirname, join } from "path";
+
+const USAGE = `usage: lane-gc [--dry-run] [--repo NAME]... [--root DIR] [--idle-hours H] [--state FILE]
+       lane-gc --unlanded
+
+For every ~/code/<project> container with main/ and worktrees/ (clients,
+resources and archive are skipped), retire what is already on origin/main:
+  - a worktree under worktrees/ whose tip is contained in origin/main, patch-equivalent
+    there (git cherry shows no +) or adds nothing when merged, that has no uncommitted or
+    untracked files, no process with its cwd or an open file inside, is not locked and
+    was not touched within --idle-hours (default 3): git worktree remove, then its branch;
+  - a local branch with no worktree passing the same check;
+  - origin claude/* and lane branches whose tip is an ancestor of origin/main;
+then git worktree prune and git fetch --prune. Everything with unique commits or dirty
+state is kept and written to the unlanded report (default
+~/.local/state/agents/lane-gc/unlanded.txt): age, container, path, branch, ahead count,
+dirty, first commit subject, Refs. --unlanded prints that report.`;
+
+const HOME = process.env.HOME!;
+const SKIP = new Set(["clients", "resources", "archive"]);
+const env = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
+
+type R = { ok: boolean; out: string; err: string };
+function git(cwd: string, args: string[], timeout = 120_000): R {
+  const r = Bun.spawnSync(["git", "-C", cwd, ...args], { env, stdout: "pipe", stderr: "pipe", timeout });
+  return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
+}
+const tilde = (p: string) => (p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p);
+function real(p: string): string {
+  try { return realpathSync(p); } catch { return p; }
+}
+
+export function liveRoots(): string[] {
+  const out = new Set<string>();
+  for (const pid of readdirSync("/proc")) {
+    if (!/^\d+$/.test(pid)) continue;
+    try { out.add(readlinkSync(`/proc/${pid}/cwd`)); } catch {}
+    let fds: string[] = [];
+    try { fds = readdirSync(`/proc/${pid}/fd`); } catch {}
+    for (const fd of fds) {
+      try {
+        const t = readlinkSync(`/proc/${pid}/fd/${fd}`);
+        if (t.startsWith("/")) out.add(t);
+      } catch {}
+    }
+  }
+  return [...out];
+}
+
+const inside = (p: string, roots: string[]) => roots.some((c) => c === p || c.startsWith(p + "/"));
+
+function newestMtime(paths: string[]): number {
+  let m = 0;
+  for (const p of paths) {
+    try { m = Math.max(m, statSync(p).mtimeMs); } catch {}
+  }
+  return m;
+}
+
+export type Verdict = { landed: boolean; ahead: number; how: string };
+export function landed(repo: string, base: string, tip: string): Verdict {
+  if (git(repo, ["merge-base", "--is-ancestor", tip, base]).ok) return { landed: true, ahead: 0, how: "ancestor" };
+  const ahead = Number(git(repo, ["rev-list", "--count", `${base}..${tip}`]).out || "0");
+  const cherry = git(repo, ["cherry", base, tip]);
+  if (cherry.ok && !cherry.out.split("\n").some((l) => l.startsWith("+"))) return { landed: true, ahead, how: "patch-equivalent" };
+  const merged = git(repo, ["merge-tree", "--write-tree", base, tip]);
+  if (merged.ok && merged.out.split("\n")[0] === git(repo, ["rev-parse", `${base}^{tree}`]).out) return { landed: true, ahead, how: "adds nothing" };
+  return { landed: false, ahead, how: "" };
+}
+
+type Opts = { dryRun: boolean; root: string; repos: string[]; idleHours: number; state: string };
+type Counts = { retiredWorktrees: number; deletedBranches: number; deletedRemote: number; kept: number; unlanded: number };
+const reportRows: string[] = [];
+
+function unlandedRow(name: string, main: string, base: string, tip: string, where: string, branch: string, ahead: number, dirty: string) {
+  const when = Number(git(main, ["log", "-1", "--format=%ct", tip]).out || "0");
+  const hours = Math.floor((Date.now() / 1000 - when) / 3600);
+  const subjects = git(main, ["log", "--reverse", "--format=%s", `${base}..${tip}`]).out.split("\n").filter(Boolean);
+  const bodies = git(main, ["log", "--format=%B", `${base}..${tip}`]).out;
+  const refs = [...new Set([...bodies.matchAll(/\b(?:Refs|Fixes|Closes|Part of)\s+([\w.-]*#\d+)/gi)].map((m) => m[1]))];
+  reportRows.push([`${hours}h`, name, where, branch || "(detached)", `+${ahead}`, dirty || "-", subjects[0] ?? (dirty ? "uncommitted changes" : "-"), refs.join(" ") || "-"].join("\t"));
+}
+
+function sweep(container: string, o: Opts, live: string[], c: Counts) {
+  const name = basename(container);
+  const main = join(container, "main");
+  const log = (s: string) => console.log(`${name}: ${s}`);
+  if (!o.dryRun) git(main, ["fetch", "-q", "--prune", "origin"], 180_000);
+  const base = ["refs/remotes/origin/main", "refs/remotes/origin/HEAD", "refs/heads/main"].find((r) => git(main, ["rev-parse", "-q", "--verify", r]).ok);
+  if (!base) return log("no main branch; skipped");
+  const cutoff = Date.now() - o.idleHours * 3600_000;
+  const common = real(git(main, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).out);
+  if (!o.dryRun) git(main, ["worktree", "prune"]);
+  const wts: Record<string, string>[] = [];
+  let cur: Record<string, string> = {};
+  for (const line of (git(main, ["worktree", "list", "--porcelain"]).out + "\n").split("\n")) {
+    if (!line) { if (cur.worktree) wts.push(cur); cur = {}; continue; }
+    const i = line.indexOf(" ");
+    cur[i < 0 ? line : line.slice(0, i)] = i < 0 ? "true" : line.slice(i + 1);
+  }
+  const checkedOut = new Set(wts.map((w) => (w.branch ?? "").replace(/^refs\/heads\//, "")).filter(Boolean));
+  const lanes = real(join(container, "worktrees"));
+  const localBranches = new Set(git(main, ["for-each-ref", "--format=%(refname:short)", "refs/heads"]).out.split("\n").filter(Boolean));
+  const deleteBranch = (b: string, tip: string) => {
+    if (o.dryRun) return true;
+    return git(main, ["update-ref", "-d", `refs/heads/${b}`, tip]).ok;
+  };
+  for (const w of wts) {
+    const path = w.worktree;
+    if (dirname(real(path)) !== lanes) continue;
+    const branch = (w.branch ?? "").replace(/^refs\/heads\//, "");
+    const tip = w.HEAD;
+    const keep = (why: string) => { c.kept++; if (o.dryRun) log(`keep ${tilde(path)}: ${why}`); };
+    if (w.locked) { keep("locked"); continue; }
+    if (w.prunable || !existsSync(path)) { keep("prunable"); continue; }
+    if (real(path) === dirname(common)) { keep("holds .git"); continue; }
+    const st = git(path, ["status", "--porcelain", "--untracked-files=normal"]);
+    const dirty = !st.ok ? "status failed" : st.out ? "dirty" : "";
+    const v = landed(main, base, tip);
+    if (!v.landed || dirty) {
+      unlandedRow(name, main, base, tip, tilde(path), branch, v.ahead, dirty);
+      c.unlanded++; keep(dirty || `+${v.ahead} unique`); continue;
+    }
+    if (inside(real(path), live)) { keep("process inside"); continue; }
+    const admin = git(path, ["rev-parse", "--path-format=absolute", "--git-dir"]).out;
+    if (newestMtime([path, join(admin, "HEAD"), join(admin, "index"), join(admin, "logs/HEAD"), join(common, "logs/refs/heads", branch)]) > cutoff) {
+      keep(`touched within ${o.idleHours}h`); continue;
+    }
+    if (o.dryRun) { log(`retire ${tilde(path)} (${branch || "detached"}, ${v.how})`); c.retiredWorktrees++; if (branch) c.deletedBranches++; continue; }
+    const rm = git(main, ["worktree", "remove", path]);
+    if (!rm.ok) { keep(`worktree remove failed: ${rm.err.split("\n").pop()}`); log(`kept ${tilde(path)}: ${rm.err.split("\n").pop()}`); continue; }
+    c.retiredWorktrees++;
+    checkedOut.delete(branch);
+    if (branch && branch !== "main" && deleteBranch(branch, tip)) { c.deletedBranches++; localBranches.delete(branch); }
+  }
+  const remoteLanes = new Set(localBranches);
+  for (const line of git(main, ["for-each-ref", "--format=%(refname:short)\t%(objectname)", "refs/heads"]).out.split("\n").filter(Boolean)) {
+    const [b, tip] = line.split("\t");
+    if (b === "main" || b === "master" || checkedOut.has(b)) continue;
+    const v = landed(main, base, tip);
+    if (!v.landed) { unlandedRow(name, main, base, tip, "(branch)", b, v.ahead, ""); c.unlanded++; c.kept++; continue; }
+    if (newestMtime([join(common, "logs/refs/heads", b)]) > cutoff) { c.kept++; continue; }
+    if (o.dryRun) { log(`delete branch ${b} (${v.how})`); c.deletedBranches++; continue; }
+    if (deleteBranch(b, tip)) c.deletedBranches++;
+  }
+  if (base === "refs/remotes/origin/main") {
+    const doomed: string[] = [];
+    for (const line of git(main, ["for-each-ref", "--format=%(refname)\t%(objectname)", "refs/remotes/origin"]).out.split("\n").filter(Boolean)) {
+      const [ref, tip] = line.split("\t");
+      const b = ref.replace("refs/remotes/origin/", "");
+      if (b === "HEAD" || b === "main" || b === "master") continue;
+      if (!b.startsWith("claude/") && !remoteLanes.has(b)) continue;
+      if (git(main, ["merge-base", "--is-ancestor", tip, base]).ok) doomed.push(b);
+    }
+    if (doomed.length && o.dryRun) log(`delete origin ${doomed.join(" ")}`);
+    if (doomed.length && !o.dryRun) {
+      const p = git(main, ["push", "-q", "origin", "--delete", ...doomed], 180_000);
+      if (p.ok) c.deletedRemote += doomed.length;
+      else log(`remote delete failed: ${p.err.split("\n").pop()}`);
+    }
+    if (o.dryRun) c.deletedRemote += doomed.length;
+  }
+  if (!o.dryRun) { git(main, ["worktree", "prune"]); git(main, ["remote", "prune", "origin"], 180_000); }
+}
+
+export function containers(root: string, only: string[]): string[] {
+  return readdirSync(root).sort().filter((n) => !SKIP.has(n) && !n.endsWith("-data") && (!only.length || only.includes(n)))
+    .map((n) => join(root, n)).filter((c) => existsSync(join(c, "main/.git")) && existsSync(join(c, "worktrees")));
+}
+
+function main(argv: string[]): number {
+  const o: Opts = { dryRun: false, root: join(HOME, "code"), repos: [], idleHours: 3, state: join(HOME, ".local/state/agents/lane-gc/unlanded.txt") };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--dry-run") o.dryRun = true;
+    else if (a === "--repo") o.repos.push(argv[++i]);
+    else if (a === "--root") o.root = argv[++i];
+    else if (a === "--idle-hours") o.idleHours = Number(argv[++i]);
+    else if (a === "--state") o.state = argv[++i];
+    else if (a === "--unlanded") {
+      if (!existsSync(o.state)) { console.error(`lane-gc: no report yet at ${tilde(o.state)}; run lane-gc --dry-run`); return 1; }
+      process.stdout.write(readFileSync(o.state, "utf8"));
+      return 0;
+    } else if (a === "-h" || a === "--help") { console.log(USAGE); return 0; }
+    else { console.error(USAGE); return 2; }
+  }
+  const live = liveRoots();
+  const c: Counts = { retiredWorktrees: 0, deletedBranches: 0, deletedRemote: 0, kept: 0, unlanded: 0 };
+  for (const container of containers(o.root, o.repos)) sweep(container, o, live, c);
+  const header = `# lane-gc ${new Date().toISOString()}: unlanded worktrees and branches (age of last commit, container, path, branch, ahead, dirty, first subject, refs)\n`;
+  const body = reportRows.sort((a, b) => parseInt(b) - parseInt(a)).join("\n");
+  if (!o.dryRun && !o.repos.length) {
+    mkdirSync(dirname(o.state), { recursive: true });
+    writeFileSync(o.state + ".tmp", header + body + (body ? "\n" : ""));
+    renameSync(o.state + ".tmp", o.state);
+  } else if (o.dryRun) console.log(header + body);
+  console.log(`lane-gc${o.dryRun ? " (dry run)" : ""}: retired ${c.retiredWorktrees} worktrees, ${c.deletedBranches} local branches, ${c.deletedRemote} origin branches; kept ${c.kept} (${c.unlanded} unlanded)`);
+  return 0;
+}
+
+if (import.meta.main) process.exit(main(Bun.argv.slice(2)));

@@ -60,7 +60,7 @@
    ;; actually enters the scope; the slice itself costs nothing.
    :myConfig.modules.agent-slice.enable true
    :myConfig.modules.delivery-liveness.enable true
-   :myConfig.modules.lane-sweep.enable true
+   :myConfig.modules.lane-gc.enable true
    ;; Home Manager activates this user service during a system switch. Bound
    ;; that activation independently of a periodic worker which may be hung.
    ;; mkForce: home-manager's nixos module pins its own 5m at equal priority.

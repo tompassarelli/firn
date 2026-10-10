@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 17)
+  | ($commands | length == 18)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -62,6 +62,7 @@ for unit in \
   spawn-capacity-guard \
   subagent-teardown \
   tripwire-guard \
+  unlanded-work \
   worker-handoff; do
   jq -e --arg unit "$unit" '
     any(.activation[$unit].distributions[]; .targets | index("claude"))
