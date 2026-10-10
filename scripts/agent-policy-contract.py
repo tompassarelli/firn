@@ -139,7 +139,7 @@ EVENT_ORDER = (
 )
 HOOK_TIMEOUT = 10
 RUNTIME = "/etc/codex/hooks/runtime"
-SEARCH_PATH = f"PATH={RUNTIME}:/home/tom/.local/bin:/run/current-system/sw/bin"
+SEARCH_PATH = f"PATH={RUNTIME}:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin"
 DEFAULT_COMMAND = {
     "claude": (
         f"{RUNTIME}/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON={RUNTIME}/python3 "

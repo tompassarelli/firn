@@ -8,62 +8,62 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/corpus-scan-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/corpus-scan-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/git-blind-stage-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/git-blind-stage-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/git-stash-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/git-stash-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/clipboard-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/clipboard-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/heavy-command-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/heavy-command-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-wait-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-wait-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/native-launch-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/native-launch-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/modern-search-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/modern-search-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/session-kill-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/session-kill-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
             "timeout": 10
           }
         ]
@@ -73,12 +73,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/launch-critical-worktree-guard.sh",
             "timeout": 10
           }
         ]
@@ -88,12 +88,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/spawn-capacity-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/spawn-capacity-guard.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-tier-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-tier-guard.sh",
             "timeout": 10
           }
         ]
@@ -104,7 +104,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-handoff.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/worker-handoff.sh",
             "timeout": 10
           }
         ]
@@ -114,7 +114,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/lead-regrounding.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/lead-regrounding.sh",
             "timeout": 10
           }
         ]
@@ -126,7 +126,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/tripwire-guard.sh",
             "timeout": 10
           }
         ]
@@ -137,7 +137,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/subagent-teardown.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/subagent-teardown.sh",
             "timeout": 10
           }
         ]
@@ -148,12 +148,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/unlanded-work.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/unlanded-work.sh",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/org-role.sh",
+            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/org-role.sh",
             "timeout": 10
           }
         ]
