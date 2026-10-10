@@ -71,7 +71,7 @@
 - Load `image-context-budget` before repeated screenshots.
 - Load `machine-capacity` before sustained multi-core work or more than 1 GiB memory.
 - Load `debugging` for a non-obvious bug and reproduce its exact error first.
-- Load `github-actions` before workflows or runs and share 20 jobs and 5,000 API calls/hour.
+- Load `github-actions` before workflows or runs and share GitHub Pro's 40 concurrent jobs and 5,000 API calls/hour.
 
 ## Code and checks
 

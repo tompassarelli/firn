@@ -51,7 +51,7 @@ Full analysis: wisp:docs/ci.md, "Runner capacity and waiting". Commits:
 wisp 61b6fb8, 9405407, 8a56976; smashcraft 0b8ef4e5, e06e9071, 4556648f.
 
 - Queue: two balance fields queued 109 shard jobs in 13 minutes on the
-  20-job Free account. Every farm run after them waited 10 to 15 minutes per
+  account (then on GitHub Free, 20 jobs; it is now GitHub Pro, 40). Every farm run after them waited 10 to 15 minutes per
   stage (plan, shards, merge): waiting jobs were served in arrival order
   across smashcraft and wisp. Filtering runs by status hid the load because
   jobs inside "queued" runs were already running.
