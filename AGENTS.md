@@ -3,6 +3,7 @@ profile: tooling
 # NixOS configuration
 
 - Store credentials under `secrets/` with sops-nix and reference `sops.secrets."name"`.
+- Treat this repository and its issues as public: keep Tom's location, email and other personal data out of issues, comments, commits and docs.
 - Write Beagle/Nix `.bnix` or explicitly selected Clause modules and compile through `firn repo build`.
 - Query Beagle from `~/code/beagle/main` or the immutable Clause pin in `config/clause-revision` for uncertain compiler/schema facts.
 - Compose one package/service per module through `myConfig.modules.*` and declared tags; let dynamic imports discover modules.
