@@ -66,6 +66,12 @@ CREATE TABLE IF NOT EXISTS gh_cache(
   fetched REAL NOT NULL,
   issues TEXT NOT NULL CHECK(json_valid(issues))
 ) STRICT;
+CREATE TABLE IF NOT EXISTS blocks(
+  item TEXT PRIMARY KEY,
+  reason TEXT NOT NULL,
+  since TEXT NOT NULL,
+  by TEXT NOT NULL
+) STRICT;
 CREATE INDEX IF NOT EXISTS events_item ON events(item, seq);
 CREATE INDEX IF NOT EXISTS runs_item ON runs(item, ended);
 """
@@ -113,7 +119,7 @@ def connect() -> sqlite3.Connection:
     db.execute("PRAGMA busy_timeout = 10000")
     if db.execute("PRAGMA journal_mode").fetchone()[0] != "wal":
         db.execute("PRAGMA journal_mode = WAL")
-    if not table_exists(db, "gh_cache"):
+    if not table_exists(db, "blocks"):
         with Tx(db):
             for stmt in SCHEMA.split(";"):
                 if stmt.strip():
@@ -358,6 +364,110 @@ def cmd_list(db, a):
         print("  ".join(v.ljust(w) for v, w in zip(row, widths)).rstrip())
 
 
+# Staffing: unowned and blocked issues -------------------------------------------
+
+STAFFED = ["smashcraft", "wisp"]
+PRIORITIES = ["priority:now", "-", "priority:next", "priority:later"]
+BOX = re.compile(r"^\s*[-*] \[ \]", re.M)
+BLOCK_DAYS = 7
+
+
+def cmd_block(db, a):
+    item = ref(*parse_ref(a.id))
+    reason = " ".join(a.reason).strip()
+    with Tx(db):
+        if a.clear:
+            db.execute("DELETE FROM blocks WHERE item = ?", (item,))
+            event(db, item, "note", a.by, unblock=True)
+        else:
+            if not reason:
+                raise Refused("block needs a reason")
+            db.execute("INSERT OR REPLACE INTO blocks(item, reason, since, by) VALUES (?,?,?,?)", (item, reason, now(), a.by))
+            event(db, item, "note", a.by, block=reason)
+    print(f"{item} unblocked" if a.clear else f"{item} blocked: {reason}")
+
+
+COMMIT_REF = re.compile(r"^(?:item|closes|close|fixes|fix|refs|ref|part of|issue|for)\b", re.I)
+BRANCH_HOURS = 48
+
+
+def commit_refs(message: str, repo: str, number: int) -> bool:
+    """The headline, or an Item:/Closes/Fixes/Refs line, names the issue; a passing mention in the body does not."""
+    lines = message.splitlines()
+    picked = lines[:1] + [l for l in lines[1:] if COMMIT_REF.match(l.strip())]
+    return any(mentions(l, repo, number) for l in picked)
+
+
+def mentions(text: str, repo: str, number: int) -> bool:
+    return re.search(rf"(?:(?<![\w/-])|(?<={re.escape(repo)}))#{number}(?!\d)", text) is not None
+
+
+def branch_names_issue(name: str, number: int) -> bool:
+    return re.search(rf"(?:^|[-_/#]){number}(?:$|[-_/])", name) is not None
+
+
+def open_branches(repo: str) -> dict:
+    """{branch: [commit messages ahead of the default branch]} for claude/* and *land-* branches on origin."""
+    names = json.loads(gh("api", "graphql", "-f", "query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) "
+                          "{ refs(refPrefix: \"refs/heads/\", first: 100) { nodes { name target { ... on Commit { committedDate } } } } } }",
+                          "-F", f"owner={OWNER}", "-F", f"name={repo}"))["data"]["repository"]["refs"]["nodes"]
+    cutoff = time.time() - BRANCH_HOURS * 3600
+    names = [n["name"] for n in names if (n["name"].startswith("claude/") or "land-" in n["name"])
+             and datetime.fromisoformat(((n.get("target") or {}).get("committedDate") or "1970-01-01T00:00:00Z")
+                                        .replace("Z", "+00:00")).timestamp() >= cutoff]
+    if not names:
+        return {}
+    fields = " ".join(f'b{i}: compare(headRef: {json.dumps(n)}) {{ commits(first: 100) {{ nodes {{ message }} }} }}' for i, n in enumerate(names))
+    out = json.loads(gh("api", "graphql", "-f", f"query=query($owner: String!, $name: String!) {{ repository(owner: $owner, name: $name) "
+                        f"{{ defaultBranchRef {{ {fields} }} }} }}", "-F", f"owner={OWNER}", "-F", f"name={repo}"))
+    base = out["data"]["repository"]["defaultBranchRef"]
+    return {n: [c["message"] for c in ((base.get(f"b{i}") or {}).get("commits") or {}).get("nodes", [])] for i, n in enumerate(names)}
+
+
+def comment_block(comments) -> str | None:
+    cutoff = time.time() - BLOCK_DAYS * 86400
+    for c in sorted(comments, key=lambda c: c["createdAt"], reverse=True):
+        body = c.get("body", "").strip()
+        if datetime.fromisoformat(c["createdAt"].replace("Z", "+00:00")).timestamp() < cutoff:
+            return None
+        if body.startswith("Blocked:"):
+            return body[len("Blocked:"):].strip().splitlines()[0] if body[len("Blocked:"):].strip() else "comment"
+    return None
+
+
+def cmd_unowned(db, a):
+    claims = {}
+    for c in db.execute("SELECT * FROM claims"):
+        if not (c["eta_min"] and minutes_since(c["since"]) > 2 * c["eta_min"]):
+            claims[c["item"]] = c["owner"]
+    blocks = {r["item"]: r["reason"] for r in db.execute("SELECT item, reason FROM blocks")}
+    rows = []
+    for repo in STAFFED:
+        issues = json.loads(gh("issue", "list", "-R", f"{OWNER}/{repo}", "--state", "open", "--limit", "500",
+                               "--json", "number,title,labels,body,comments"))
+        branches = open_branches(repo)
+        for i in issues:
+            boxes = len(BOX.findall(i.get("body") or ""))
+            if not boxes:
+                continue
+            number, item = i["number"], ref(repo, i["number"])
+            labels = {l["name"] for l in i.get("labels", [])}
+            prio = next((p for p in PRIORITIES if p in labels), "-")
+            owner = claims.get(item) or next(
+                (f"branch:{b}" for b, msgs in sorted(branches.items())
+                 if branch_names_issue(b, number) or any(commit_refs(m, repo, number) for m in msgs)), None)
+            block = blocks.get(item) or comment_block(i.get("comments") or [])
+            state = owner or (f"blocked:{block}" if block else "UNOWNED")
+            rows.append((PRIORITIES.index(prio), repo, number, prio, state, boxes, i["title"]))
+    rows.sort(key=lambda r: (r[0], STAFFED.index(r[1]), r[2]))
+    for _, repo, number, prio, state, boxes, title in rows:
+        print(f"{ref(repo, number)}\t{prio}\t{state}\t{boxes}\t{title}")
+    now_rows = [r for r in rows if r[3] == "priority:now"]
+    print(f"priority:now unowned={sum(r[4] == 'UNOWNED' for r in now_rows)} "
+          f"blocked={sum(r[4].startswith('blocked:') for r in now_rows)} "
+          f"owned={sum(r[4] != 'UNOWNED' and not r[4].startswith('blocked:') for r in now_rows)}")
+
+
 # Runs (fed by worker-ledger) ---------------------------------------------------
 
 BRIEF_FIELD = {name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows", "Arm")}
@@ -542,7 +652,12 @@ def parser() -> argparse.ArgumentParser:
                     f"({', '.join(r + '#N' for r in REPOS)}). Database: {DB}",
         epilog="A running worker whose brief has `Item: <repo#N>` holds that issue (worker-ledger, run by "
                "worker-sweep); claim/release are for humans and lanes. Brief categories: "
-               + ", ".join(CATEGORIES) + "; anything else counts as unknown.",
+               + ", ".join(CATEGORIES) + "; anything else counts as unknown. unowned: order is priority:now, unlabeled, "
+               "priority:next, priority:later; the owner is a threads claim not past 2x its ETA, else an origin claude/* or "
+               f"*land-* branch with a commit in the last {BRANCH_HOURS} h whose name, or a commit headline or "
+               "Item:/Closes/Fixes/Refs line ahead of main, names the issue; blocked:REASON comes from `threads block` "
+               f"or a comment starting `Blocked:` in the last {BLOCK_DAYS} days. Cloud routine runs are not a source: the "
+               "CLI cannot read them.",
     )
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -570,6 +685,12 @@ def parser() -> argparse.ArgumentParser:
     cmd("list", cmd_list, "held issues with owner, time on the clock, ETA and overdue flag")
     cmd("ingest", cmd_ingest, "record worker runs from worker-ledger rows on stdin")
     cmd("run-ids", cmd_run_ids, "agent ids already recorded (for worker-ledger)")
+    s = cmd("unowned", cmd_unowned, "open smashcraft and wisp issues with an unchecked box: owner, block or UNOWNED, "
+            "priority:now first")
+    s = cmd("block", cmd_block, "record why an issue cannot be staffed now (shown by unowned); --clear removes it")
+    s.add_argument("id")
+    s.add_argument("reason", nargs="*")
+    s.add_argument("--clear", action="store_true")
     s = cmd("summary", cmd_summary, "runs by category and tier: success and minutes against ETA")
     s.add_argument("--since", help="only runs that ended on or after DATE")
     return p

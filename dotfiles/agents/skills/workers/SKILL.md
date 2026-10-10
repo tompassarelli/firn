@@ -43,6 +43,7 @@ written: 2026-10-10
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Send every code-only Smashcraft/Wisp item to `cloud-workers` first (4 cores/run, no run cap); staff a local worker only for real-game clients, private game assets, the LAN pool or unpushed local state, and move a code-only local worker to the cloud when found.
 - Route compute (agreed with Tom 2026-10-10): cloud runs cost only the same plan usage a local worker would, with the machine included; parallel batch work (balance/CPU fields, suites, soaks) goes to GitHub runners through `github-actions` first and to vast.ai through `vast-job` when the farm queue delays a result; always-on Warcraft clients, the offline LAN pool and GPU work go to the Hetzner box once it exists and to the vast.ai VM until then, with signed-in Definitive clients staying local unless moved deliberately; rent no other CPU provider (DigitalOcean and similar cost several times vast.ai for the same cores).
+- Start every leash or heartbeat tick with `threads unowned`: before any other work, give each priority:now UNOWNED row a worker (cloud first when code-only) or `threads block <repo#N> <reason>`; only the spawn gate caps this staffing, and every status-file line carries its `priority:now unowned=N blocked=M owned=K` summary.
 - Keep `worker-sweep --wait` active while workers run, and run `worker-sweep` once at every leash or heartbeat check; act on every STALLED, OVERTIME, HANDOFF or PARKED row (nudge once, then replace with a Follows: brief) and never judge a worker by recent activity alone; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
 - As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers per the recycle rule and closes passed issues, so Tom never has to prompt a regrounding.
 - Stop the parent's monitors/background shells when their work ends.
@@ -57,6 +58,6 @@ written: 2026-10-10
 - Before a playtest's last blocker lands, prebuild its map with the fix applied and run the frame-cost compare, so the build cannot fail at playtest time.
 - Promote a process idea to policy only after it produced a measured result; file unproven ideas as issues.
 - After an hour with no closure, start nothing new until an open box closes.
-- Write the status file in plain sentences, one line per item, with spaces between words.
+- Write the status file in plain sentences, one line per item, with spaces between words, each line ending with the `threads unowned` summary counts.
 - Use `orchestrating-codex` for a Claude session's Codex work.
 - Use `agents --help`, `threads --help` and `worker-ledger --help` for command detail.
