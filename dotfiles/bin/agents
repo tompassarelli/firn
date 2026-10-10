@@ -10,7 +10,7 @@ set -uo pipefail
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--state ACCOUNT=burn|even|conserve]... [--at SCENARIO.json]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json] [--gate PROVIDER] [--fast PROVIDER [--domain D]]|org [show|add|remove]|lead start}\n' >&2
+  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--state ACCOUNT=burn|even|conserve]... [--at SCENARIO.json]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json] [--gate PROVIDER] [--fast PROVIDER [--domain D]]|news [--days 7]|org [show|add|remove]|lead start}\n' >&2
 }
 
 plan() {
@@ -287,6 +287,10 @@ case "${1:-}" in
   usage)
     shift
     exec python3 -I "$(dirname "$(readlink -f "$0")")/../agents/lib/usage.py" "$@"
+    ;;
+  news)
+    shift
+    exec python3 -I "$(dirname "$(readlink -f "$0")")/../agents/lib/news.py" "$@"
     ;;
   routines)
     shift
