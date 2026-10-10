@@ -6,6 +6,7 @@ owner: modules/proton-log-watchdog/default.bnix
 purpose: Strip PROTON_LOG from Wisp clone launch.sh and truncate clone steam-*.log over 1 GiB, after debug logs filled the disk and hung the desktop.
 relates-to: [modules/proton-log-watchdog/default.bnix, dotfiles/agents/skills/warcraft-modding/SKILL.md]
 expires: never
+placement: laptop
 ---
 
 ~/.local/bin/proton-log-watchdog
