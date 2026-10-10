@@ -99,10 +99,10 @@ announces entries older than 24 h.
 
 ## Secrets
 
-[sops-nix](https://github.com/Mic92/sops-nix): encrypted `secrets/*.yaml` are
-committed, the private age key stays machine-local, `.sops.yaml` lists the
-public recipients. The `awscli` module is opt-in, so the config builds clean
-without it.
+[sops-nix](https://github.com/Mic92/sops-nix): encrypted secrets live in a
+private overlay flake that builds the host from firn; the private age key
+stays machine-local. Secret-backed modules are opt-in and have no default
+file, so the config builds clean without them.
 
 → **[docs/secrets.md](docs/secrets.md)** — key layout + bring-your-own-key fork recipe.
 

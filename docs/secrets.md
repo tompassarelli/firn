@@ -1,39 +1,50 @@
 # Secrets
 
-Secrets go through [sops-nix](https://github.com/Mic92/sops-nix): the
-encrypted `secrets/*.yaml` are committed (safe — they're encrypted), the
-private age key stays machine-local at `/var/lib/sops-nix/key.txt` (never in
-the repo), and `.sops.yaml` lists the public age recipients.
+firn is public and carries no personal secrets. Hosts get theirs from a
+private overlay flake that builds the host from firn (`firn.lib.mkSystem` with
+`extraModules`), keeps its own encrypted `secrets/*.yaml` and `.sops.yaml`, and
+points each consumer at them. Secrets go through
+[sops-nix](https://github.com/Mic92/sops-nix): the private age key stays
+machine-local at `/var/lib/sops-nix/key.txt`, never in a repository.
 
-The `awscli` module is opt-in (off unless a host enables it) and exposes a
-`sopsFile` option so a fork points it at its own encrypted file.
+Secret-backed modules have no default file, so a host that enables one without
+an overlay value fails evaluation instead of reading a path in firn:
 
-**Forking — bring your own:**
+- `myConfig.modules.awscli.sopsFile` (keys `aws-access-key-id`, `aws-secret-access-key`);
+- `myConfig.modules.cloudflare-auth.sopsFile` (key `cloudflare-global-api-key`);
+- `sops.secrets.<name>.sopsFile` for secrets a host declares without a file,
+  such as the `wg-nexus` client's `wireguard-nexus-laptop` and `nexus-endpoint`.
+
+**Bring your own:**
 
 ```bash
 age-keygen -o ~/.config/sops/age/keys.txt           # prints your public key
-# put that public key in .sops.yaml as the `admin` recipient
-cp secrets/aws.yaml.example secrets/aws.yaml         # fill real values
-sops --encrypt --in-place secrets/aws.yaml           # encrypt to your key
+# in your overlay: put that public key in .sops.yaml as the `admin` recipient
+sops secrets/aws.yaml                                # create and encrypt
 sudo install -Dm600 ~/.config/sops/age/keys.txt /var/lib/sops-nix/key.txt
 ```
 
-Or simplest: **don't enable `awscli`** — nothing else needs secrets, and the
-config builds clean without it. The `secrets/*.yaml.example` files document
-the cleartext structure of each.
+```nix
+# overlay hosts/<host>.nix
+{ ... }: {
+  myConfig.modules.awscli.sopsFile = toString ../secrets/aws.yaml;
+}
+```
 
-Cloudflare deployment credentials live in the encrypted
-`nixos-config:secrets/cloudflare.yaml`. The `cloudflare-auth` module projects them as
-owner-only files under `/run/secrets`; commands consume them through
-`with-cloudflare <profile> -- <command>`. Do not put Cloudflare credentials in
-shell startup files, Wrangler configuration, or project repositories.
+Or simplest: leave the secret-backed modules disabled.
 
-The DigitalOcean API token lives in the encrypted
-`nixos-config:secrets/digitalocean.yaml` (key `token`). Decrypt it with the
-machine age key only into a command's environment, for example
-`DIGITALOCEAN_ACCESS_TOKEN=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["token"]' secrets/digitalocean.yaml) doctl ...`.
+`secrets/nexus/*` remains in firn until the nexus host builds from its own
+overlay.
 
-The vast.ai API key lives in the encrypted `nixos-config:secrets/vastai.yaml`
-(key `api_key`; billing read-only). Decrypt it the same way, only into a
-command's environment:
-`VAST_API_KEY=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["api_key"]' secrets/vastai.yaml) vastai ...`.
+## Tom's machines
+
+Tom's overlay is the private `south` repository. Its encrypted files live at
+`${SOUTH_SECRETS:-$HOME/code/south/main/secrets}` (aws, bnet, cloudflare,
+digitalocean, gmail, vastai, wireguard). Decrypt only into a command's
+environment, never to the terminal, for example:
+
+`DIGITALOCEAN_ACCESS_TOKEN=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["token"]' "${SOUTH_SECRETS:-$HOME/code/south/main/secrets}/digitalocean.yaml") doctl ...`
+
+Cloudflare credentials reach commands through `with-cloudflare <profile> --
+<command>`; the vast.ai key and bnet credentials are projected to
+`/run/secrets/vastai-api-key` and `/run/secrets/bnet`.
