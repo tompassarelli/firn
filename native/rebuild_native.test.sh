@@ -127,7 +127,9 @@ case "$name" in
       '7 2026-08-20 current'
     ;;
   readlink)
-    if [[ "${1:-}" == -e \
+    if [[ "${1:-}" == /nix/var/nix/profiles/system ]]; then
+      printf '%s\n' system-40-link
+    elif [[ "${1:-}" == -e \
         && "${2:-}" == /nix/var/nix/profiles/system ]]; then
       printf '%s\n' "${PROFILE_TARGET:-/nix/store/controlled-system}"
     elif [[ "${1:-}" == -e \
@@ -166,6 +168,9 @@ case "$name" in
     ;;
   systemd-run|firn-environment-switch)
     ;;
+  tool-check-shell)
+    [[ -z "${MISSING_TOOLS:-}" ]] || { printf '%s\n' $MISSING_TOOLS; exit 1; }
+    ;;
   *)
     printf 'unexpected fake command: %s\n' "$name" >&2
     exit 97
@@ -173,7 +178,7 @@ case "$name" in
 esac
 EOF
 chmod +x "$fakebin/command-stub"
-for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sudo systemd-run firn-environment-switch; do
+for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sudo systemd-run firn-environment-switch tool-check-shell; do
   ln -s command-stub "$fakebin/$command"
 done
 
@@ -192,6 +197,7 @@ run_host_case() {
     FIRN_TRACE_ID="$name" \
     FIRN_COMMAND_LOG="$scratch/$name.commands" \
     CASE_PLATFORM="$platform" \
+    FIRN_TOOL_CHECK_SHELL=tool-check-shell \
     FIRN_REBUILD_MODULE="$modules/firn/rebuild-family.js" \
     "$@" "$bun" "$repo/native/firn_rebuild_host.mjs" \
     host "$edge" "$target" \
@@ -212,6 +218,7 @@ run_case linux Linux env
   || die "Linux controlled run failed"
 cut -f1 "$scratch/linux.commands" >"$scratch/linux.names"
 cat >"$scratch/linux.expected-names" <<'EOF'
+readlink
 git
 git
 uname
@@ -228,6 +235,7 @@ git
 nix
 firn-environment-switch
 systemd-run
+tool-check-shell
 EOF
 cmp -s "$scratch/linux.expected-names" "$scratch/linux.names" \
   || {
@@ -243,6 +251,18 @@ rg -Fq $'git\t-C\t'"$fixture"$'\ttag\t-f\tgen-42' \
 rg -Fq $'firn-environment-switch\twhiterabbit\tgit+file://' \
   "$scratch/linux.commands" \
   || die "Linux environment switch did not use the snapshot URI"
+
+run_case missing-tool Linux env MISSING_TOOLS='worker-sweep codex-lead'
+[[ "$(<"$scratch/missing-tool.status")" == 70 ]] \
+  || die "a switch that lost core tools did not exit nonzero"
+rg -Fq 'CORE TOOLS MISSING' "$scratch/missing-tool.err" \
+  && rg -Fq 'worker-sweep codex-lead' "$scratch/missing-tool.err" \
+  || die "missing core tools were not named"
+rg -Fq $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system\t--switch-generation\t40' \
+  "$scratch/missing-tool.commands" \
+  || die "a switch that lost core tools did not switch back to the previous generation"
+[[ "$(tail -n1 "$scratch/missing-tool.commands" | cut -f1-2)" == $'sudo\t/nix/store/controlled-rollback-system/bin/switch-to-configuration' ]] \
+  || die "switch-back did not end with the previous generation's switch-to-configuration"
 
 run_case linux-no-environment Linux env ENVIRONMENT_PRESENT=false
 [[ "$(<"$scratch/linux-no-environment.status")" == 0 ]] \
@@ -468,6 +488,7 @@ run_case system-flake Linux env FIRN_SYSTEM_FLAKE="$system" SYSTEM_FIXTURE="$sys
   || die "two-snapshot controlled run failed"
 cut -f1 "$scratch/system-flake.commands" >"$scratch/system-flake.names"
 cat >"$scratch/system-flake.expected-names" <<'EOF'
+readlink
 git
 git
 uname
@@ -487,6 +508,7 @@ git
 nix
 firn-environment-switch
 systemd-run
+tool-check-shell
 EOF
 cmp -s "$scratch/system-flake.expected-names" "$scratch/system-flake.names" \
   || {
