@@ -24,6 +24,7 @@ metadata:
 - Start all independent items together; open/claim Claude-held items and tell the lead before staffing them.
 - Share GitHub Pro's 40 concurrent Actions jobs and 5,000 API calls/hour through `github-actions`; confirm the exact revision before farm dispatch.
 - Codex workers run local affected checks and push no branch CI; the repository's landing queue is the farm.
+- Before a lane pushes, it runs the landing queue's checks for its touched modules, including those skipped locally by default (target-language compile, sweeps).
 - Wait on farm/CI with one blocking repository command or `gh run watch RUN --exit-status`.
 - Never poll in a loop.
 - Monitor `~/.local/state/agents/handoffs/codex-lead-peer.md` for `PEER`/`HANDOFF`, with a 30-minute timeout rearmed on expiry.
