@@ -7,10 +7,11 @@ exec 9>"$state/agent-runtime-update.lock"
 flock 9
 codex-runtime-update "${1:-latest}"
 claude-runtime-update "${1:-latest}"
+agy-runtime-update "${1:-latest}"
 if [[ "$(date +%H)" == 02 ]]; then
   source_dir="$(dirname "$(readlink -f "$0")")"
   while IFS= read -r updater; do
-    case "$(basename "$updater")" in codex-runtime-update|claude-runtime-update|agent-runtime-update) continue ;; esac
+    case "$(basename "$updater")" in codex-runtime-update|claude-runtime-update|agy-runtime-update|agent-runtime-update) continue ;; esac
     "$updater"
   done < <(find "$source_dir" -maxdepth 1 -type f -executable -name '*-runtime-update' | sort)
 fi

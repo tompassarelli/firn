@@ -57,9 +57,11 @@ same way via `lib.mkDarwinSystem` and a `darwinConfigurations` entry —
 firn rebuild          # build + validate + switch (current host), then its environment apps when the host has one
 firn-environment-switch [host] [flake] # install the host environment apps (Blender, Obsidian) in ~/.nix-profile, outside the system closure
 machine-update        # nightly inputs, validation, exact build, landing and switch
-agent-runtime-update [version|latest] # Codex and Claude at 02:00 and 13:00
+agent-runtime-update [version|latest] # Codex, Claude and agy at 02:00 and 13:00
 claude-runtime-update [version|latest] # install verified official Claude binary
 claude                # launch the atomically selected Claude runtime
+agy-runtime-update [version|latest] # install verified official Antigravity binary
+agy                   # launch the atomically selected Antigravity runtime
 vast-job --offer-query Q --max-hours H --run CMD --fetch P --to DIR # rent, run, fetch, destroy one capped vast.ai job
 vast-reaper [--dry-run]  # every 5 min: destroy vast-job instances past deadline or without a live supervisor; runner VM credit floor (warn $5, teardown $2.50)
 lane-gc [--dry-run] [--unlanded] # hourly: retire landed clean idle worktrees/branches; report unlanded work

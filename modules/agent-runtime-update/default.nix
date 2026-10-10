@@ -23,6 +23,8 @@
               pkgs.nix
               pkgs.python3
               pkgs.zstd
+              pkgs.gnutar
+              pkgs.gzip
               pkgs.util-linux
               pkgs.libnotify
               pkgs.systemd
