@@ -17,6 +17,8 @@ metadata:
 - Read `workers`; choose tiers from the plan and `worker-ledger --summary`, never low/max or Astra without Tom naming it.
 - Write `~/.local/state/agents/handoffs/codex-lead-brief.md` with scope, first reads, ordered queue, checks, files, ETA and the lead's staffing/landing/status role.
 - Require worker reports beginning `Done:`, `Not done:` or `Blocked:` and brief fields `Item`, `Category`, plus `Follows` on retries/escalations/continuations.
+- Before a brief names test or case roots, confirm each holds every file its grader requires.
+- Name in the brief the existing control case (error path, exit code, stderr) that the change must keep byte-identical.
 - Start the lead with `agents lead start --provider codex --domain D --brief BRIEF`, which registers it in `agents org`.
 - Use `CODEX_LEAD_THREAD=<id>` for an existing live lead.
 - Give it a goal closing every ordered item on GitHub or naming a blocker with evidence and an owner.
