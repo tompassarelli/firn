@@ -1,0 +1,21 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  (let [homeDir config.myConfig.modules.users.homeDir
+        username config.myConfig.modules.users.username
+        description "Deterministic location safety alerts"]
+    {:tags-opt-in [development]
+     :options.myConfig.modules.watch-alerts.enable (lib.mkEnableOption description)
+     :config (lib.mkIf config.myConfig.modules.watch-alerts.enable
+       {:home-manager.users {username (nix/module [config ...]
+         {:systemd.user.services.watch-alerts
+           {:Unit {:Description description
+                   :After ["network-online.target"]
+                   :OnFailure ["update-notify@%n.service"]}
+            :Service {:Type "oneshot" :Nice 10 :TimeoutStartSec "4min"
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.python3]))]
+              :ExecStart (s homeDir "/.local/bin/model-watch --alerts-only")}}
+          :systemd.user.timers.watch-alerts
+           {:Unit {:Description description}
+            :Timer {:OnCalendar "*:0/5" :AccuracySec "30s" :Persistent true}
+            :Install {:WantedBy ["timers.target"]}}})}})}))

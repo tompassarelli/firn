@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 import json
@@ -18,6 +18,7 @@ import sys
 import tomllib
 import urllib.error
 import urllib.request
+import urllib.parse
 import xml.etree.ElementTree as ET
 
 DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
@@ -392,8 +393,227 @@ def digest(db: sqlite3.Connection, events: list[dict], directory: Path) -> dict:
                 db.execute("UPDATE events SET data=? WHERE seq=?", (json.dumps(data), note))
 
 
+ALERT_SCHEMA = """
+CREATE TABLE IF NOT EXISTS watch_alerts(
+  key TEXT PRIMARY KEY, sent_at TEXT NOT NULL, source TEXT NOT NULL,
+  title TEXT NOT NULL, url TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS watch_advisory_levels(
+  source TEXT NOT NULL, country TEXT NOT NULL, level INTEGER NOT NULL,
+  PRIMARY KEY(source,country)
+) STRICT;
+"""
+CAP = "{urn:oasis:names:tc:emergency:cap:1.2}"
+ATOM = "{http://www.w3.org/2005/Atom}"
+GDACS = "{http://www.gdacs.org}"
+GEO = "{http://www.w3.org/2003/01/geo/wgs84_pos#}"
+
+
+def distance(lat: float, lon: float, other_lat: float, other_lon: float) -> float:
+    a, b = math.radians(lat), math.radians(other_lat)
+    h = math.sin((b - a) / 2) ** 2 + math.cos(a) * math.cos(b) * math.sin(math.radians(other_lon - lon) / 2) ** 2
+    return 6371.0088 * 2 * math.asin(math.sqrt(min(1, max(0, h))))
+
+
+def nearby(location: dict, lat: float, lon: float, radius: float = 0) -> bool:
+    if not all(math.isfinite(v) for v in (lat, lon, radius)) or not -90 <= lat <= 90 or not -180 <= lon <= 180 or radius < 0:
+        raise ValueError("invalid feed geometry")
+    return distance(location["lat"], location["lon"], lat, lon) <= location["radius_km"] + radius
+
+
+def polygon_nearby(location: dict, value: str) -> bool:
+    points = [tuple(map(float, pair.split(","))) for pair in value.split()]
+    if len(points) < 4 or points[0] != points[-1]:
+        raise ValueError("invalid feed polygon")
+    lat, lon = location["lat"], location["lon"]
+    relative = [(((y - lon + 180) % 360) - 180, x - lat) for x, y in points]
+    inside = False
+    for (ax, ay), (bx, by) in zip(relative, relative[1:]):
+        if (ay > 0) != (by > 0) and 0 < ax + (bx - ax) * -ay / (by - ay):
+            inside = not inside
+    if inside:
+        return True
+    for (a_lat, a_lon), (b_lat, b_lon) in zip(points, points[1:]):
+        segment = distance(a_lat, a_lon, b_lat, b_lon) / 6371.0088
+        if segment == 0:
+            if nearby(location, a_lat, a_lon):
+                return True
+            continue
+        def bearing(x_lat: float, x_lon: float, y_lat: float, y_lon: float) -> float:
+            x, y, dl = math.radians(x_lat), math.radians(y_lat), math.radians(y_lon - x_lon)
+            return math.atan2(math.sin(dl) * math.cos(y), math.cos(x) * math.sin(y) - math.sin(x) * math.cos(y) * math.cos(dl))
+        start = distance(a_lat, a_lon, lat, lon) / 6371.0088
+        angle = bearing(a_lat, a_lon, lat, lon) - bearing(a_lat, a_lon, b_lat, b_lon)
+        along = math.atan2(math.sin(start) * math.cos(angle), math.cos(start))
+        cross = math.asin(max(-1, min(1, math.sin(start) * math.sin(angle))))
+        closest = abs(cross) * 6371.0088 if 0 <= along <= segment else min(distance(lat, lon, a_lat, a_lon), distance(lat, lon, b_lat, b_lon))
+        if closest <= location["radius_km"]:
+            return True
+    return False
+
+
+def weather_nearby(entry: ET.Element, location: dict) -> bool:
+    for node in entry.iter():
+        tag = node.tag.rsplit("}", 1)[-1]
+        value = node.text or ""
+        if tag == "polygon" and value.strip() and polygon_nearby(location, value):
+            return True
+        if tag == "circle" and value.strip():
+            center, radius = value.split()
+            lat, lon = map(float, center.split(","))
+            if nearby(location, lat, lon, float(radius)):
+                return True
+        if tag == "point" and value.strip():
+            lat, lon = map(float, value.split())
+            if nearby(location, lat, lon):
+                return True
+    return False
+
+
+def alert_rows(source: dict, payload: bytes, location: dict, now: str) -> list[dict]:
+    rows = []
+    def add(identifier: str, title: str, url: str, **extra) -> None:
+        if identifier and title and urllib.parse.urlsplit(url).scheme in ("http", "https"):
+            rows.append(dict(key=source["name"] + ":" + identifier, source=source["name"], title=clean(title), url=url, **extra))
+    if source["parser"] == "usgs":
+        for event in json.loads(payload)["features"]:
+            props = event["properties"]
+            lon, lat = event["geometry"]["coordinates"][:2]
+            if props.get("mag") is not None and props["mag"] >= 4.5 and nearby(location, lat, lon):
+                add(str(event["id"]), props["title"], props["url"])
+        return rows
+    root = ET.fromstring(payload)
+    if source["parser"] == "gdacs":
+        for entry in root.findall(".//item"):
+            if entry.findtext(GDACS + "alertlevel", "").lower() not in ("orange", "red"):
+                continue
+            if entry.findtext(GDACS + "iscurrent", "").lower() != "true":
+                continue
+            point = entry.find(GEO + "Point")
+            if point is not None and nearby(location, float(point.findtext(GEO + "lat")), float(point.findtext(GEO + "long"))):
+                identifier = entry.findtext(GDACS + "eventid", "")
+                add(entry.findtext(GDACS + "eventtype", "") + identifier if identifier else "", entry.findtext("title", ""), entry.findtext("link", ""))
+    elif source["parser"] == "travel":
+        country = location.get("advisory_country", "").casefold()
+        for entry in root.findall(".//item"):
+            title = entry.findtext("title", "")
+            name = re.split(r"\s*-\s*(?:Level|Travel Advisory)", title, maxsplit=1, flags=re.I)[0].strip().casefold()
+            tags = [clean(c.text or "").casefold() for c in entry.findall("category") if c.get("domain") == "Country-Tag"]
+            if not country or country not in [name, *tags]:
+                continue
+            level = next((re.search(r"\bLevel\s*([1-4])\b", c.text or "", re.I) for c in entry.findall("category") if c.get("domain") == "Threat-Level"), None)
+            level = level or re.search(r"\bLevel\s*([1-4])\b", title, re.I)
+            if level:
+                add(entry.findtext("guid", "") or entry.findtext("{http://purl.org/dc/elements/1.1/}identifier", ""), title, entry.findtext("link", ""), level=int(level[1]), country=country)
+    elif source["parser"] == "weather":
+        entries = [root] if root.tag == CAP + "alert" else root.findall(ATOM + "entry") or root.findall(".//item")
+        for entry in entries:
+            if entry.findtext(CAP + "status", entry.findtext("status", "Actual")) != "Actual" or entry.findtext(CAP + "msgType", "") == "Cancel":
+                continue
+            infos = entry.findall(CAP + "info") or [entry]
+            for info in infos:
+                severity = info.findtext(CAP + "severity", info.findtext("severity", "")).lower()
+                if severity not in ("severe", "extreme", "orange", "red"):
+                    continue
+                expires = info.findtext(CAP + "expires", info.findtext("expires", ""))
+                if expires and (date(expires) is None or date(expires) <= now):
+                    continue
+                if not weather_nearby(info, location):
+                    continue
+                link = entry.find(ATOM + "link")
+                url = info.findtext(CAP + "web", "") or entry.findtext("link", "") or (link.get("href", "") if link is not None else "")
+                identifier = entry.findtext(CAP + "identifier", "") or entry.findtext(ATOM + "id", "") or entry.findtext("guid", "")
+                title = info.findtext(CAP + "headline", "") or entry.findtext(ATOM + "title", "") or entry.findtext("title", "") or info.findtext(CAP + "event", "")
+                add(identifier, title, url)
+                break
+    else:
+        raise ValueError("unknown alert parser")
+    return rows
+
+
+def location_config(path: Path) -> dict:
+    location = tomllib.loads(path.expanduser().read_text())
+    if not isinstance(location.get("place"), str) or not location["place"].strip():
+        raise ValueError("location place required")
+    for key in ("lat", "lon", "radius_km"):
+        location[key] = float(location.get(key, 150) if key == "radius_km" else location[key])
+    if not all(math.isfinite(location[k]) for k in ("lat", "lon", "radius_km")) or not -90 <= location["lat"] <= 90 or not -180 <= location["lon"] <= 180 or not 0 < location["radius_km"] <= 20001.6:
+        raise ValueError("invalid location")
+    for key in ("weather_feed", "advisory_country"):
+        if key in location and not isinstance(location[key], str):
+            raise ValueError("invalid location option")
+    return location
+
+
+def deliver_alert(alert: dict, timeout: float) -> None:
+    base = os.environ.get("NTFY_URL", "http://10.77.0.1:2586").rstrip("/")
+    topic = os.environ.get("NTFY_URGENT_TOPIC", "urgent")
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", topic):
+        raise ValueError("invalid ntfy topic")
+    title = "Socrates: location warning"
+    headers = {"Title": title, "Priority": "5", "Click": alert["url"], "Tags": "warning", "Content-Type": "text/plain; charset=utf-8"}
+    token_file = os.environ.get("NTFY_TOKEN_FILE", "/run/secrets/ntfy-publisher-token")
+    if token_file:
+        headers["Authorization"] = "Bearer " + Path(token_file).read_text().strip()
+    request = urllib.request.Request(base + "/" + topic, data=(alert["title"] + "\n" + alert["url"]).encode(), headers=headers, method="POST")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        response.read(65536)
+
+
+def alerts_only(args: argparse.Namespace) -> int:
+    try:
+        location = location_config(args.location)
+    except (OSError, ValueError, KeyError, TypeError):
+        print("model-watch: location unavailable; skipped location alerts", file=sys.stderr)
+        return 0
+    config = tomllib.loads(args.sources.read_text())
+    Path(DB).parent.mkdir(parents=True, exist_ok=True)
+    result = {"alerts": 0, "sources": [], "invocations": 0}
+    with sqlite3.connect(DB, timeout=30) as db:
+        db.executescript(ALERT_SCHEMA)
+        for configured in config.get("alert_sources", []):
+            source = dict(configured)
+            name = source["name"]
+            if source["parser"] == "weather":
+                if not location.get("weather_feed"):
+                    continue
+                source["endpoint"] = location["weather_feed"]
+            if source["parser"] == "travel" and not location.get("advisory_country"):
+                continue
+            if source["parser"] == "usgs":
+                source["endpoint"] += "?" + urllib.parse.urlencode(dict(format="geojson", latitude=location["lat"], longitude=location["lon"], maxradiuskm=location["radius_km"], minmagnitude=4.5, starttime=(datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")))
+            try:
+                now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                rows = alert_rows(source, fetch(source, args.timeout), location, now)
+                sent = 0
+                for alert in rows:
+                    previous = None
+                    if "level" in alert:
+                        before = db.execute("SELECT level FROM watch_advisory_levels WHERE source=? AND country=?", (name, alert["country"])).fetchone()
+                        previous = before[0] if before else None
+                    qualifies = "level" not in alert or alert["level"] >= 3 or (previous is not None and alert["level"] > previous)
+                    with db:
+                        db.execute("BEGIN IMMEDIATE")
+                        if qualifies and not db.execute("SELECT 1 FROM watch_alerts WHERE key=?", (alert["key"],)).fetchone():
+                            deliver_alert(alert, args.timeout)
+                            db.execute("INSERT INTO watch_alerts VALUES(?,?,?,?,?)", (alert["key"], now, name, alert["title"], alert["url"]))
+                            sent += 1
+                        if "level" in alert:
+                            db.execute("INSERT OR REPLACE INTO watch_advisory_levels VALUES(?,?,?)", (name, alert["country"], alert["level"]))
+                result["alerts"] += sent
+                result["sources"].append({"source": name, "sent": sent})
+            except (OSError, ValueError, KeyError, TypeError, ET.ParseError, sqlite3.Error) as error:
+                status = "HTTP " + str(error.code) if isinstance(error, urllib.error.HTTPError) else type(error).__name__
+                result["sources"].append({"source": name, "error": status})
+        print(json.dumps(result, sort_keys=True))
+    return 1 if any("error" in source for source in result["sources"]) else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--alerts-only", action="store_true", help="send deterministic location alerts; never run a model digest")
+    parser.add_argument("--location", type=Path, default=Path.home() / "code/south/main/config/location.toml",
+                        help="private runtime location TOML for alerts")
     parser.add_argument("--sources", type=Path, default=SOURCES, help="verified source TOML")
     parser.add_argument("--timeout", type=float, default=20, help="per-source read timeout in seconds")
     parser.add_argument("--proposals", type=Path, default=Path.home() / ".local/state/agents/model-watch/proposals",
@@ -401,6 +621,8 @@ def main() -> int:
     args = parser.parse_args()
     if not 0 < args.timeout <= 60:
         parser.error("timeout must be greater than 0 and at most 60 seconds")
+    if args.alerts_only:
+        return alerts_only(args)
     config = tomllib.loads(args.sources.read_text())
     Path(DB).parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB, timeout=30) as db:

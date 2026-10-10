@@ -113,6 +113,7 @@
   myConfig.modules.uv.enable = lib.mkDefault true;
   myConfig.modules.vast-reaper.enable = lib.mkDefault true;
   myConfig.modules.vim.enable = lib.mkDefault true;
+  myConfig.modules.watch-alerts.enable = lib.mkDefault true;
   myConfig.modules.wf-recorder.enable = lib.mkDefault true;
   myConfig.modules.wget.enable = lib.mkDefault true;
   myConfig.modules.wireguard.enable = lib.mkDefault true;

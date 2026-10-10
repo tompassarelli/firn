@@ -102,3 +102,35 @@ verified = "2026-10-10"
 name = "agy-models"
 endpoint = "agy models"
 reason = "CLI help verifies this subcommand, but the read exits 1: Please sign in to view available models. Launch the CLI without arguments to sign in. Excluded as account-required; no login attempted."
+
+[[alert_sources]]
+name = "usgs"
+parser = "usgs"
+endpoint = "https://earthquake.usgs.gov/fdsnws/event/1/query"
+access = "Anonymous GET returned HTTP 200. Runtime query uses format=geojson, latitude, longitude, maxradiuskm, minmagnitude=4.5 and a rolling one-day starttime. Location comes only from private runtime config."
+documentation = "https://earthquake.usgs.gov/fdsnws/event/1/"
+verified = "2026-10-11"
+
+[[alert_sources]]
+name = "gdacs"
+parser = "gdacs"
+endpoint = "https://www.gdacs.org/xml/rss.xml"
+access = "Anonymous GET returned HTTP 200. RSS gdacs:eventtype/eventid identify events; current orange/red events are filtered by geo:Point distance."
+documentation = "https://data.gdacs.org/feed_reference.aspx"
+verified = "2026-10-11"
+
+[[alert_sources]]
+name = "weather"
+parser = "weather"
+endpoint = "https://api.weather.gov/alerts/active.atom"
+access = "Anonymous reference-feed GET returned HTTP 200. Fetch only private runtime weather_feed when supplied. CAP, Atom and RSS require stable identifiers, explicit Severe/Extreme or orange/red severity, and polygon/circle/GeoRSS point geometry within the runtime radius. Expired or cancelled warnings are skipped."
+documentation = "https://docs.oasis-open.org/emergency/cap/v1.2/CAP-v1.2-os.html"
+verified = "2026-10-11"
+
+[[alert_sources]]
+name = "travel"
+parser = "travel"
+endpoint = "https://travel.state.gov/_res/rss/TAsTWs.xml"
+access = "Anonymous GET returned HTTP 200. Match private advisory_country to the title country name or Country-Tag; use Threat-Level 3/4 or an observed level increase. GUID is the stable event identifier; same-ID updates are suppressed after delivery."
+documentation = "https://travel.state.gov/content/travel/en/rss.html"
+verified = "2026-10-11"

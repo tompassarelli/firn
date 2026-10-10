@@ -59,6 +59,7 @@ firn-environment-switch [host] [flake] # install the host environment apps (Blen
 machine-update        # nightly inputs, validation, exact build, landing and switch
 agent-runtime-update [version|latest] # Codex, Claude and agy at 02:00 and 13:00
 model-watch [--sources FILE] [--proposals DIR] # public snapshots/events; one plan-billed digest on change at 02:10 and 13:10
+model-watch --alerts-only [--location FILE] # deterministic location warnings to ntfy every 5 minutes; private runtime config
 agents news [--days 7] # shipped and expected models, market probabilities and sources; none when empty
 claude-runtime-update [version|latest] # install verified official Claude binary
 claude                # launch the atomically selected Claude runtime
