@@ -1,13 +1,24 @@
 import "nixpkgs.clause"
 
+foreign package-text(?package: Delayed<nix,Package>): Text
+  construction: "nix"
+  call: "toString"
+  from: "builtins"
+  failure: throw
+
 export proton-autopurge-module()
-  configuration-module(path(myConfig.modules.proton-autopurge.enable), "Daily Proton spam autopurge via ~/proton-triage (rescue correspondents, purge the rest)",
+  configuration-module(path(myConfig.modules.proton-autopurge.enable), "Daily mail hygiene via ~/code/proton-triage: Proton Bridge user service plus one 06:00 pass over Proton and Gmail",
     {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
       {systemd: {user: {
-        services: {proton-spam-autopurge: {
-          Unit: {Description: "Proton spam autopurge (rescue -> grace -> purge, ledgered)"},
-          Service: {Type: "oneshot", ExecStart: "/home/tom/proton-triage/autopurge-run.sh"}}},
+        services: {
+          proton-bridge: {
+            Unit: {Description: "Proton Mail Bridge (IMAP 127.0.0.1:1143 for proton-triage)", After: ["graphical-session.target"]},
+            Service: {ExecStart: "{package-text(package(path(protonmail-bridge)))}/bin/protonmail-bridge --noninteractive", Restart: "on-failure", RestartSec: 30},
+            Install: {WantedBy: ["niri.service"]}},
+          proton-spam-autopurge: {
+            Unit: {Description: "Daily mail hygiene: Proton rescue/grace/purge and Gmail rules, ledgered", Wants: ["proton-bridge.service"], After: ["proton-bridge.service"]},
+            Service: {Type: "oneshot", ExecStart: "{configured-text(path(myConfig.modules.users.homeDir))}/code/proton-triage/main/daily-run.sh"}}},
         timers: {proton-spam-autopurge: {
-          Unit: {Description: "Daily Proton spam autopurge"},
-          Timer: {OnCalendar: "*-*-* 09:30", Persistent: true, RandomizedDelaySec: "10m"},
+          Unit: {Description: "Daily mail hygiene at 06:00"},
+          Timer: {OnCalendar: "*-*-* 06:00", Persistent: true},
           Install: {WantedBy: ["timers.target"]}}}}}})}})
