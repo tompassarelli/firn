@@ -52,6 +52,8 @@
           (builtins.readFile (p "./config/darwin-modules.json")))
        environmentPkgs
         ((import nixpkgs) {:system "x86_64-linux" :config.allowUnfree true})
+       whiterabbitEnvironmentApps
+        [environmentPkgs.blender environmentPkgs.obsidian]
        validateDomainDependency
         (fn [dependency] Any
           (if (and (== dependency.dependentDomain "boot")
@@ -69,7 +71,7 @@
                   :home.homeDirectory "/home/tom"
                   :home.stateVersion  "25.05"
                   :home.packages
-                   (++ [pkgs.blender pkgs.obsidian]
+                   (++ whiterabbitEnvironmentApps
                        (if includeExperimentPackage [pkgs.hello] []))})]}))
        mkWhiterabbitWorld
         (fn [includeExperimentPackage] Any
@@ -369,7 +371,7 @@
        :packages.x86_64-linux.whiterabbit-environment
         (environmentPkgs.buildEnv
           {:name "whiterabbit-environment"
-           :paths whiterabbitEnvironment.config.home.packages})
+           :paths whiterabbitEnvironmentApps})
        :domainIndependence
         {:baseline
           {:bootDrvPath

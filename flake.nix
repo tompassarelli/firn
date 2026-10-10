@@ -52,7 +52,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((whiterabbitEnvironment: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((whiterabbitEnvironmentApps: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((whiterabbitEnvironment: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -302,7 +302,7 @@
     };
     packages.x86_64-linux.whiterabbit-environment = environmentPkgs.buildEnv {
       name = "whiterabbit-environment";
-      paths = whiterabbitEnvironment.config.home.packages;
+      paths = whiterabbitEnvironmentApps;
     };
     domainIndependence = {
       baseline = {
@@ -363,10 +363,10 @@
           home.username = "tom";
           home.homeDirectory = "/home/tom";
           home.stateVersion = "25.05";
-          home.packages = ([ pkgs.blender pkgs.obsidian ] ++ (if includeExperimentPackage then [ pkgs.hello ] else [ ]));
+          home.packages = (whiterabbitEnvironmentApps ++ (if includeExperimentPackage then [ pkgs.hello ] else [ ]));
         })
       ];
-    }))) (dependency: if ((dependency.dependentDomain == "boot") && (dependency.requiredDomain == "environment")) then builtins.throw "boot responsibilities cannot require the environment domain" else dependency))) (import nixpkgs {
+    }))) (dependency: if ((dependency.dependentDomain == "boot") && (dependency.requiredDomain == "environment")) then builtins.throw "boot responsibilities cannot require the environment domain" else dependency))) [ environmentPkgs.blender environmentPkgs.obsidian ])) (import nixpkgs {
       system = "x86_64-linux";
       config.allowUnfree = true;
     }))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
