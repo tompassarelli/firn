@@ -1,9 +1,9 @@
 ---
 name: lua-performance
 description: >-
-  Cut frame cost and Lua instruction or allocation counts in TypeScriptToLua
-  code on PUC Lua 5.3 (Warcraft III, Wisp): over-ceiling Lua32 test costs,
-  `bun wisp perf compare` failures, per-frame allocation and GC pressure.
+  Cut frame cost, Lua instruction counts or per-frame allocation in
+  TypeScriptToLua code on PUC Lua 5.3 (Warcraft III, Wisp): over-ceiling Lua32
+  tests, failing `bun wisp perf compare`, GC pressure.
 grounded: 2026-10-09
 written: 2026-10-09
 metadata:

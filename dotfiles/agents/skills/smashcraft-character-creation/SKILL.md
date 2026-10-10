@@ -1,10 +1,9 @@
 ---
 name: smashcraft-character-creation
 description: >-
-  Design, build and test a Smashcraft fighter or move: role and trade-offs,
-  move phases, hit regions and hurt capsules, damage, knockback, shield,
-  recovery, rollback state, presentation and selection. Use for a new fighter
-  or a move change, not for other Warcraft maps.
+  Design, build and test a Smashcraft fighter or move (role, move phases, hit
+  regions, hurt capsules, damage, knockback, shield, recovery, rollback state,
+  selection) for a new fighter or move change, not other Warcraft maps.
 grounded: 2026-10-09
 written: 2026-10-09
 metadata:

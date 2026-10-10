@@ -2,9 +2,8 @@
 name: github-actions
 description: >-
   Write or change GitHub Actions workflows, dispatch or wait on runs, or run
-  many agents against GitHub: share the account's concurrent-job limit and
-  hourly API budget, cap matrices, join runs, poll with backoff, and clean up
-  scratch branches.
+  many agents against GitHub within the account's job limit and hourly API
+  budget: cap matrices, poll with backoff, clean up scratch branches.
 grounded: 2026-10-10
 written: 2026-10-10
 metadata:

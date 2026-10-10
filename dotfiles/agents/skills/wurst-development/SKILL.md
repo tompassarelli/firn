@@ -1,10 +1,9 @@
 ---
 name: wurst-development
 description: >-
-  Develop Warcraft III maps and tooling in WurstScript, including Wurst
-  projects, compiler workflows, tests, compile-time object data, and WC3 UI.
-  Use when the requested source or project toolchain is Wurst; it does not
-  require migrating existing Lua or Jass projects.
+  Develop Warcraft III maps and tooling in WurstScript (projects, compiler
+  workflows, tests, compile-time object data, WC3 UI) when the requested source
+  or toolchain is Wurst; existing Lua or Jass projects need no migration.
 grounded: 2026-10-09
 written: 2026-10-09
 metadata:

@@ -1,10 +1,9 @@
 ---
 name: smashcraft-stage-design
 description: >-
-  Design, dress and judge a Smashcraft stage's look: backdrop, scenery bands,
-  set pieces, the deck's underside, water, sky, light and fighter contrast, in
-  Classic and Definitive. Use for any stage art, stage composition or stage
-  look issue, a new stage, or a stage review.
+  Design, dress and judge a Smashcraft stage's look (backdrop, scenery, set
+  pieces, water, sky, light, fighter contrast) in Classic and Definitive, for
+  any stage art, composition, look issue or new stage.
 grounded: 2026-10-09
 written: 2026-10-09
 metadata:

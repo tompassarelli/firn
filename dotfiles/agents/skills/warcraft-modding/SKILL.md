@@ -1,10 +1,9 @@
 ---
 name: warcraft-modding
 description: >-
-  Develop and test Warcraft III maps: TypeScript maps with Wisp (hot reload,
-  fast rebuilds, headless and 32-bit Lua tests) and the native game (offline
-  LAN test clients, signed-in clients, startup recovery, desync debugging).
-  Use for any Warcraft III map work, Smashcraft's ts/ included.
+  Develop and test Warcraft III maps with Wisp TypeScript (hot reload, headless
+  and 32-bit Lua tests) or the native game (LAN and signed-in clients, startup
+  recovery, desync debugging), including Smashcraft's ts/.
 grounded: 2026-10-10
 written: 2026-10-10
 metadata:
