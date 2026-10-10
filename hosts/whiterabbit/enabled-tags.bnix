@@ -9,7 +9,7 @@
    [desktop -mako +river]
    theming
    auth
-   [development -beagle +claude +machine-update +agent-runtime-update +model-watch +watch-alerts +update-notify +proton-log-watchdog +skill-review-queue +vast-reaper +socat +procps +alsa-lib]
+   [development -beagle +claude +machine-update +agent-runtime-update +model-watch +supply-chain-scan +watch-alerts +update-notify +proton-log-watchdog +skill-review-queue +vast-reaper +socat +procps +alsa-lib]
    javascript
    python
    [database -postgresql]

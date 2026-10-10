@@ -103,6 +103,7 @@
   myConfig.modules.styling.enable = lib.mkDefault true;
   myConfig.modules.stylix.enable = lib.mkDefault true;
   myConfig.modules.stylix.chosenTheme = lib.mkDefault "tokyo-night-dark";
+  myConfig.modules.supply-chain-scan.enable = lib.mkDefault true;
   myConfig.modules.swaylock.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;
   myConfig.modules.theme-switcher.enable = lib.mkDefault true;
