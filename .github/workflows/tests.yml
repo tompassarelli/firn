@@ -41,6 +41,27 @@ jobs:
           PLTCOLLECTS='' "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
           PLTCOLLECTS='' "$RACO" setup --pkgs beagle-lib
 
+      - name: Read declared Clause revision
+        id: clause
+        run: echo "revision=$(cat firn/config/clause-revision)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout clause
+        uses: actions/checkout@v4
+        with:
+          repository: tompassarelli/clause
+          ref: ${{ steps.clause.outputs.revision }}
+          path: clause
+
+      - name: Install firn user runtime
+        working-directory: firn
+        env:
+          BEAGLE_PATH: ${{ github.workspace }}/beagle
+          FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
+          FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
+        run: |
+          nix profile install nixpkgs#bun
+          FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
+
       - name: Drift check (.bnix and .nix in sync)
         # Regenerates every .nix from its sibling .bnix and fails if any
         # generated file differs from what's committed. Forces .bnix to
@@ -48,6 +69,7 @@ jobs:
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
+          FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn" repo build
           if ! git diff --exit-code; then
