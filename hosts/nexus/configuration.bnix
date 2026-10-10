@@ -14,4 +14,5 @@
    :myConfig.modules.timezone.enable true
    :myConfig.modules.timezone.zone "Asia/Taipei"
    :myConfig.modules.wg-nexus {:enable true :role "hub"}
+   :myConfig.modules.networkd.staticSopsFile (p "../../secrets/nexus/network.yaml")
    :imports [(p "./_generated-enables.nix")]})

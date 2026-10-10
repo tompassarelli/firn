@@ -16,5 +16,6 @@
     enable = true;
     role = "hub";
   };
+  myConfig.modules.networkd.staticSopsFile = ../../secrets/nexus/network.yaml;
   imports = [ ./_generated-enables.nix ];
 }
