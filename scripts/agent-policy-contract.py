@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic policy ownership and Firn provider-binding checks."""
+"""Policy surface ownership and provider hook-binding checks."""
 
 from __future__ import annotations
 
@@ -14,9 +14,7 @@ import sys
 import tomllib
 
 
-KEY = re.compile(r"^[a-z0-9]+(?:[.-][a-z0-9]+)*$")
 UNIT = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-DIGEST = re.compile(r"^[0-9a-f]{64}$")
 ACTIVATION_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 PERMISSION = re.compile(r"^(on|off)$")
 ACTIVATION_SCHEMA = "north.agent-activation/v1"
@@ -111,100 +109,23 @@ def markdown_blocks(path: Path) -> list[tuple[str, str, str]]:
     return blocks
 
 
-def check_claims(contract: Contract, policy: dict, surfaces: dict[str, Path]) -> None:
-    claims = policy.get("claim", [])
-    seen_keys: set[str] = set()
-    mapped: dict[tuple[str, str], dict] = {}
-    machine_digests: set[str] = set()
-    approved_routes: dict[str, dict] = {}
-
-    for route in policy.get("approved_route", []):
-        key = route.get("key", "")
-        owner = route.get("owner", "")
-        text = route.get("text", "")
-        slug = owner.split(":", 1)[1] if owner.startswith("skill:") else ""
-        shape = re.fullmatch(r"- .{3,180} → `([a-z0-9-]+)`\.", text)
-        if not KEY.fullmatch(key) or key in approved_routes:
-            contract.reject(f"invalid or duplicate approved route key: {key!r}")
-        elif not shape or shape.group(1) != slug:
-            contract.reject(f"{key}: approved route has invalid owner or exact text")
-        else:
-            approved_routes[key] = route
-
-    for claim in claims:
-        key = claim.get("key", "")
-        if not KEY.fullmatch(key):
-            contract.reject(f"invalid policy key: {key!r}")
-        if key in seen_keys:
-            contract.reject(f"multiple owners for policy key {key}")
-        seen_keys.add(key)
-        role = claim.get("role")
-        owner = claim.get("owner", "")
-        scope = claim.get("scope")
-        surface = claim.get("surface")
-        block_digest = claim.get("digest")
-
-        if role == "bootstrap":
-            if owner != "bootstrap" or scope != "machine" or surface != "bootstrap":
-                contract.reject(f"{key}: bootstrap role has invalid owner, scope, or surface")
-        elif role == "route":
-            if not owner.startswith("skill:") or scope != "machine" or surface != "bootstrap":
-                contract.reject(f"{key}: route role must route machine policy to one skill")
-            approved = approved_routes.get(key)
-            if not approved or approved.get("owner") != owner:
-                contract.reject(f"{key}: route is absent from the closed approved-route catalog")
-        elif role == "owner":
-            if owner.startswith("skill:"):
-                if surface == "bootstrap" or block_digest:
-                    contract.reject(f"{key}: skill-owned procedure remains in bootstrap")
-                continue
-            if not owner.startswith("repo:") or scope != owner or surface != "repo":
-                contract.reject(f"{key}: owner role has invalid repository authority")
-        else:
-            contract.reject(f"{key}: role must be bootstrap, route, or owner")
-            continue
-
-        if not isinstance(block_digest, str) or not DIGEST.fullmatch(block_digest):
-            contract.reject(f"{key}: mapped claim has no valid digest")
-            continue
-        identity = (surface, block_digest)
-        if identity in mapped:
-            contract.reject(f"multiple owners map {surface} block {block_digest}")
-        mapped[identity] = claim
-        if scope == "machine":
-            machine_digests.add(block_digest)
-
+def check_surfaces(contract: Contract, surfaces: dict[str, Path]) -> None:
+    seen: dict[str, tuple[str, str]] = {}
     for surface, path in surfaces.items():
         try:
             blocks = markdown_blocks(path)
         except OSError as exc:
             contract.reject(f"{surface} policy source is unreadable: {path}: {exc}")
             continue
-        observed: set[str] = set()
         for section, block_digest, text in blocks:
-            claim = mapped.get((surface, block_digest))
-            if not claim:
-                contract.reject(f"unmapped normative block in {surface} [{section}]: {block_digest}")
-                continue
-            observed.add(block_digest)
-            if claim.get("section") != section:
+            if block_digest in seen:
+                other_surface, other_section = seen[block_digest]
                 contract.reject(
-                    f"{claim['key']}: expected section {claim.get('section')!r}, "
-                    f"observed {section!r}"
+                    f"{surface} [{section}] repeats the {other_surface} [{other_section}] "
+                    f"block: {text[:80]}"
                 )
-            if surface == "repo" and claim.get("scope") == "machine":
-                contract.reject(f"{claim['key']}: machine-global claim is in repo AGENTS.md")
-            if surface == "repo" and block_digest in machine_digests:
-                contract.reject(f"repo AGENTS.md duplicates machine-global claim {claim['key']}")
-            if claim.get("role") == "route":
-                approved = approved_routes.get(claim["key"])
-                if not approved or text != approved.get("text"):
-                    contract.reject(
-                        f"{claim['key']}: route differs from the closed approved-route catalog"
-                    )
-        for (mapped_surface, block_digest), claim in mapped.items():
-            if mapped_surface == surface and block_digest not in observed:
-                contract.reject(f"{claim['key']}: mapped {surface} block is absent")
+                continue
+            seen[block_digest] = (surface, section)
 
 
 def command_identity(command: str) -> str:
@@ -307,7 +228,6 @@ def check_activation(
     contract: Contract,
     policy: dict,
     repo: Path,
-    expected_catalog_digest: str,
 ) -> dict[str, dict]:
     path = activation_path()
     try:
@@ -319,8 +239,6 @@ def check_activation(
         contract.reject(f"North activation schema is not {ACTIVATION_SCHEMA}")
     if not ACTIVATION_DIGEST.fullmatch(data.get("catalogDigest", "")):
         contract.reject("North activation catalogDigest is invalid")
-    elif data.get("catalogDigest") != expected_catalog_digest:
-        contract.reject("North activation catalogDigest differs from the canonical catalog")
     if not ACTIVATION_DIGEST.fullmatch(data.get("generationId", "")):
         contract.reject("North activation generationId is invalid")
     units = data.get("units")
@@ -388,142 +306,6 @@ def check_activation(
     return by_id
 
 
-def resolve_catalog(
-    contract: Contract, unit_ids: set[str], repo: Path
-) -> tuple[str, dict[str, dict]]:
-    try:
-        payload = json.loads(activation_path().read_text())
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        contract.reject(f"North activation is unreadable: {activation_path()}: {exc}")
-        return "", {}
-    digest_value = payload.get("catalogDigest")
-    units = payload.get("units")
-    if not ACTIVATION_DIGEST.fullmatch(digest_value or "") or not isinstance(units, list):
-        contract.reject("North activation returned an invalid catalog payload")
-        return "", {}
-    roots = {"nixos-config": str(repo)}
-    if configured := os.environ.get("NORTH_REPO_ROOTS"):
-        try:
-            parsed_roots = json.loads(configured)
-        except json.JSONDecodeError as exc:
-            contract.reject(f"NORTH_REPO_ROOTS is invalid JSON: {exc}")
-            return "", {}
-        if not isinstance(parsed_roots, dict) or not all(
-            isinstance(key, str) and isinstance(value, str)
-            for key, value in parsed_roots.items()
-        ):
-            contract.reject("NORTH_REPO_ROOTS must map repository names to paths")
-            return "", {}
-        roots.update(parsed_roots)
-    by_id: dict[str, dict] = {}
-    for unit in units:
-        if not isinstance(unit, dict) or not UNIT.fullmatch(unit.get("id", "")):
-            contract.reject("North activation returned an invalid unit")
-            continue
-        unit_id = unit["id"]
-        if unit_id not in unit_ids:
-            continue
-        if unit_id in by_id:
-            contract.reject(f"North activation duplicated unit {unit_id}")
-            continue
-        owner = unit.get("owner")
-        if not isinstance(owner, dict):
-            contract.reject(f"North activation unit {unit_id} has no owner")
-            continue
-        owner_repo = owner.get("repo")
-        owner_relative = owner.get("path")
-        if not isinstance(owner_repo, str) or not isinstance(owner_relative, str):
-            contract.reject(f"North activation unit {unit_id} has an invalid owner")
-            continue
-        root = Path(roots.get(owner_repo, Path.home() / "code" / owner_repo / "main"))
-        resolved = (root / owner_relative).resolve()
-        try:
-            resolved.relative_to(root.resolve())
-        except ValueError:
-            contract.reject(f"North activation unit {unit_id} owner escapes its repository")
-            continue
-        enriched = dict(unit)
-        enriched["resolvedOwnerPath"] = str(resolved)
-        by_id[unit_id] = enriched
-    return digest_value, by_id
-
-
-def check_skill_evidence(
-    contract: Contract,
-    policy: dict,
-    catalog: dict[str, dict],
-    activation: dict[str, dict] | None = None,
-) -> None:
-    claims = policy.get("claim", [])
-    approved_routes = {route.get("key"): route for route in policy.get("approved_route", [])}
-    evidence = [
-        entry
-        for entry in claims
-        if entry.get("owner", "").startswith("skill:")
-    ] + list(policy.get("approved_route", []))
-
-    for entry in evidence:
-        key = entry.get("key", "")
-        unit_id = entry.get("owner", "").split(":", 1)[1]
-        catalog_unit = catalog.get(unit_id)
-        if not catalog_unit or catalog_unit.get("kind") != "skill":
-            contract.reject(f"{key}: destination skill is absent from the North catalog: {unit_id}")
-            continue
-        owner = catalog_unit.get("owner")
-        section = entry.get("destination_section")
-        block_digest = entry.get("destination_digest")
-        if not isinstance(section, str) or not isinstance(block_digest, str) or not DIGEST.fullmatch(block_digest):
-            contract.reject(f"{key}: destination skill section or digest is invalid")
-            continue
-        source_value = catalog_unit.get("resolvedOwnerPath")
-        if not isinstance(source_value, str):
-            contract.reject(f"{key}: North resolver omitted the destination source")
-            continue
-        source = Path(source_value)
-        destination_file = entry.get("destination_file")
-        if destination_file is not None:
-            skill_dir = source.parent.resolve()
-            source = (skill_dir / str(destination_file)).resolve()
-            try:
-                source.relative_to(skill_dir)
-            except ValueError:
-                contract.reject(f"{key}: destination file escapes its skill: {destination_file}")
-                continue
-        try:
-            blocks = markdown_blocks(source)
-        except (OSError, UnicodeError) as exc:
-            contract.reject(f"{key}: destination skill is unreadable: {unit_id}: {exc}")
-            continue
-        if not any(
-            observed_section == section and observed_digest == block_digest
-            for observed_section, observed_digest, _ in blocks
-        ):
-            contract.reject(f"{key}: destination skill block is absent: {unit_id} [{section}]")
-
-        if entry in claims and entry.get("role") == "route":
-            approved = approved_routes.get(key)
-            if approved and (
-                approved.get("destination_section") != section
-                or approved.get("destination_digest") != block_digest
-                or approved.get("destination_file") != destination_file
-            ):
-                contract.reject(f"{key}: route destination differs from the approved catalog")
-
-        if activation is None:
-            continue
-        activation_unit = activation.get(unit_id)
-        if not activation_unit or activation_unit.get("kind") != "skill":
-            contract.reject(f"{key}: destination skill is absent from North activation: {unit_id}")
-            continue
-        provenance = activation_unit.get("ownerProvenance")
-        if activation_unit.get("owner") != owner:
-            contract.reject(f"{key}: activation owner differs from the catalog owner")
-        if provenance is None:
-            contract.reject(f"{key}: destination skill lacks ownerProvenance")
-        elif provenance != catalog_unit.get("ownerProvenance"):
-            contract.reject(f"{key}: activation ownerProvenance differs from the North catalog")
-
-
 def env_path(name: str, default: Path) -> Path:
     return Path(os.environ.get(name, str(default)))
 
@@ -554,18 +336,10 @@ def main() -> int:
     )
 
     contract = Contract()
-    check_claims(contract, policy, {"bootstrap": bootstrap, "repo": repo_agents})
+    check_surfaces(contract, {"bootstrap": bootstrap, "repo": repo_agents})
     check_provider_bindings(contract, policy, requirements, claude_hooks)
-    skill_ids = {
-        entry.get("owner", "").split(":", 1)[1]
-        for entry in policy.get("claim", []) + policy.get("approved_route", [])
-        if entry.get("owner", "").startswith("skill:")
-    }
-    catalog_digest, catalog = resolve_catalog(contract, skill_ids, repo)
-    activation = None
     if args.local:
-        activation = check_activation(contract, policy, repo, catalog_digest)
-    check_skill_evidence(contract, policy, catalog, activation)
+        check_activation(contract, policy, repo)
 
     if contract.errors:
         for error in contract.errors:
