@@ -97,12 +97,14 @@ gather() {
   local check=$1 state=$2 now=$3
   case "$check" in
     logins)
-      local accepted
+      local log accepted
       if [ -f "$state/sshd.cursor" ]; then
-        accepted=$(journalctl -u sshd.service --cursor-file="$state/sshd.cursor" -o cat --no-pager | grep 'Accepted ' || true)
+        log=$(journalctl -u sshd.service --cursor-file="$state/sshd.cursor" -o cat --no-pager)
       else
-        accepted=$(journalctl -u sshd.service --since=-15min --cursor-file="$state/sshd.cursor" -o cat --no-pager | grep 'Accepted ' || true)
+        log=$(journalctl -u sshd.service --since=-15min -o cat --no-pager)
+        journalctl -u sshd.service -n 1 --cursor-file="$state/sshd.cursor" --no-pager >/dev/null
       fi
+      accepted=$(printf '%s\n' "$log" | grep 'Accepted ' || true)
       check_logins "$accepted" "$(loginctl list-sessions --no-legend)" "$ALLOWED_IPS" "$(ssh-keygen -lf "$AUTHORIZED_KEYS" | awk '{print $2}' | paste -sd ' ' -)" ;;
     units)
       check_units "$(systemctl --failed --plain --no-legend)" "$(systemctl --user -M "$USER_NAME@" --failed --plain --no-legend 2>/dev/null || true)" ;;
