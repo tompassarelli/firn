@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export gemini-cli-module()
-  module(path(myConfig.modules.gemini-cli.enable), "Gemini CLI for free-tier adversarial review", package(path(gemini-cli)))
