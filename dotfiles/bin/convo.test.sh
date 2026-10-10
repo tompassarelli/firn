@@ -88,7 +88,47 @@ with open(opath, "w") as f:
                                                  "text": "BOILERPLATETOKEN"}]}}) + "\n")
 PY
 
+# ---- fixture: one Claude Code session and its subagent --------------------
+CSID=77777777-8888-4999-aaaa-bbbbbbbbbbbb
+cdir="$CONVO_ROOT/anthropic/acct/projects/-synthetic-claude"
+mkdir -p "$cdir/$CSID/subagents" "$cdir/$CSID/scratchpad"
+python3 - "$cdir" "$CSID" <<'PY'
+import json, os, sys
+d, sid = sys.argv[1:3]
+def rec(t, content, ts, **kw):
+    return json.dumps({"type": t, "sessionId": sid, "cwd": "/synthetic/claude",
+                       "timestamp": ts, "message": {"role": t, "content": content},
+                       **kw}) + "\n"
+with open(os.path.join(d, sid + ".jsonl"), "w") as f:
+    f.write(json.dumps({"type": "ai-title", "sessionId": sid,
+                        "aiTitle": "Claude demo"}) + "\n")
+    f.write(rec("user", "please check PELICANGATE status", "2026-08-08T10:00:00Z"))
+    f.write(rec("assistant", [
+        {"type": "thinking", "thinking": "consider PELICANTHINK"},
+        {"type": "text", "text": "PELICANGATE is open"},
+        {"type": "tool_use", "id": "t1", "name": "Skill",
+         "input": {"skill": "machine-capacity"}}], "2026-08-08T10:00:05Z"))
+    f.write(rec("user", [{"type": "tool_result", "tool_use_id": "t1",
+                          "content": "CLAUDETOOLRESULT"}], "2026-08-08T10:00:06Z"))
+with open(os.path.join(d, sid, "subagents", "agent-a1.jsonl"), "w") as f:
+    f.write(rec("assistant", [{"type": "text", "text": "subagent says HERONLOOP"}],
+                "2026-08-08T10:01:00Z", isSidechain=True))
+with open(os.path.join(d, sid, "scratchpad", "notes.jsonl"), "w") as f:
+    f.write(rec("assistant", "SCRATCHTOKEN", "2026-08-08T10:02:00Z"))
+PY
+
 "$CONVO" index >/dev/null
+
+# ---- Claude Code transcripts are decoded --------------------------------
+out="$("$CONVO" --color=never PELICANGATE -n 5)"
+has "$out" "Claude demo"
+[ "$(grep -c 'PELICANGATE' <<<"$out")" -eq 2 ] || fail "expected the user and assistant PELICANGATE messages"
+has "$("$CONVO" --color=never -r thinking PELICANTHINK)" PELICANTHINK
+has "$("$CONVO" --color=never -r tool -x 'Skill skill=machine-capacity')" "tool ·"
+has "$("$CONVO" --color=never HERONLOOP)" "agent-a1.jsonl"
+has "$("$CONVO" --color=never session "$CSID")" "$CSID.jsonl"
+nomatch CLAUDETOOLRESULT "a Claude tool_result was indexed"
+nomatch SCRATCHTOKEN "a scratchpad file was indexed as a transcript"
 
 # ---- search finds both rollouts ------------------------------------------
 out="$("$CONVO" --color=never QUARKFISH -n 5)"
@@ -311,14 +351,25 @@ mkrec "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
 ln "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
   "$data_home/accounts/openai/acct/sessions/2026/08/07/account-hardlink.jsonl"
 mkrec "$pooled/sessions/2026/08/07/pooled.jsonl" POOLEDROOT 2026-08-07T10:01:00Z
+claude_tx="$HOME/.claude/projects/-synthetic-local/$CSID.jsonl"
+mkdir -p "${claude_tx%/*}"
+python3 - "$claude_tx" <<'PY'
+import json, sys
+with open(sys.argv[1], "w") as f:
+    for i in range(3):
+        f.write(json.dumps({"type": "assistant", "timestamp": "2026-08-07T10:02:00Z",
+                            "message": {"role": "assistant", "content": [
+                                {"type": "text", "text": f"LOCALCLAUDE {i}"}]}}) + "\n")
+PY
 "$CONVO" index >/dev/null
+has "$("$CONVO" --color=never LOCALCLAUDE)" "LOCALCLAUDE"
 has "$("$CONVO" --color=never ACCOUNTROOT)" ACCOUNTROOT
 out="$("$CONVO" --color=never POOLEDROOT -n 5)"
 has "$out" POOLEDROOT
 [ "$(grep -c POOLEDROOT <<<"$out")" -eq 3 ] || fail "pooled mirror duplicated messages"
 out="$($CONVO --color=never ACCOUNTROOT -n 5)"
 [ "$(grep -c ACCOUNTROOT <<<"$out")" -eq 3 ] || fail "overlapping transcript identity duplicated messages"
-has "$("$CONVO" status)" "3 reconciled"
+has "$("$CONVO" status)" "4 reconciled"
 nomatch NOT_IN_ANY_CONFIGURED_ROOT "absent query unexpectedly matched"
 
 set +e
@@ -377,5 +428,15 @@ set -e
 wait "$locker"
 [ "$session_rc" -eq 2 ] || fail "session lock contention returned $session_rc"
 has "$session_out" "refresh inconclusive"
+
+# ---- a real sweep never compresses a Claude transcript --------------------
+cp "$claude_tx" "$fixture/claude.orig"
+codex_tx="$pooled/sessions/2026/08/07/pooled.jsonl"
+touch -d '3 days ago' "$claude_tx" "$codex_tx"
+out="$("$CONVO" compress --color=never)"
+has "$out" "never      1 Claude"
+[ -f "$codex_tx.zst" ] || fail "an eligible Codex rollout was not compressed"
+[ ! -e "$claude_tx.zst" ] || fail "a Claude transcript was compressed"
+cmp -s "$claude_tx" "$fixture/claude.orig" || fail "a Claude transcript changed"
 
 echo "convo.test.sh: all assertions passed"

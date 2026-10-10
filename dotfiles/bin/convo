@@ -4,8 +4,9 @@ exec "${CONVO_PYTHON:-$HOME/.local/libexec/convo/python3}" "$0" "$@"
 ":"""
 """convo — full-text search over local agent conversation transcripts.
 
-Indexes JSONL transcripts under the configured North account and Codex homes into a SQLite
-FTS5 index at ~/.local/state/convo/index.db, then searches it.
+Indexes JSONL transcripts under the configured North account homes, Codex homes
+and Claude Code's projects directory into a SQLite FTS5 index at
+~/.local/state/convo/index.db, then searches it.
 
 The index is self-sufficient: it stores the extracted message text alongside
 the postings, so a query never opens a transcript. The whole indexable text of
@@ -14,8 +15,10 @@ and compaction replays, not conversation. Keeping the text here is what lets
 the sources be compressed, moved, or archived underneath it. The (file, offset)
 locator survives as provenance for the path:line each hit prints.
 
-`convo compress` is the other half: it rewrites closed transcripts as
-`.jsonl.zst`, which the indexer reads transparently.
+`convo compress` is the other half: it rewrites closed Codex rollouts as
+`.jsonl.zst`, which the indexer reads transparently. Claude Code transcripts
+are index-only: Claude resumes and reads them in place, so no root holding
+them grants compression.
 """
 
 import argparse
@@ -117,29 +120,36 @@ class Unreconciled(Exception):
 
 
 def transcript_roots():
-    """Return configured transcript roots, de-duplicated by real path.
+    """Return configured (root, provider, account, layout), de-duplicated by real path.
 
-    Account stores contain ``<provider>/<account>/sessions`` while a direct
-    CODEX_HOME (notably the credential-free pooled home) contains
-    ``sessions`` itself.  Symlinked North projections therefore resolve to one
-    identity and cannot duplicate messages in the index.
+    Layout "accounts" holds ``<provider>/<account>/sessions`` (Codex) and
+    ``<provider>/<account>/projects`` (Claude Code); "codex" is a direct
+    CODEX_HOME holding ``sessions``; "claude" is Claude Code's ``projects``
+    directory itself.  Symlinked North projections resolve to one identity and
+    cannot duplicate messages in the index.
     """
     override = os.environ.get("CONVO_ROOT")
     if override:
-        candidates = [(ROOT, "", "", True, "CONVO_ROOT")]
+        candidates = [(ROOT, "", "", "accounts", True, "CONVO_ROOT")]
     else:
         codex_home = os.environ.get("CODEX_HOME")
         pooled_home = os.environ.get("NORTH_CODEX_POOLED_HOME")
+        claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
         candidates = [
-            (ROOT, "", "", False, "account transcript root"),
-            (codex_home, "openai", "configured", bool(codex_home), "CODEX_HOME"),
-            (pooled_home, "openai", "pooled", bool(pooled_home),
+            (ROOT, "", "", "accounts", False, "account transcript root"),
+            (codex_home, "openai", "configured", "codex", bool(codex_home),
+             "CODEX_HOME"),
+            (pooled_home, "openai", "pooled", "codex", bool(pooled_home),
              "NORTH_CODEX_POOLED_HOME"),
             (os.path.join(HOME, ".local/state/north/codex-pooled"),
-             "openai", "pooled", False, "default pooled transcript root"),
+             "openai", "pooled", "codex", False, "default pooled transcript root"),
+            (os.path.join(claude_dir, "projects") if claude_dir else None,
+             "anthropic", "local", "claude", False, "CLAUDE_CONFIG_DIR projects"),
+            (os.path.join(HOME, ".claude/projects"),
+             "anthropic", "local", "claude", False, "Claude Code projects root"),
         ]
     out, seen = [], set()
-    for root, provider, account, required, label in candidates:
+    for root, provider, account, layout, required, label in candidates:
         if not root:
             continue
         canonical = os.path.realpath(os.path.expanduser(root))
@@ -155,12 +165,52 @@ def transcript_roots():
         if canonical in seen:
             continue
         seen.add(canonical)
-        out.append((canonical, provider, account))
+        out.append((canonical, provider, account, layout))
     return out
 
 
+# What each on-disk layout may have done to it. Only Codex rollouts are ever
+# compressed: Claude Code reads its own transcripts in place to resume.
+CODEX = ("codex", True)
+CLAUDE = ("claude", False)
+
+
+def claude_files(base, walk_error):
+    """Yield (dirpath, filenames, project) for Claude Code's projects layout.
+
+    Only ``<project>/<session>.jsonl`` and
+    ``<project>/<session>/subagents/*.jsonl`` are transcripts; the rest of a
+    session directory (scratchpads, tool-result spills) is agent output.
+    """
+    try:
+        projects = sorted(os.listdir(base))
+    except OSError as e:
+        walk_error(e)
+        return
+    for project in projects:
+        pdir = os.path.join(base, project)
+        if not os.path.isdir(pdir):
+            continue
+        try:
+            entries = sorted(os.listdir(pdir))
+        except OSError as e:
+            walk_error(e)
+            continue
+        yield pdir, entries, project
+        for name in entries:
+            sub = os.path.join(pdir, name, "subagents")
+            if os.path.isdir(sub):
+                try:
+                    yield sub, sorted(os.listdir(sub)), project
+                except OSError as e:
+                    walk_error(e)
+
+
 def discover(roots=None):
-    """Yield (logical, disk, provider, account, project_hint) per transcript.
+    """Yield (logical, disk, provider, account, project_hint, kind) per transcript.
+
+    `kind` is CODEX or CLAUDE: which decoder reads it and whether it may be
+    compressed.
 
     `logical` always names the `.jsonl`; `disk` is what actually exists, which
     may be `<logical>.zst`. Identity is the logical path, so compressing a
@@ -176,11 +226,18 @@ def discover(roots=None):
             f"configured transcript tree is unreadable: {error.filename}: {error}"
         )
 
-    for root, direct_provider, direct_account in (
+    def codex_files(base):
+        for dirpath, dirnames, filenames in os.walk(base, onerror=walk_error):
+            dirnames.sort()
+            yield dirpath, sorted(filenames), ""
+
+    for root, direct_provider, direct_account, layout in (
             transcript_roots() if roots is None else roots):
-        if direct_provider:
+        if layout == "claude":
+            trees = [(direct_provider, direct_account, root, CLAUDE)]
+        elif layout == "codex":
             trees = [(direct_provider, direct_account or os.path.basename(root),
-                      os.path.join(root, "sessions"))]
+                      os.path.join(root, "sessions"), CODEX)]
         else:
             trees = []
             for provider in sorted(os.listdir(root)):
@@ -188,15 +245,19 @@ def discover(roots=None):
                 if not os.path.isdir(pdir):
                     continue
                 for account in sorted(os.listdir(pdir)):
+                    adir = os.path.join(pdir, account)
                     trees.append((provider, account,
-                                  os.path.join(pdir, account, "sessions")))
-        for provider, account, base in trees:
+                                  os.path.join(adir, "sessions"), CODEX))
+                    trees.append((provider, account,
+                                  os.path.join(adir, "projects"), CLAUDE))
+        for provider, account, base, kind in trees:
             if not os.path.isdir(base):
                 continue
-            for dirpath, dirnames, filenames in os.walk(base, onerror=walk_error):
-                dirnames.sort()
+            walk = (claude_files(base, walk_error) if kind is CLAUDE
+                    else codex_files(base))
+            for dirpath, filenames, hint in walk:
                 here = set(filenames)
-                for fn in sorted(filenames):
+                for fn in filenames:
                     if fn.endswith(".jsonl"):
                         logical = disk = os.path.join(dirpath, fn)
                     elif fn.endswith(".jsonl.zst"):
@@ -222,7 +283,7 @@ def discover(roots=None):
                     seen_paths.add(path_identity)
                     if file_identity is not None:
                         seen_files.add(file_identity)
-                    yield logical, disk, provider, account, ""
+                    yield logical, disk, provider, account, hint, kind
 
 
 # ------------------------------------------------------------- line reader
@@ -288,7 +349,7 @@ def _tool_text(name, args):
     if isinstance(args, str):
         body = args
     elif isinstance(args, dict):
-        keep = ("command", "file_path", "path", "pattern", "query", "prompt",
+        keep = ("skill", "command", "file_path", "path", "pattern", "query", "prompt",
                 "description", "old_string", "new_string", "url", "content")
         parts = []
         for k in keep:
@@ -299,6 +360,56 @@ def _tool_text(name, args):
     else:
         body = ""
     return _clip(f"{name} {body}")
+
+
+def extract_claude(d):
+    """Claude Code record -> (list[(role, text)], meta_updates).
+
+    Reads `message.content` the way worker-sweep does: text, thinking and
+    tool_use blocks. tool_result and image blocks are machine output.
+    """
+    out = []
+    meta = {}
+    t = d.get("type")
+    for k, key in (("sessionId", "session_id"), ("cwd", "cwd"),
+                   ("gitBranch", "branch")):
+        if isinstance(d.get(k), str) and d[k]:
+            meta[key] = d[k]
+    if t == "ai-title" and d.get("aiTitle"):
+        meta["title"] = d["aiTitle"]
+        return out, meta
+    if d.get("slug"):
+        meta["slug"] = d["slug"]
+    if t not in ("user", "assistant"):
+        return out, meta
+    m = d.get("message")
+    if not isinstance(m, dict):
+        return out, meta
+    c = m.get("content")
+    if isinstance(c, str):
+        s = _clip(c)
+        if s:
+            out.append((t, s))
+        return out, meta
+    if not isinstance(c, list):
+        return out, meta
+    for b in c:
+        if not isinstance(b, dict):
+            continue
+        bt = b.get("type")
+        if bt == "text":
+            s = _clip(b.get("text"))
+            if s:
+                out.append((t, s))
+        elif bt == "thinking":
+            s = _clip(b.get("thinking"))
+            if s:
+                out.append(("thinking", s))
+        elif bt == "tool_use":
+            s = _tool_text(b.get("name") or "tool", b.get("input"))
+            if s:
+                out.append(("tool", s))
+    return out, meta
 
 
 def extract_openai(d):
@@ -532,8 +643,9 @@ def index(con, quiet=False, verbose=False):
 
     roots = transcript_roots()
     reconciled_roots = json.dumps(
-        [{"root": root, "provider": provider, "account": account}
-         for root, provider, account in roots],
+        [{"root": root, "provider": provider, "account": account,
+          "layout": layout}
+         for root, provider, account, layout in roots],
         sort_keys=True, separators=(",", ":"))
 
     def record_reconciliation():
@@ -559,7 +671,7 @@ def index(con, quiet=False, verbose=False):
     todo = []
     total_new = 0
     adopted = 0
-    for path, disk, provider, account, hint in discover(roots):
+    for path, disk, provider, account, hint, kind in discover(roots):
         try:
             st = os.stat(disk)
         except OSError:
@@ -583,7 +695,8 @@ def index(con, quiet=False, verbose=False):
                     adopted += 1
                     continue
             if is_zst:
-                todo.append((path, disk, provider, account, hint, st, row, True))
+                todo.append((path, disk, provider, account, hint, kind, st, row,
+                             True))
                 total_new += row["size"] or st.st_size
                 continue
             # Size or mtime moved, so the file must be looked at. Anything but
@@ -594,10 +707,12 @@ def index(con, quiet=False, verbose=False):
             reset = (row["ino"] != st.st_ino or row["dev"] != st.st_dev
                      or st.st_size < row["off"]
                      or h is None or h != row["head"])
-            todo.append((path, disk, provider, account, hint, st, row, reset))
+            todo.append((path, disk, provider, account, hint, kind, st, row,
+                         reset))
             total_new += st.st_size if reset else max(0, st.st_size - row["off"])
         else:
-            todo.append((path, disk, provider, account, hint, st, None, False))
+            todo.append((path, disk, provider, account, hint, kind, st, None,
+                         False))
             total_new += st.st_size
 
     if adopted:
@@ -614,7 +729,8 @@ def index(con, quiet=False, verbose=False):
     nbytes = 0
     next_id = con.execute("SELECT COALESCE(MAX(id),0)+1 FROM msg").fetchone()[0]
 
-    for path, disk, provider, account, hint, st, row, reset in todo:
+    for path, disk, provider, account, hint, kind, st, row, reset in todo:
+        extract = extract_claude if kind is CLAUDE else extract_openai
         fid = row["id"] if row else None
         is_zst = disk != path
         start = 0 if (row is None or reset or is_zst) else row["off"]
@@ -676,12 +792,14 @@ def index(con, quiet=False, verbose=False):
                 prog.b += le - ls
                 if line is None:
                     continue
-                # Cheap prefix reject: drops compaction replays, token counts,
-                # world_state and event_msg duplicates before parsing.
-                head = line[:200]
-                if (b"response_item" not in head
-                        and b"session_meta" not in head):
-                    continue
+                # Cheap Codex prefix reject: drops compaction replays, token
+                # counts, world_state and event_msg duplicates before parsing.
+                # Claude records carry their type anywhere in the line.
+                if kind is CODEX:
+                    head = line[:200]
+                    if (b"response_item" not in head
+                            and b"session_meta" not in head):
+                        continue
                 if not line.strip():
                     continue
                 try:
@@ -690,7 +808,7 @@ def index(con, quiet=False, verbose=False):
                     continue
                 if not isinstance(d, dict):
                     continue
-                msgs, mu = extract_openai(d)
+                msgs, mu = extract(d)
                 for k, v in mu.items():
                     if v:
                         meta[k] = v
@@ -1162,12 +1280,15 @@ def cmd_compress(args):
     roster = coordinator_ids()
 
     eligible = []
-    skip_open = skip_live = skip_hot = 0
+    skip_open = skip_live = skip_hot = index_only = 0
     warm_bytes = 0
     total = 0
-    for path, disk, _prov, _acct, _hint in discover():
+    for path, disk, _prov, _acct, _hint, kind in discover():
         if disk != path:
             continue  # already an archive
+        if not kind[1]:
+            index_only += 1
+            continue
         total += 1
         try:
             st = os.stat(path)
@@ -1191,6 +1312,7 @@ def cmd_compress(args):
     ebytes = sum(st.st_size for _, st in eligible)
 
     print(f"corpus     {total} uncompressed transcripts under {root_note}")
+    print(f"never      {index_only} Claude transcripts (index-only roots)")
     print(f"eligible   {len(eligible)} files  {gib(ebytes)}  "
           f"(untouched for {args.older_than}h, no open fd, not on the roster)")
     print(f"held back  {skip_hot} still warm ({gib(warm_bytes)}) · "
