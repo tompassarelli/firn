@@ -73,6 +73,7 @@ written: 2026-10-10
 - Use integrity maps for pad chat setup rather than default dev maps.
 - Read [lan-pair-batching.md](references/lan-pair-batching.md) for pool setup, capacity limits, pair ownership and issue queues.
 - Use signed-in clones B/C/D for Definitive, Battle.net tests and the updated install feeding the Classic pool.
+- Run native work off Tom's machine on the vast.ai Warcraft VM through the vast-ai skill's path and pool recipe; account b is signed in there only.
 - Preserve signed-in clients at the menu for the next assigned Battle.net check.
 - Never touch Tom's game install; use account a only as clone-a through its launch.sh, which yields to Tom's game.
 - Start signed-in clients through `bun wisp client start [CLIENT...] --clients-file FILE` user services rather than shell/background tasks.
