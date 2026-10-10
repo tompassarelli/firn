@@ -42,6 +42,7 @@
   myConfig.modules.vscode.enable = true;
   myConfig.modules.mini-serve.enable = true;
   myConfig.modules.awscli.enable = true;
+  myConfig.modules.bitwarden-desktop.enable = true;
   myConfig.modules.cloudflare-auth.enable = true;
   myConfig.modules.libsecret.enable = true;
   myConfig.modules.proton-autopurge.enable = true;
