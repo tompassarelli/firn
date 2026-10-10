@@ -7,6 +7,7 @@
 # decider denies the same way. Delegation budget 0 (session env, or a subagent
 # brief without a Delegation line) denies with the do-it-yourself message and
 # budget 1 allows; a domain below the first in the org priority stops at 80%.
+# A fresh usage-gate.json refusal (firn#12 money gate) denies with its own text.
 set -uo pipefail
 export PATH="/etc/codex/hooks/runtime:$PATH"
 
@@ -21,6 +22,11 @@ printf 'hook spawn-capacity-guard\nhook codex-behavior-guard\n' >"$ACTIVATION"
 mkdir -p "$SCRATCH/home/.claude/projects/p/s/subagents"
 : >"$SCRATCH/home/.claude/projects/p/s/subagents/agent-a.jsonl"
 : >"$SCRATCH/home/.claude/projects/p/s/subagents/agent-b.jsonl"
+GATE="$SCRATCH/home/.local/state/agents/usage-gate.json"
+mkdir -p "${GATE%/*}"
+# gate CLAUDE_REFUSAL: write a fresh money-gate verdict (codex always allowed).
+gate() { printf '{"claude":{"epoch":%s,"stale_min":30,"refusal":%s},"codex":{"epoch":%s,"stale_min":30,"refusal":null}}\n' "$(date +%s)" "$1" "$(date +%s)" >"$GATE"; }
+gate null
 
 # status LEASED PROTECTED [SYSTEM_PSI]: write the probe fixture (limit 20 CPUs).
 status() { printf '{"decision":"RUN","leasedBatchCpus":%s,"leasedNativeCpus":12,"aggregateCpuLimit":20,"protectedCpuSomeAvg10":%s,"cpuSomeAvg10":%s}\n' "$1" "$2" "${3:-1}" >"$STATUS"; }
@@ -132,6 +138,12 @@ CALL_ENV=()
 
 status 19 5
 input="$(agent "$worker")"
+status 2 5
+gate '"No: a new claude worker could spend money: test."'
+out="$(call "$HOOK" "$(agent "$worker")")"
+[ "$out" = "No: a new claude worker could spend money: test." ] && check ok 'fresh money-gate refusal denies' || check bad 'fresh money-gate refusal denies' "$out"
+gate null
+
 start=$(date +%s%N)
 printf '%s' "$input" | env -u AGENT_DELEGATION_BUDGET -u AGENT_ROLE SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
 ms=$(( ($(date +%s%N) - start) / 1000000 ))

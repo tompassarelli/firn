@@ -247,11 +247,36 @@ def org_domain_rank():
     return domain, order.index(domain), order[0]
 
 
+def money_gate(event):
+    """The refusal `agents usage` recorded for this provider when a new worker could bill money (firn#12): a fresh
+    usage-gate.json verdict answers at once, a stale or missing one runs `agents usage --gate`; no command allows."""
+    import shutil
+    import subprocess
+    provider = "claude" if event.get("tool_name") == "Agent" else "codex"
+    home = os.environ.get("SPAWN_CAPACITY_HOME")
+    state = Path(home) / ".local/state" if home else Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state")
+    try:
+        verdict = json.loads((state / "agents/usage-gate.json").read_text())[provider]
+        if time.time() - verdict["epoch"] < verdict["stale_min"] * 60:
+            return verdict["refusal"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    agents = shutil.which("agents") or os.path.expanduser("~/.local/bin/agents")
+    try:
+        result = subprocess.run([agents, "usage", "--gate", provider], capture_output=True, text=True, timeout=45)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip() if result.returncode == 3 and result.stdout.strip() else None
+
+
 def check(event):
     """The refusal text for this spawn, or None to allow it."""
     texts = brief_texts(event.get("tool_input") or {})
     if any(EXEMPT_MARKER in t for t in texts):
         return None
+    money = money_gate(event)
+    if money:
+        return money
     if event.get("tool_name") == "Agent":
         budget, source = delegation_budget(event)
         if budget <= 0:
