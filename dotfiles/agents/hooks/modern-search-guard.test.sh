@@ -10,7 +10,7 @@ SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/modern-search-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 CODE="$SCRATCH/code"
 PYTHON="${NORTH_AGENT_PYTHON:-/etc/codex/hooks/runtime/python3}"
 [ -x "$PYTHON" ] || {
@@ -33,10 +33,7 @@ ln -s "$SOURCE_GUARD" "$PROVIDER_HOOKS/modern-search-guard.sh"
 GUARD="$PROVIDER_HOOKS/modern-search-guard.sh"
 
 set_active() {
-  local permission=off
-  [ "$1" = true ] && permission=on
-  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"modern-search-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' \
-    "$permission" "$1" >"$ACTIVATION"
+  if [ "$1" = true ]; then printf 'hook modern-search-guard\n' >"$ACTIVATION"; else : >"$ACTIVATION"; fi
 }
 set_active true
 
@@ -69,7 +66,7 @@ run() { # command [env...]
   local command="$1"
   shift
   payload "$command" | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" \
-    NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" \
+    NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" \
     "$@" "$GUARD" 2>&1
 }
 
@@ -172,20 +169,20 @@ allow 'grep -rn foo src'
 set_active true
 
 output="$(printf 'not-json' | env -u AGENT_NO_AUTHORING_HOOKS \
-  NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
+  NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
 ok=0; [ "$(decision "$output")" = allow ] && ok=1
 record "$ok" 'malformed payload fails open' "$output"
 
 output="$("$PYTHON" -c 'import json
 print(json.dumps({"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"grep -r x . " + "x" * 1048576}}))' |
-  env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+  env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
 ok=0; [ "$(decision "$output")" = allow ] && ok=1
 record "$ok" 'oversized payload fails open' "$output"
 
 output="$("$PYTHON" -c 'import json
 print(json.dumps({"tool_name":"Edit","tool_input":{"file_path":"grep -r find"}}))' |
-  env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+  env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
 ok=0; [ "$(decision "$output")" = allow ] && ok=1
 record "$ok" 'an Edit envelope is not a search' "$output"

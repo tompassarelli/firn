@@ -19,9 +19,10 @@ its NixOS source and installed executable. `firn-system-policy` illustrates
 that shape; a provider adapter is a distribution, not a second identity.
 
 The current generation defaults to
-`${NORTH_AGENT_STATE_ROOT:-~/.local/state/north/agents}/current/activation.json`.
-Read one exact row by `kind`, `id`, and resolved `active` boolean. North has
-already resolved permission, claimants, module closure, and provenance.
+`${NORTH_AGENT_STATE_ROOT:-~/.local/state/north/agents}/current/activation.active`,
+one `kind id` line per active unit; `north_agent_unit_active` reads it with bash
+builtins. North has already resolved permission, claimants, module closure, and
+provenance.
 
 The session switch shape is:
 

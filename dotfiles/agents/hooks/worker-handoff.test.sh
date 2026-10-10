@@ -10,13 +10,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/worker-handoff.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/worker-handoff-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 HANDOFFS="$SCRATCH/home/.local/state/agents/handoffs"
 
 set_active() {
-  local permission=off
-  [ "$1" = true ] && permission=on
-  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"worker-handoff","kind":"hook","category":"agents","permission":"%s","active":%s}]}\n' "$permission" "$1" >"$ACTIVATION"
+  if [ "$1" = true ]; then printf 'hook worker-handoff\n' >"$ACTIVATION"; else : >"$ACTIVATION"; fi
 }
 set_active true
 
@@ -57,7 +55,7 @@ if sys.argv[2]:
     d.update(agent_id=sys.argv[1], agent_type=sys.argv[2], agent_transcript_path=sys.argv[3])
 print(json.dumps(d))' "$id" "$type" "$file")"
   printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" \
-    NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
+    NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
     "$HOOK" | python3 -c '
 import json, sys
 raw = sys.stdin.read().strip()
@@ -109,7 +107,7 @@ expect_silent a6 worker-high 900000 'inactive hook is silent'
 set_active true
 
 out="$(printf '{not json "agent_type":"worker' | HOME="$SCRATCH/home" \
-  NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$HOOK")"
+  NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$HOOK")"
 [ -z "$out" ] && check ok 'malformed input is silent' || check bad 'malformed input is silent' "$out"
 
 printf 'worker-handoff: %d passed, %d failed\n' "$pass" "$fail"

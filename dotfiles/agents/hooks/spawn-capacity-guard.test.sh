@@ -13,9 +13,9 @@ HOOK="$HERE/spawn-capacity-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/spawn-capacity-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 STATUS="$SCRATCH/probe.json"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"spawn-capacity-guard","kind":"hook","category":"agents","permission":"on","active":true},{"id":"codex-behavior-guard","kind":"hook","category":"authoring","permission":"on","active":true}]}\n' >"$ACTIVATION"
+printf 'hook spawn-capacity-guard\nhook codex-behavior-guard\n' >"$ACTIVATION"
 mkdir -p "$SCRATCH/home/.claude/projects/p/s/subagents"
 : >"$SCRATCH/home/.claude/projects/p/s/subagents/agent-a.jsonl"
 : >"$SCRATCH/home/.claude/projects/p/s/subagents/agent-b.jsonl"
@@ -28,7 +28,7 @@ call() {
   printf '%s' "$2" | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" SPAWN_CAPACITY_HOME="$SCRATCH/home" \
     SPAWN_CAPACITY_STATUS="$STATUS" CODEX_BEHAVIOR_STATE="$SCRATCH/state" \
     CODEX_BEHAVIOR_CODE_ROOT="$SCRATCH/code" \
-    NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
+    NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
     "$1" | python3 -c '
 import json, sys
 raw = sys.stdin.read().strip()
@@ -109,7 +109,7 @@ out="$(call "$HERE/codex-behavior-guard.sh" '{"session_id":"s","cwd":"/tmp","hoo
 status 19 5
 input="$(agent "$worker")"
 start=$(date +%s%N)
-printf '%s' "$input" | env SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVATION="$ACTIVATION" "$HOOK" >/dev/null
+printf '%s' "$input" | env SPAWN_CAPACITY_STATUS="$STATUS" NORTH_AGENT_ACTIVE="$ACTIVATION" "$HOOK" >/dev/null
 ms=$(( ($(date +%s%N) - start) / 1000000 ))
 [ "$ms" -lt 100 ] && check ok "allow decision takes ${ms} ms (under 100)" || check bad 'allow decision under 100 ms' "${ms} ms"
 

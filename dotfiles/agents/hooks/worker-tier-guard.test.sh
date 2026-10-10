@@ -8,8 +8,8 @@ HOOK="$HERE/worker-tier-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/worker-tier-guard-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 mkdir -p "$SCRATCH/home/.local/state/north"
-ACTIVATION="$SCRATCH/activation.json"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"worker-tier-guard","kind":"hook","category":"agents","permission":"on","active":true}]}\n' >"$ACTIVATION"
+ACTIVATION="$SCRATCH/activation.active"
+printf 'hook worker-tier-guard\n' >"$ACTIVATION"
 
 pass=0 fail=0
 # run EXPECT DESCRIPTION SUBAGENT_TYPE PROMPT [ENV...]
@@ -21,7 +21,7 @@ ti = {"description": "d", "prompt": sys.argv[1]}
 if sys.argv[2]: ti["subagent_type"] = sys.argv[2]
 print(json.dumps({"tool_name": "Agent", "tool_input": ti}))' "$prompt" "$agent")"
   out="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$@" "$HOOK" 2>&1)"
   decision="$(python3 -c 'import json,sys
 try:

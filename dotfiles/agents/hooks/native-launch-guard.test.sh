@@ -11,13 +11,11 @@ HOOK="$HERE/native-launch-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/native-launch-guard-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 mkdir -p "$SCRATCH/home/.local/state/north"
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 
 pass=0 fail=0
 set_active() {
-  local permission=off
-  [ "$1" = true ] && permission=on
-  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"native-launch-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' "$permission" "$1" >"$ACTIVATION"
+  if [ "$1" = true ]; then printf 'hook native-launch-guard\n' >"$ACTIVATION"; else : >"$ACTIVATION"; fi
 }
 set_active true
 
@@ -27,7 +25,7 @@ run() {
   local input out decision ok=0
   input="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$cmd")"
   out="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$@" "$HOOK" 2>&1)"
   decision="$(python3 -c 'import json,sys
 try:

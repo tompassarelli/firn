@@ -9,7 +9,7 @@ SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/concrete-model-identity-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
 TODO="$SCRATCH/home/code/todo"
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 mkdir -p "$TODO" "$SCRATCH/work" "$PROVIDER_HOOKS/lib"
 
 for source in authoring-killswitch.sh north-agent-activation.sh; do
@@ -24,9 +24,7 @@ ln -s "$SOURCE_GUARD" "$PROVIDER_HOOKS/concrete-model-identity-guard.sh"
 GUARD="$PROVIDER_HOOKS/concrete-model-identity-guard.sh"
 
 set_active() {
-  local permission=off
-  [ "$1" = true ] && permission=on
-  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' "$permission" "$1" >"$ACTIVATION"
+  if [ "$1" = true ]; then printf 'hook concrete-model-identity-guard\n' >"$ACTIVATION"; else : >"$ACTIVATION"; fi
 }
 set_active true
 
@@ -72,7 +70,7 @@ run_case() {
   local expect="$1" description="$2" input="$3" output decision ok=0
   shift 3
   output="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" TODO_ROOT="$TODO" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    HOME="$SCRATCH/home" TODO_ROOT="$TODO" NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
     "$@" "$GUARD" 2>&1)"
   decision="$(python3 -c 'import json,sys
@@ -245,12 +243,6 @@ run_case allow 'inactive unit' \
 set_active true
 printf 'not-json\n' >"$ACTIVATION"
 run_case allow 'malformed activation' \
-  "$(payload Write "$TODO/task.md" 'model = "inherited"')"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[%s,%s]}\n' \
-  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"on","active":true}' \
-  '{"id":"concrete-model-identity-guard","kind":"hook","category":"authoring","permission":"on","active":true}' \
-  >"$ACTIVATION"
-run_case allow 'duplicate activation unit' \
   "$(payload Write "$TODO/task.md" 'model = "inherited"')"
 rm -f "$ACTIVATION"
 run_case allow 'missing activation' \

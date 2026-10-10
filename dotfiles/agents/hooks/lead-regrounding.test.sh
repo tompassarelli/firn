@@ -9,8 +9,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 HOOK="$HERE/lead-regrounding.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/lead-regrounding-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
-ACTIVATION="$SCRATCH/activation.json"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"lead-regrounding","kind":"hook","category":"agents","permission":"on","active":true}]}\n' >"$ACTIVATION"
+ACTIVATION="$SCRATCH/activation.active"
+printf 'hook lead-regrounding\n' >"$ACTIVATION"
 
 # call SESSION [AGENT_ID]: print the hook's additionalContext ("" when silent).
 call() {
@@ -24,7 +24,7 @@ if sys.argv[2]:
     d.update(agent_id=sys.argv[2], agent_type="worker")
 print(json.dumps(d))' "$1" "${2:-}")"
   printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" \
-    NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
+    NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 \
     "$HOOK" | python3 -c '
 import json, sys
 raw = sys.stdin.read().strip()

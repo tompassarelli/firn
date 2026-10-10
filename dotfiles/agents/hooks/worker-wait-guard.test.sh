@@ -9,8 +9,8 @@ HOOK="$HERE/worker-wait-guard.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/worker-wait-guard-test.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 mkdir -p "$SCRATCH/home/.local/state/north"
-ACTIVATION="$SCRATCH/activation.json"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"worker-wait-guard","kind":"hook","category":"agents","permission":"on","active":true}]}\n' >"$ACTIVATION"
+ACTIVATION="$SCRATCH/activation.active"
+printf 'hook worker-wait-guard\n' >"$ACTIVATION"
 
 pass=0 fail=0
 # run EXPECT DESCRIPTION AGENT_TYPE BACKGROUND TIMEOUT_MS COMMAND [ENV...]
@@ -25,7 +25,7 @@ d = {"tool_name": "Bash", "tool_input": ti}
 if sys.argv[2]: d["agent_type"] = sys.argv[2]
 print(json.dumps(d))' "$cmd" "$agent" "$bg" "$to")"
   out="$(printf '%s' "$input" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$@" "$HOOK" 2>&1)"
   decision="$(python3 -c 'import json,sys
 try:

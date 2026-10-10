@@ -9,7 +9,7 @@ SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/resource-safe-search-guard.XXXXXX")"
 trap 'rm -rf "${SCRATCH:?}"' EXIT
 export AGENT_HOOK_ERRORS="$SCRATCH/errors.tsv"
 PROVIDER_HOOKS="$SCRATCH/provider-hooks"
-ACTIVATION="$SCRATCH/activation.json"
+ACTIVATION="$SCRATCH/activation.active"
 CONTAINER="$SCRATCH/project"
 CODE="$CONTAINER/main"
 LANE="$CONTAINER/worktrees/lane"
@@ -34,10 +34,7 @@ ln -s "$SOURCE_GUARD" "$PROVIDER_HOOKS/resource-safe-search-guard.sh"
 GUARD="$PROVIDER_HOOKS/resource-safe-search-guard.sh"
 
 set_active() {
-  local permission=off
-  [ "$1" = true ] && permission=on
-  printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"resource-safe-search-guard","kind":"hook","category":"authoring","permission":"%s","active":%s}]}\n' \
-    "$permission" "$1" >"$ACTIVATION"
+  if [ "$1" = true ]; then printf 'hook resource-safe-search-guard\n' >"$ACTIVATION"; else : >"$ACTIVATION"; fi
 }
 set_active true
 
@@ -69,7 +66,7 @@ run_case() {
   local expect="$1" description="$2" command="$3" cwd="${4:-$CODE}" output observed ok=0
   shift $(( $# >= 4 ? 4 : 3 ))
   output="$(payload "$command" "$cwd" | env -u AGENT_NO_AUTHORING_HOOKS \
-    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+    HOME="$SCRATCH/home" NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON="$PYTHON" \
     "$@" "$GUARD" 2>&1)"
   observed="$(decision "$output")"
@@ -146,7 +143,7 @@ run_case allow 'malformed activation fails open' 'rg TARGET /proc'
 set_active true
 
 malformed_output="$(printf 'not-json' | env -u AGENT_NO_AUTHORING_HOOKS \
-  NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
+  NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
 if [ "$(decision "$malformed_output")" = allow ]; then
   pass=$((pass + 1)); printf 'PASS allow malformed payload fails open\n'
 else
@@ -159,7 +156,7 @@ print(json.dumps({"tool_name":"Bash","cwd":"/tmp","tool_input":{"command":"rg x 
 PY
 )"
 oversized_output="$(printf '%s' "$oversized" | env -u AGENT_NO_AUTHORING_HOOKS \
-  NORTH_AGENT_ACTIVATION="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
+  NORTH_AGENT_ACTIVE="$ACTIVATION" NORTH_AGENT_PYTHON="$PYTHON" "$GUARD" 2>&1)"
 if [ "$(decision "$oversized_output")" = allow ]; then
   pass=$((pass + 1)); printf 'PASS allow oversized payload fails open\n'
 else

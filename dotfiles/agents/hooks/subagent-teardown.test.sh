@@ -12,8 +12,8 @@ HOOK="$HERE/subagent-teardown.sh"
 SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/subagent-teardown-test.XXXXXX")"
 sleeper=""
 trap '[ -z "$sleeper" ] || kill "$sleeper" 2>/dev/null; rm -rf "${SCRATCH:?}"' EXIT
-ACTIVATION="$SCRATCH/activation.json"
-printf '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"subagent-teardown","kind":"hook","category":"agents","permission":"on","active":true}]}\n' >"$ACTIVATION"
+ACTIVATION="$SCRATCH/activation.active"
+printf 'hook subagent-teardown\n' >"$ACTIVATION"
 OUT="$SCRATCH/tasks/bshell001.output"
 mkdir -p "$SCRATCH/tasks" "$SCRATCH/subagents"
 : >"$OUT"
@@ -33,7 +33,7 @@ plain='{"type":"assistant","timestamp":"'"$now"'","message":{"role":"assistant",
 fixture() { printf '%s\n' "$2" >"$SCRATCH/subagents/agent-$1.jsonl"; printf '%s' "$SCRATCH/subagents/agent-$1.jsonl"; }
 stop_input() { printf '{"session_id":"s","hook_event_name":"SubagentStop","agent_id":"a1","agent_type":"worker","stop_hook_active":%s,"transcript_path":"%s/main.jsonl","agent_transcript_path":"%s"}' "${2:-false}" "$SCRATCH" "$1"; }
 call() {
-  printf '%s' "$1" | env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVATION="$ACTIVATION" \
+  printf '%s' "$1" | env -u AGENT_NO_AUTHORING_HOOKS NORTH_AGENT_ACTIVE="$ACTIVATION" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 "$HOOK"
 }
 

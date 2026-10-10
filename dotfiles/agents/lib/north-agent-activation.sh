@@ -1,18 +1,33 @@
 # shellcheck shell=bash
 
+# North resolves permission, module closure, support claims and every kill switch
+# into one immutable generation. Its activation.active lists one `kind id` line
+# per active unit; a generation from before that list falls back to the JSON.
+north_agent_unit_active() {
+  local wanted="$1 $2" line
+  local list="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}/current/activation.active"
+  [ -z "${NORTH_AGENT_ACTIVATION:-}" ] || list="${NORTH_AGENT_ACTIVATION%.json}.active"
+  list="${NORTH_AGENT_ACTIVE:-$list}"
+  if [ -r "$list" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ "$line" != "$wanted" ] || return 0
+    done <"$list"
+    return 1
+  fi
+  north_agent_unit_active_json "$1" "$2"
+}
+
 north_agent_activation_path() {
   if [ -n "${NORTH_AGENT_ACTIVATION:-}" ]; then
     printf '%s\n' "$NORTH_AGENT_ACTIVATION"
-    return
+  elif [ -n "${NORTH_AGENT_ACTIVE:-}" ]; then
+    printf '%s\n' "${NORTH_AGENT_ACTIVE%.active}.json"
+  else
+    printf '%s\n' "${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}/current/activation.json"
   fi
-  local state_root="${NORTH_AGENT_STATE_ROOT:-$HOME/.local/state/north/agents}"
-  printf '%s\n' "$state_root/current/activation.json"
 }
 
-# North resolves permission, module closure, support claims, and every kill switch
-# before publishing one immutable activation generation. Provider adapters read
-# only that resolved decision; a missing or malformed generation is inactive.
-north_agent_unit_active() {
+north_agent_unit_active_json() {
   local wanted_kind="$1" wanted_id="$2" activation python_bin
   activation="$(north_agent_activation_path)" || return 1
   python_bin="${NORTH_AGENT_PYTHON:-python3}"

@@ -52,7 +52,7 @@ git -C "$REPO_CWD" add .gitignore src lib >/dev/null 2>&1
 git -C "$REPO_CWD" -c user.email=t@example -c user.name=t \
   commit -qm base >/dev/null 2>&1
 printf 'edited\n' > "$REPO_CWD/lib/x.txt" # a tracked edit: real work git cannot restore
-printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","permission":"on","active":true}]}' >"$SCRATCH/activation.json"
+printf 'hook tripwire-guard\n' >"$SCRATCH/activation.active"
 
 pass=0 fail=0
 
@@ -76,7 +76,7 @@ run() {
   set -- env -u SAFE_PUSH_ACTIVE -u XDG_CACHE_HOME -u XDG_DATA_HOME \
     HOME="$FH" TMPDIR=/tmp \
     TRIPWIRE_LOG_DIR="$SCRATCH" AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" \
-    NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
+    NORTH_AGENT_ACTIVE="$SCRATCH/activation.active" \
     NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 NORTH_BIN=/bin/true
   # shellcheck disable=SC2086  # deliberate split: EXTRA_ENV may name several vars
   [ -n "$extra" ] && set -- "$@" $extra
@@ -521,7 +521,7 @@ echo "== kill-switch: shared value-aware semantics (lib/authoring-killswitch.sh)
 # env 0/false force guards LIVE -> guard runs -> deny. The old presence-only check
 # (`[ -n "$VAR" ] && exit 0`) would have ALLOWED these — the bug this rewire fixes.
 # Persistent inactive unit (env unset) -> guard OFF -> allow.
-printf '%s\n' '{"schema":"north.agent-activation/v1","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"tripwire-guard","kind":"hook","category":"authoring","permission":"off","active":false}]}' >"$SCRATCH/activation.json"
+: >"$SCRATCH/activation.active"
 run allow 'tripwire UnitId off -> personal delete allowed' 'rm -rf ~/Pictures/Screenshots'
 run allow 'tripwire UnitId off -> bounded find allowed' \
   'find ~/Pictures/Screenshots -type f -mtime +30 -delete'
@@ -530,7 +530,7 @@ run allow "tripwire UnitId off -> another lane's worktree allowed (human's call)
 # UnitId off BUT env=0 -> env force-live BEATS activation -> deny.
 run deny 'env=0 force-live beats inactive UnitId' \
   'rm -rf ~/Pictures/Screenshots' "$REPO_CWD" AGENT_NO_AUTHORING_HOOKS=0
-rm -f "${SCRATCH:?}/activation.json" # restore neutral state for the benches below
+rm -f "${SCRATCH:?}/activation.active" # restore neutral state for the benches below
 
 echo "== latency (fast path = prescreen miss; slow path = parse, allow) =="
 bench() {
@@ -541,7 +541,7 @@ bench() {
   for _ in $(seq 1 50); do
     printf '%s' "$json" | env HOME="$FH" TRIPWIRE_LOG_DIR="$SCRATCH" \
       AUTHORING_KILLSWITCH_STATE="$SCRATCH/killswitch.state" NORTH_BIN=/bin/true \
-      NORTH_AGENT_ACTIVATION="$SCRATCH/activation.json" \
+      NORTH_AGENT_ACTIVE="$SCRATCH/activation.active" \
       "$HOOK" >/dev/null 2>&1
   done
   t1=$(date +%s%N)
