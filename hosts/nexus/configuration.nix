@@ -4,6 +4,8 @@
   myConfig.modules.system.stateVersion = "26.05";
   myConfig.modules.users.enable = true;
   myConfig.modules.users.username = "tom";
+  myConfig.modules.users.email = "6378995+tompassarelli@users.noreply.github.com";
+  myConfig.modules.users.fullName = "tompassarelli";
   myConfig.modules.users.mutable = false;
   myConfig.modules.users.authorizedKeys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFJ2c3khPX8NgkazmQdEI1kU9IrEZuE8m2/2OIquQbgh tom@nexus"
@@ -18,5 +20,27 @@
     phonePublicKey = "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE=";
   };
   myConfig.modules.networkd.staticSopsFile = ../../secrets/nexus/network.yaml;
+  myConfig.modules.claude.enable = true;
+  myConfig.modules.codex.enable = true;
+  myConfig.modules.codex-runtime.enable = true;
+  myConfig.modules.agent-runtime-update.enable = true;
+  myConfig.modules.north-profile.enable = true;
+  myConfig.modules.lane-gc.enable = true;
+  myConfig.modules.worker-ledger.enable = true;
+  myConfig.modules.nix-ld.enable = true;
+  myConfig.modules.bun.enable = true;
+  myConfig.modules.ripgrep.enable = true;
+  myConfig.modules.fd.enable = true;
+  myConfig.modules.python.enable = true;
+  myConfig.modules.sqlite.enable = true;
+  myConfig.modules.uv.enable = true;
+  myConfig.modules.keyring-headless = {
+    enable = true;
+    sopsFile = ../../secrets/nexus/keyring.yaml;
+  };
+  myConfig.modules.github-pat = {
+    enable = true;
+    sopsFile = ../../secrets/nexus/github.yaml;
+  };
   imports = [ ./_generated-enables.nix ];
 }
