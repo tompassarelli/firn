@@ -60,6 +60,7 @@
   myConfig.modules.delivery-liveness.enable = true;
   myConfig.modules.lane-gc.enable = true;
   myConfig.modules.worker-ledger.enable = true;
+  home-manager.users.tom.xdg.configFile."threads/remote".text = "nexus\n";
   myConfig.modules.capacity-watchdog.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";

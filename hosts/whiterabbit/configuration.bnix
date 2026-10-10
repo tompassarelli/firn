@@ -62,6 +62,8 @@
    :myConfig.modules.delivery-liveness.enable true
    :myConfig.modules.lane-gc.enable true
    :myConfig.modules.worker-ledger.enable true
+   ;; The threads ledger lives on nexus; the laptop's threads proxies there over ssh.
+   :home-manager.users.tom.xdg.configFile {"threads/remote" {:text "nexus\n"}}
    :myConfig.modules.capacity-watchdog.enable true
    ;; Home Manager activates this user service during a system switch. Bound
    ;; that activation independently of a periodic worker which may be hung.
