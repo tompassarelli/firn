@@ -126,6 +126,15 @@ moved=$(t recommend 'Category: performance' | head -1)
 out="$first / $held / $moved"
 check '[spec] hysteresis: haiku at 80% wins, holds at 66% against medium 80%, and yields at 57%'   '[ "$out" = "tier haiku  cell [Category: performance]  n 10 / tier haiku  cell [Category: performance]  n 11 / tier medium  cell [Category: performance]  n 12" ]'
 
+{ for i in 1 2 3; do row --arg id "n$i" '{id:$id,ended:"2026-10-09T00:00:00Z",tier:"haiku",actual_min:5,outcome:"done",landed:0,expects_landing:0,brief:"Category: native-check"}'; done
+  row '{id:"n4",ended:"2026-10-09T00:00:00Z",tier:"haiku",actual_min:5,outcome:"done",landed:0,expects_landing:1,brief:"Category: native-check"}'
+  row '{id:"n5",ended:"2026-10-09T00:00:00Z",tier:"haiku",actual_min:5,outcome:"done",landed:1,expects_landing:1,brief:"Category: native-check"}'
+  row '{id:"n6",ended:"2026-10-09T01:00:00Z",tier:"medium",actual_min:5,outcome:"done",landed:1,brief:"Category: native-check Follows: n5"}'
+} | "$threads" ingest 2>/dev/null
+out=$(t recommend 'Category: native-check')
+check '[spec] success is Done with no later Follows: run, and landed only when the brief expected a landing' \
+  'grep -qx "  haiku   60% of 5" <<<"$out"'
+
 t claim smashcraft#11 --by alice --eta 30 >/dev/null
 t block wisp#20 waits on smashcraft#13 >/dev/null
 out=$(t unowned)

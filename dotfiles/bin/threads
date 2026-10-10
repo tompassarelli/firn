@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS runs(
   surface TEXT,
   verify TEXT,
   lens TEXT,
-  flaws INTEGER
+  flaws INTEGER,
+  expects_landing INTEGER
 ) STRICT;
 CREATE TABLE IF NOT EXISTS tier_choice(
   cell TEXT PRIMARY KEY,
@@ -142,8 +143,9 @@ def connect() -> sqlite3.Connection:
     for column in ("arm", "spec", "scope", "surface", "verify", "lens"):
         if column not in columns:
             db.execute(f"ALTER TABLE runs ADD COLUMN {column} TEXT")
-    if "flaws" not in columns:
-        db.execute("ALTER TABLE runs ADD COLUMN flaws INTEGER")
+    for column in ("flaws", "expects_landing"):
+        if column not in columns:
+            db.execute(f"ALTER TABLE runs ADD COLUMN {column} INTEGER")
     db.execute("CREATE TABLE IF NOT EXISTS tier_choice(cell TEXT PRIMARY KEY, tier TEXT NOT NULL, since TEXT NOT NULL) STRICT")
     return db
 
@@ -560,10 +562,12 @@ def cmd_ingest(db, a):
                 if r.get("backfill"):
                     backfilled += db.execute(
                         "UPDATE runs SET spec = coalesce(spec, ?), scope = coalesce(scope, ?), surface = coalesce(surface, ?),"
-                        " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?) WHERE agent = ?"
-                        " AND (spec IS NULL OR scope IS NULL OR surface IS NULL OR verify IS NULL OR lens IS NULL OR flaws IS NULL)",
+                        " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?),"
+                        " expects_landing = coalesce(expects_landing, ?) WHERE agent = ?"
+                        " AND (spec IS NULL OR scope IS NULL OR surface IS NULL OR verify IS NULL OR lens IS NULL OR flaws IS NULL"
+                        " OR expects_landing IS NULL)",
                         (f.get("spec"), f.get("scope"), f.get("surface"), f.get("verify"), f.get("lens"),
-                         r.get("flaws"), r["id"])).rowcount if any(k in f for k in (*FACETS, "lens")) else 0
+                         r.get("flaws"), r.get("expects_landing"), r["id"])).rowcount
                 continue
             item = issue_ref(f.get("item") or r.get("item"))
             follows = f.get("follows") or r.get("follows")
@@ -591,13 +595,13 @@ def cmd_ingest(db, a):
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
                                     eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed, arm,
-                                    spec, scope, surface, verify, lens, flaws)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    spec, scope, surface, verify, lens, flaws, expects_landing)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
                  r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
                  r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed"),
                  (f.get("arm") or "").lower() or None, f.get("spec"), f.get("scope"), f.get("surface"),
-                 f.get("verify"), f.get("lens"), r.get("flaws")),
+                 f.get("verify"), f.get("lens"), r.get("flaws"), r.get("expects_landing")),
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
@@ -646,14 +650,15 @@ def cmd_summary(db, a):
     groups: dict = {}
     for r in rows:
         groups.setdefault((*(cell_value(r, k) for k in keys), r["tier"], r["arm"] or "-"), []).append(r)
-    out = [(*keys, "tier", "arm", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
+    ok = run_ok(db)
+    out = [(*keys, "tier", "arm", "n", "done", "success", "ok", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
             "repeat_runs", "no_landing")]
     for key, rs in sorted(groups.items(), key=lambda kv: (kv[0][:-2], TIER_RANK.get(kv[0][-2], 5), kv[0][-1])):
         done = sum(r["outcome"] == "done" for r in rs)
         timed = [r for r in rs if r["eta_min"]]
         ratio = median([r["minutes"] / r["eta_min"] for r in timed])
         tok = median([r["tokens"] for r in rs])
-        out.append((*key, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
+        out.append((*key, str(len(rs)), str(done), f"{done * 100 // len(rs)}%", f"{sum(map(ok, rs)) * 100 // len(rs)}%",
                     str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
@@ -682,7 +687,7 @@ BACKOFF = ["surface", "verify", "scope", "spec"]
 
 
 def recommend(runs, asked, incumbent):
-    """Pure core. runs: dicts with category, the facets, tier and ok (closed without escalation and landed).
+    """Pure core. runs: dicts with category, the facets, tier and ok (run_ok).
     asked: facet -> value, category required. incumbent: cell -> tier. Returns (cell, n, tier, rates) where
     cell is the finest one with a tier holding MIN_RUNS runs, backing off along BACKOFF; tier is the cheapest
     reaching BAR, kept at the incumbent unless a pricier challenger beats it by MARGIN points on MIN_RUNS each."""
@@ -710,8 +715,10 @@ def recommend(runs, asked, incumbent):
 
 
 def run_ok(db):
+    """Reported Done (ruled out included) with no later Follows: run on it, and landed when its brief expected a landing."""
     escalated = {r["follows"] for r in db.execute("SELECT follows FROM runs WHERE follows IS NOT NULL")}
-    return lambda r: r["outcome"] == "done" and r["landed"] != 0 and r["agent"] not in escalated
+    return lambda r: (r["outcome"] == "done" and r["agent"] not in escalated
+                      and not (r["expects_landing"] and r["landed"] == 0))
 
 
 def cmd_recommend(db, a):
@@ -822,7 +829,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--since", help="only runs that ended on or after DATE")
     s.add_argument("--group", default="category", help=f"comma list of {', '.join(GROUPS)} (default category)")
     s = cmd("recommend", cmd_recommend,
-            f"cheapest tier whose first-assignment runs closed without escalation and landed at >= {BAR}% in the finest "
+            f"cheapest tier whose first-assignment runs reported Done with no later Follows: run (and landed when the brief "
+            f"expected a landing) at >= {BAR}% in the finest "
             f"cell holding a tier with >= {MIN_RUNS} runs, backing off {', '.join(BACKOFF)}; a pricier tier replaces the "
             f"cell's last recommendation only when it beats it by {MARGIN} points on >= {MIN_RUNS} runs each")
     s.add_argument("facets", help="brief facet lines, e.g. 'Category: tooling, Spec: measured, Scope: one-file'")

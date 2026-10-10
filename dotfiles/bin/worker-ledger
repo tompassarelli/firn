@@ -21,7 +21,9 @@ Briefs carry `Item: <repo#N>`, `Follows: <agent id>`, `Category: <name>`, option
 `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`,
 `Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and for adversarial
 reviewers `Lens: <lens>`; a reviewer report stating `Accepted flaws: N` counts N for its lens.
---recommend picks the cheapest tier at >= 80% closed without escalation and landed in the finest cell with >= 5 runs,
+A run succeeds when it reports Done (ruled out included) with no later Follows: run, and landed when its brief
+expects a landing (mentions landed, safe-push or push to claude/, or its report says Done: queued).
+--recommend picks the cheapest tier at >= 80% success in the finest cell with >= 5 runs,
 backing off Surface, Verify, Scope, then Spec; a pricier tier replaces a cell's last pick only when 15 points better.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
@@ -136,6 +138,8 @@ while IFS= read -r f; do
                   elif ($head | test("^\\W*done\\b"; "i")) then "done"
                   else "unclear" end),
         note: ([$report | scan("(?:~|/home/[^/\\s]+)/[^\\s`]*handoffs?/[^\\s`]+?\\.md")] | first),
+        expects_landing: (if (($brief | test("(?i)\\b(landed|safe-push)\\b|push(es|ed)? to claude/"))
+                              or ($report | test("(?i)\\bDone:\\s*queued"))) then 1 else 0 end),
         flaws: ([$report | scan("(?i)\\baccepted flaws?:\\s*([0-9]+)")] | first | if . == null then null else (.[0] | tonumber) end),
         backfill: $backfill,
         report: ($head | gsub("\\s+"; " ") | .[0:160])
@@ -310,6 +314,7 @@ for path in candidates:
     eta = float(eta[1]) * (60 if eta[2].lower().startswith("h") else 1) if eta else None
     fields = re.findall(r"\b(?:Item|Follows|Category|Arm|Spec|Scope|Surface|Verify|Lens):[^\n]+", brief)
     flaws = re.search(r"(?i)\baccepted flaws?:\s*([0-9]+)", report)
+    expects = bool(re.search(r"(?i)\b(landed|safe-push)\b|push(es|ed)? to claude/", brief) or re.search(r"(?i)\bDone:\s*queued", report))
     head = report[:400]
     outcome = "handoff" if "HANDOFF" in head else "not done" if re.match(r"\W*(not|partly|mostly|half) done", head, re.I) else "escalated" if re.match(r"\W*blocked", head, re.I) else "done" if re.match(r"\W*done\b", head, re.I) else "unclear"
     note = re.search(r"(?:~|/home/[^/\s]+)/[^\s`]*handoffs?/[^\s`]+?\.md", report)
@@ -318,7 +323,7 @@ for path in candidates:
                status="finished" if final else "running" if time.time() - stamp(ended) < 7200 else "stale",
                actual_min=max(0, int((stamp(ended) - stamp(meta["timestamp"])) / 60)),
                tokens=tokens, peak_ctx=peak, outcome=outcome, note=note[0] if note else None,
-               report=re.sub(r"\s+", " ", head)[:160], flaws=int(flaws[1]) if flaws else None,
+               report=re.sub(r"\s+", " ", head)[:160], flaws=int(flaws[1]) if flaws else None, expects_landing=int(expects),
                backfill=meta["id"] in recorded, **tally(steps))
     print(json.dumps(row))
 PY
