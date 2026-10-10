@@ -24,6 +24,7 @@
   myConfig.modules.libsecret.enable = lib.mkDefault true;
   myConfig.modules.networkd.enable = lib.mkDefault true;
   myConfig.modules.nexus-alerts.enable = lib.mkDefault true;
+  myConfig.modules.nexus-checks.enable = lib.mkDefault true;
   myConfig.modules.nexus-hardening.enable = lib.mkDefault true;
   myConfig.modules.poppler-utils.enable = lib.mkDefault true;
   myConfig.modules.procs.enable = lib.mkDefault true;
