@@ -907,9 +907,14 @@ touches_same_files() {
     <(git diff --no-renames --name-only "$1" "$2" | LC_ALL=C sort -u) | grep -q .
 }
 
+touches_workflows() {
+  git diff --name-only "$1" "$2" -- .github/workflows | grep -q .
+}
+
 # hook_verified=1: the hook passed on HEAD's change against the destination it
 # will land on (or one whose new commits touch none of its files, unless the
-# repository's committed .safe-push sets landing.exact), so the push skips it.
+# repository's committed .safe-push sets landing.exact and the lane changes no
+# workflow), so the push skips it.
 hook_verified=0
 # Read from the destination too: its new commits may be what introduce the setting.
 exact_landing() {
@@ -1018,7 +1023,8 @@ if [ "$to_seen" -eq 1 ] && [ "$dry" = 0 ]; then
         hook_verified=1
         break
       fi
-      if ! exact_landing "$upstream" && [ -n "$checked_base" ] && [ -n "$upstream" ] \
+      if { ! exact_landing "$upstream" || touches_workflows "$checked_base" "$checked_head"; } \
+          && [ -n "$checked_base" ] && [ -n "$upstream" ] \
           && git merge-base --is-ancestor "$checked_base" "$upstream" 2>/dev/null \
           && ! touches_same_files "$checked_base" "$upstream" "$checked_head"; then
         echo "safe-push: origin $to's new commits touch none of this change's files — keeping the checks' verdict"
