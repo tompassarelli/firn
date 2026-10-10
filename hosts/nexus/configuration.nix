@@ -22,7 +22,10 @@
   };
   myConfig.modules.nexus-backup = {
     enable = true;
-    recipients = [ "age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0" ];
+    recipients = [
+      "age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0"
+      "age17ttquzyuxeystegvartakw2x5h0jp54v4xh83vm6qyr7kd505seq94swwf"
+    ];
   };
   myConfig.modules.networkd.staticSopsFile = ../../secrets/nexus/network.yaml;
   myConfig.modules.claude.enable = true;
