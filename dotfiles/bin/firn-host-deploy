@@ -17,14 +17,23 @@ if [[ "$head" != "$main" ]]; then
   exit 1
 fi
 
-printf 'starting %s on %s for %s\n' "$unit" "$host" "$main"
-ssh "$host" systemctl start "$unit"
-revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
+reached() {
+  [[ "$revision" == "$main" ]] && return 0
+  git -C "$repo" fetch --quiet origin main
+  git -C "$repo" cat-file -e "$revision^{commit}" 2>/dev/null \
+    && git -C "$repo" merge-base --is-ancestor "$main" "$revision"
+}
+
+for attempt in 1 2; do
+  printf 'starting %s on %s for %s (attempt %s)\n' "$unit" "$host" "$main" "$attempt"
+  ssh "$host" systemctl start "$unit"
+  revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
+  reached && break
+  [[ $attempt == 1 ]] && { printf 'GitHub may still serve the previous main; retrying in 30 s\n'; sleep 30; }
+done
 printf '%s configurationRevision: %s\nstarted from:                %s\n' "$host" "$revision" "$main"
 [[ "$revision" == "$main" ]] && exit 0
-git -C "$repo" fetch --quiet origin main
-if git -C "$repo" cat-file -e "$revision^{commit}" 2>/dev/null \
-  && git -C "$repo" merge-base --is-ancestor "$main" "$revision"; then
+if reached; then
   printf '%s is on a newer main that contains %s\n' "$host" "$main"
   exit 0
 fi
