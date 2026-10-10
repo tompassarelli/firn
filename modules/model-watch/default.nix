@@ -25,7 +25,7 @@
           Description = description;
         };
         Timer = {
-          OnCalendar = [ "02:10" "13:10" ];
+          OnCalendar = [ "08:00" "18:00" ];
           Persistent = true;
         };
         Install = {
@@ -34,4 +34,4 @@
       };
     });
   };
-}) "Twice-daily public model release watch")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}) "Twice-daily ranked public watch digest")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)

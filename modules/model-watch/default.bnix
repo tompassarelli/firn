@@ -3,7 +3,7 @@
 (nix/module [config lib pkgs ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
-        description "Twice-daily public model release watch"]
+        description "Twice-daily ranked public watch digest"]
     {:tags-opt-in [development]
      :options.myConfig.modules.model-watch.enable (lib.mkEnableOption description)
      :config (lib.mkIf config.myConfig.modules.model-watch.enable
@@ -17,5 +17,5 @@
               :ExecStart (s homeDir "/.local/share/north/bin/model-watch")}}
           :systemd.user.timers.model-watch
            {:Unit {:Description description}
-            :Timer {:OnCalendar ["02:10" "13:10"] :Persistent true}
+            :Timer {:OnCalendar ["08:00" "18:00"] :Persistent true}
             :Install {:WantedBy ["timers.target"]}}})}})}))
