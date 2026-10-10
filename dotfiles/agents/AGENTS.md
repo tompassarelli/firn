@@ -5,7 +5,7 @@
 - Read the repository's `AGENTS.md` before the first edit.
 - Keep the profile fixed until Tom changes it or an outside user appears.
 - Use prototype by default: run one quick check that exercises the change, then ship.
-- Use tooling for nixos-config, north, fram, clause and beagle: run the named check and land through a worktree.
+- Use tooling for nixos-config, north, fram and muove: run the named check and land through a worktree.
 - Use client under `~/code/clients/`: follow its review rules and preserve its interfaces and confidentiality.
 - Honor a repository's `profile: <name>` override.
 - Add no compatibility, migrations or release process for nonexistent users.
@@ -64,7 +64,7 @@
 - Keep generated global policy at most 120 lines where possible, at most 200.
 - Use Bun for JS/TS unless the project requires Node.
 - Use the project's language for its scripts, tests and tools.
-- Write declared Clause or .bnix source and make only the language fix that blocks the task.
+- Treat Beagle and Clause as frozen archives that Muove replaces: edit existing source only to unblock a task, never fix or extend the languages, and port to Muove instead.
 - Search one checkout with `rg`/`fd`; use `ast-grep`, `sd` and `jq`/`yq` for structural edits.
 - Use `convo` for past conversations.
 - Read PDFs with `pdftotext -layout`; render relevant pages with `pdftoppm`.
