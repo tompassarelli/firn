@@ -3,3 +3,5 @@ font-family = CommitMono
 font-size = 14
 window-padding-x = 4
 window-padding-y = 4,0
+# io_uring waits count as iowait and I/O pressure while idle (ghostty discussions 3224, 10700)
+async-backend = epoll
