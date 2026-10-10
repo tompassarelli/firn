@@ -8,7 +8,8 @@ written: 2026-10-10
 
 # vast.ai
 
-- Account: Tom's vast.ai account (`https://cloud.vast.ai`), created 2026-10-10 with $10 of prepaid credit for agent work; use Tom's established browser session, add no API keys, and ask Tom once before topping up or changing billing.
+- Account: Tom's vast.ai account (`https://cloud.vast.ai`), created 2026-10-10 with $10 of prepaid credit for agent work; Tom approved one API key (billing read-only) in `nixos-config:secrets/vastai.yaml` (decrypt per docs/secrets.md); ask Tom once before topping up or changing billing.
+- Use it for asset-free CPU work that already runs on GitHub runners (balance and CPU fields, suites, soaks), on CPU-only hosts; never upload Warcraft files.
 - Billing is prepaid credit. At $0 balance instances stop but are not destroyed, and storage charges keep accruing; a balance that stays negative ends with all data deleted permanently.
 - Never let the balance reach $0: before renting, read the balance and the instance's hourly price including storage, and rent only when the balance covers the planned hours plus $2 margin.
 - Destroy every instance and volume as soon as its work is copied off; a stopped instance still bills storage.

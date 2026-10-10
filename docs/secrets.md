@@ -32,3 +32,8 @@ The DigitalOcean API token lives in the encrypted
 `nixos-config:secrets/digitalocean.yaml` (key `token`). Decrypt it with the
 machine age key only into a command's environment, for example
 `DIGITALOCEAN_ACCESS_TOKEN=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["token"]' secrets/digitalocean.yaml) doctl ...`.
+
+The vast.ai API key lives in the encrypted `nixos-config:secrets/vastai.yaml`
+(key `api_key`; billing read-only). Decrypt it the same way, only into a
+command's environment:
+`VAST_API_KEY=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["api_key"]' secrets/vastai.yaml) vastai ...`.
