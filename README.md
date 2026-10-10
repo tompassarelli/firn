@@ -54,8 +54,8 @@ same way via `lib.mkDarwinSystem` and a `darwinConfigurations` entry —
 ## Commands
 
 ```bash
-firn rebuild          # build + validate + switch (current host)
-firn-environment-switch [host] # install or upgrade the host environment apps (Blender, Obsidian) in ~/.nix-profile, outside the system closure
+firn rebuild          # build + validate + switch (current host), then its environment apps when the host has one
+firn-environment-switch [host] [flake] # install the host environment apps (Blender, Obsidian) in ~/.nix-profile, outside the system closure
 machine-update        # nightly inputs, validation, exact build, landing and switch
 agent-runtime-update [version|latest] # Codex and Claude at 02:00 and 13:00
 claude-runtime-update [version|latest] # install verified official Claude binary

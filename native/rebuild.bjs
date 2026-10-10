@@ -195,6 +195,30 @@
     ["git" "-C" (snapshot-root snapshot) "tag" "-f"
        (str "gen-" generation) (snapshot-revision snapshot)])))
 
+(defn environment-name [host String] String
+  (str host "-environment"))
+
+(js/export
+  (defn environment-query-effect
+  [snapshot Snapshot
+   host String] ArgvEffect
+  (capture-effect "query user environment"
+    ["nix" "eval" "--json" (str (snapshot-uri snapshot) "#packages")
+     "--apply"
+     (str "packages: builtins.any (system: (builtins.getAttr system packages) ? \""
+       (environment-name host) "\") (builtins.attrNames packages)")])))
+
+(js/export
+  (defn environment-present? [text String] Bool
+    (= (str/trim text) "true")))
+
+(js/export
+  (defn environment-switch-effect
+  [snapshot Snapshot
+   host String] ArgvEffect
+  (inherit-effect "switch user environment"
+    ["firn-environment-switch" host (snapshot-uri snapshot)])))
+
 (js/export
   (defn advisory-effect [snapshot Snapshot] ArgvEffect
     (inherit-effect "schedule agent configuration check"

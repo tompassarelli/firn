@@ -97,6 +97,10 @@ case "$name" in
     printf '%s\n' "${CASE_PLATFORM:?}"
     ;;
   nix)
+    if [[ "${1:-}" == eval ]]; then
+      printf '%s\n' "${ENVIRONMENT_PRESENT:-true}"
+      exit 0
+    fi
     if [[ "${BUILD_FAIL:-0}" == 1 ]]; then
       printf 'controlled build failure\n' >&2
       exit 23
@@ -151,7 +155,7 @@ case "$name" in
       exit 29
     fi
     ;;
-  systemd-run)
+  systemd-run|firn-environment-switch)
     ;;
   *)
     printf 'unexpected fake command: %s\n' "$name" >&2
@@ -160,7 +164,7 @@ case "$name" in
 esac
 EOF
 chmod +x "$fakebin/command-stub"
-for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sudo systemd-run; do
+for command in git uname nix nixos-rebuild darwin-rebuild readlink test firn sudo systemd-run firn-environment-switch; do
   ln -s command-stub "$fakebin/$command"
 done
 
@@ -211,6 +215,8 @@ sudo
 sudo
 nixos-rebuild
 git
+nix
+firn-environment-switch
 systemd-run
 EOF
 cmp -s "$scratch/linux.expected-names" "$scratch/linux.names" \
@@ -224,9 +230,19 @@ rg -Fq $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system' \
   "$scratch/linux.commands" || die "Linux profile activation changed"
 rg -Fq $'git\t-C\t'"$fixture"$'\ttag\t-f\tgen-42' \
   "$scratch/linux.commands" || die "Linux generation was not tagged"
-[[ "$(rg -c 'span_start' "$scratch/linux.trace")" == 14 ]] \
+rg -Fq $'firn-environment-switch\twhiterabbit\tgit+file://' \
+  "$scratch/linux.commands" \
+  || die "Linux environment switch did not use the snapshot URI"
+
+run_case linux-no-environment Linux env ENVIRONMENT_PRESENT=false
+[[ "$(<"$scratch/linux-no-environment.status")" == 0 ]] \
+  || die "Linux run without an environment output failed"
+if rg -q '^firn-environment-switch' "$scratch/linux-no-environment.commands"; then
+  die "environment switch ran for a host without an environment output"
+fi
+[[ "$(rg -c 'span_start' "$scratch/linux.trace")" == 16 ]] \
   || die "Linux trace start count changed"
-[[ "$(rg -c 'span_end' "$scratch/linux.trace")" == 14 ]] \
+[[ "$(rg -c 'span_end' "$scratch/linux.trace")" == 16 ]] \
   || die "Linux trace end count changed"
 
 run_host_case prepare Linux prepare whiterabbit env

@@ -224,6 +224,39 @@
       [(EffectSucceeded stdout) 0])
     0))
 
+(defn apply-environment
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (do
+    (firn-host-out
+      (str "firn rebuild: switching user environment " host "-environment\n"))
+    (match (execute-effect (rebuild/environment-switch-effect snapshot host)
+             trace-path trace-id (rebuild/snapshot-revision snapshot))
+      [(EffectFailed status) (fail-phase status)]
+      [(EffectSucceeded stdout)
+       (run-advisory snapshot platform trace-path trace-id)])))
+
+(defn switch-environment
+  [snapshot rebuild/Snapshot
+   host String
+   platform rebuild/Platform
+   trace-path (U String Nil)
+   trace-id String]
+  Int
+  (if (rebuild/linux? platform)
+    (match (execute-effect (rebuild/environment-query-effect snapshot host)
+             trace-path trace-id (rebuild/snapshot-revision snapshot))
+      [(EffectFailed status) (fail-phase status)]
+      [(EffectSucceeded stdout)
+       (if (rebuild/environment-present? stdout)
+         (apply-environment snapshot host platform trace-path trace-id)
+         (run-advisory snapshot platform trace-path trace-id))])
+    (run-advisory snapshot platform trace-path trace-id)))
+
 (defn tag-generation
   [snapshot rebuild/Snapshot
    host String
@@ -245,7 +278,7 @@
                   trace-path trace-id (rebuild/snapshot-revision snapshot))
            [(EffectFailed status) (fail-phase status)]
            [(EffectSucceeded stdout)
-            (run-advisory snapshot platform trace-path trace-id)])))]))
+            (switch-environment snapshot host platform trace-path trace-id)])))]))
 
 (defn activate
   [snapshot rebuild/Snapshot
