@@ -59,7 +59,7 @@ jobs:
           FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
-          nix profile install nixpkgs#bun
+          nix profile install nixpkgs#bun nixpkgs#ripgrep
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
 
       - name: Drift check (.bnix and .nix in sync)
