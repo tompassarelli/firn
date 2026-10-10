@@ -1,0 +1,104 @@
+market_move_threshold = 0.10
+
+[[sources]]
+name = "codex-cache"
+parser = "codex-cache"
+endpoint = "~/code/north-data/codex-pooled/models_cache.json"
+access = "Existing local models[].slug cache; no network, account access, key, or token read. Verified 10 model slugs. Only fallback: ~/.local/state/north/codex-pooled/models_cache.json."
+verified = "2026-10-10"
+
+[[sources]]
+name = "claude-models"
+parser = "claude-models"
+endpoint = "https://platform.claude.com/docs/en/about-claude/models/overview"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "openai-news"
+parser = "rss"
+endpoint = "https://openai.com/news/rss.xml"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "anthropic-news"
+parser = "anthropic-news"
+endpoint = "https://www.anthropic.com/news"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "google-gemini"
+parser = "rss"
+endpoint = "https://blog.google/products/gemini/rss/"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "codex-releases"
+parser = "atom"
+endpoint = "https://github.com/openai/codex/releases.atom"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "claude-code"
+parser = "changelog"
+endpoint = "https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md"
+access = "Public official publication; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers."
+verified = "2026-10-10"
+
+[[sources]]
+name = "manifold-release"
+parser = "manifold"
+endpoint = "https://api.manifold.markets/v0/search-markets?term=release&filter=open&limit=100"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access."
+verified = "2026-10-10"
+
+[[sources]]
+name = "polymarket-release"
+parser = "polymarket"
+endpoint = "https://gamma-api.polymarket.com/public-search?q=GPT&events_status=active&limit_per_type=20"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Gamma /public-search returns nested markets; /markets was separately verified HTTP 200 but does not provide keyword search. At most 20 matching events per query."
+verified = "2026-10-10"
+
+[[sources]]
+name = "polymarket-claude"
+parser = "polymarket"
+endpoint = "https://gamma-api.polymarket.com/public-search?q=Claude&events_status=active&limit_per_type=20"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Gamma /public-search returns nested markets; /markets was separately verified HTTP 200 but does not provide keyword search. At most 20 matching events per query."
+verified = "2026-10-10"
+
+[[sources]]
+name = "polymarket-gemini"
+parser = "polymarket"
+endpoint = "https://gamma-api.polymarket.com/public-search?q=Gemini&events_status=active&limit_per_type=20"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Gamma /public-search returns nested markets; /markets was separately verified HTTP 200 but does not provide keyword search. At most 20 matching events per query."
+verified = "2026-10-10"
+
+[[sources]]
+name = "kalshi-KXCLAUDE"
+parser = "kalshi"
+endpoint = "https://api.elections.kalshi.com/trade-api/v2/markets?limit=100&status=open&series_ticker=KXCLAUDE"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Series selected from public Science and Technology /series data; at most 100 open markets for this verified model-release series."
+verified = "2026-10-10"
+
+[[sources]]
+name = "kalshi-KXGPT"
+parser = "kalshi"
+endpoint = "https://api.elections.kalshi.com/trade-api/v2/markets?limit=100&status=open&series_ticker=KXGPT"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Series selected from public Science and Technology /series data; at most 100 open markets for this verified model-release series."
+verified = "2026-10-10"
+
+[[sources]]
+name = "kalshi-KXGEMINI"
+parser = "kalshi"
+endpoint = "https://api.elections.kalshi.com/trade-api/v2/markets?limit=100&status=open&series_ticker=KXGEMINI"
+access = "Public read-only market data; anonymous HTTPS GET returned HTTP 200 without Authorization or Cookie headers. Bounded release-question search; no trading, accounts, keys, or paid access. Series selected from public Science and Technology /series data; at most 100 open markets for this verified model-release series."
+verified = "2026-10-10"
+
+[[excluded]]
+name = "agy-models"
+endpoint = "agy models"
+reason = "CLI help verifies this subcommand, but the read exits 1: Please sign in to view available models. Launch the CLI without arguments to sign in. Excluded as account-required; no login attempted."

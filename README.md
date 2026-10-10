@@ -58,6 +58,7 @@ firn rebuild          # build + validate + switch (current host), then its envir
 firn-environment-switch [host] [flake] # install the host environment apps (Blender, Obsidian) in ~/.nix-profile, outside the system closure
 machine-update        # nightly inputs, validation, exact build, landing and switch
 agent-runtime-update [version|latest] # Codex, Claude and agy at 02:00 and 13:00
+model-watch [--sources FILE] # public model snapshots/events in THREADS_DB at 02:10 and 13:10
 claude-runtime-update [version|latest] # install verified official Claude binary
 claude                # launch the atomically selected Claude runtime
 agy-runtime-update [version|latest] # install verified official Antigravity binary

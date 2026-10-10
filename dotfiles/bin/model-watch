@@ -1,0 +1,306 @@
+#!/usr/bin/env python3
+"""Read public model sources, persist snapshots, and print newly observed events."""
+
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from html.parser import HTMLParser
+import json
+import math
+import os
+from pathlib import Path
+import re
+import sqlite3
+import sys
+import tomllib
+import urllib.error
+import urllib.request
+import xml.etree.ElementTree as ET
+
+DB = os.environ.get("THREADS_DB") or os.path.expanduser("~/.local/state/threads/threads.db")
+SOURCES = Path(__file__).resolve().parent.parent / "agents/model-watch-sources.toml"
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS watch_snapshot(
+  source TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+  fetched TEXT NOT NULL, PRIMARY KEY(source,key)
+) STRICT;
+CREATE TABLE IF NOT EXISTS model_events(
+  ts TEXT NOT NULL, model TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('released','expected','market')),
+  at TEXT, p REAL CHECK(p IS NULL OR (p >= 0 AND p <= 1)),
+  source TEXT NOT NULL, detail TEXT NOT NULL
+) STRICT;
+"""
+
+
+class PublicPage(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.text: list[str] = []
+        self.links: list[tuple[str, str]] = []
+        self.hidden = 0
+        self.href = ""
+        self.anchor: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in ("script", "style"):
+            self.hidden += 1
+        if tag == "a" and not self.hidden:
+            self.href = dict(attrs).get("href") or ""
+            self.anchor = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in ("script", "style"):
+            self.hidden = max(0, self.hidden - 1)
+        if tag == "a" and self.href:
+            self.links.append((self.href, " ".join(self.anchor)))
+            self.href = ""
+
+    def handle_data(self, data: str) -> None:
+        if not self.hidden:
+            self.text.append(data)
+            if self.href:
+                self.anchor.append(data)
+
+
+def clean(value: str) -> str:
+    return " ".join(value.split())[:1200]
+
+
+def model_names(text: str) -> list[str]:
+    result: set[str] = set()
+    for match in re.finditer(r"\bgpt[ -]?(?:(sol|astra|luna|terra|image)[ -]+)?(\d+(?:\.\d+)*(?:o)?)(?:[ -](sol|astra|luna|terra|codex))?\b", text, re.I):
+        family = match[1] or match[3]
+        result.add("openai:gpt-" + match[2].lower() + ("-" + family.lower() if family else ""))
+    for match in re.finditer(r"\bclaude[ -](?:(opus|sonnet|haiku|fable)[ -])?(\d+(?:[.-]\d+)*)\b", text, re.I):
+        result.add("anthropic:claude-" + (match[1].lower() + "-" if match[1] else "") + match[2].replace(".", "-"))
+    if "anthropic" in text.lower():
+        for match in re.finditer(r"\b(opus|sonnet|haiku|fable)[ -](\d+(?:\.\d+)*)\b", text, re.I):
+            result.add("anthropic:claude-" + match[1].lower() + "-" + match[2].replace(".", "-"))
+    for provider, family in (("google", "gemini"), ("xai", "grok"), ("deepseek", "deepseek")):
+        pattern = rf"\b{family}[ -]((?:[rv])?\d+(?:\.\d+)*)(?:[ -](pro|flash|argon))?\b"
+        for match in re.finditer(pattern, text, re.I):
+            result.add(provider + ":" + family + "-" + match[1].lower() + ("-" + match[2].lower() if match[2] else ""))
+    return sorted(result)
+
+
+def date(value: str | int | float | None) -> str | None:
+    if value is None or value == "":
+        return None
+    try:
+        if isinstance(value, (int, float)):
+            stamp = datetime.fromtimestamp(value / 1000, timezone.utc)
+        else:
+            try:
+                stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                try:
+                    stamp = parsedate_to_datetime(value)
+                except ValueError:
+                    stamp = datetime.strptime(value, "%b %d, %Y").replace(tzinfo=timezone.utc)
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        return stamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def probability(value: object) -> float | None:
+    try:
+        number = float(value)
+        return round(number, 6) if math.isfinite(number) and 0 <= number <= 1 else None
+    except (ValueError, TypeError):
+        return None
+
+
+def normalize(source: dict, payload: bytes) -> dict[str, dict]:
+    rows: dict[str, dict] = {}
+    parser = source["parser"]
+    endpoint = source["endpoint"]
+
+    def add(key: str, model: str, kind: str, title: str, at: str | None = None,
+            p: float | None = None, url: str = endpoint, basis: str = "") -> None:
+        rows[key + "|" + model] = {"model": model, "kind": kind, "title": clean(title),
+                                  "at": at, "p": p, "url": url, "basis": basis}
+
+    if parser == "codex-cache":
+        models = json.loads(payload)["models"]
+        if not models:
+            raise ValueError("empty model list")
+        for row in models:
+            slug = row["slug"]
+            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,120}", slug):
+                add(slug, "openai:" + slug, "released", slug, basis="CLI cache availability; first-seen is not a release date")
+    elif parser == "claude-models":
+        page = PublicPage()
+        page.feed(payload.decode())
+        text = " ".join(page.text)
+        for slug in sorted(set(re.findall(r"\bclaude-(?:opus|sonnet|haiku|fable)-\d+(?:-\d+)*\b", text))):
+            add(slug, "anthropic:" + slug, "released", slug, basis="public model overview availability; first-seen is not a release date")
+        if not rows:
+            raise ValueError("no model IDs in overview")
+    elif parser in ("rss", "atom", "anthropic-news", "changelog"):
+        entries: list[tuple[str, str, str | None]] = []
+        if parser in ("rss", "atom"):
+            root = ET.fromstring(payload)
+            prefix = "{http://www.w3.org/2005/Atom}" if parser == "atom" else ""
+            for entry in root.findall(prefix + "entry") if prefix else root.findall(".//item"):
+                title = entry.findtext(prefix + "title", "")
+                link = entry.find(prefix + "link")
+                url = link.get("href", "") if prefix and link is not None else entry.findtext("link", "")
+                entries.append((url, title, date(entry.findtext(prefix + "published") or entry.findtext("pubDate"))))
+        elif parser == "anthropic-news":
+            page = PublicPage()
+            page.feed(payload.decode())
+            for href, title in page.links:
+                if href.startswith(("/news/", "/claude-")):
+                    observed = re.search(r"\b[A-Z][a-z]{2} \d{1,2}, \d{4}\b", title)
+                    entries.append(("https://www.anthropic.com" + href, title, date(observed[0]) if observed else None))
+        else:
+            for section in re.split(r"(?m)^## ", payload.decode())[1:]:
+                version, _, body = section.partition("\n")
+                for line in body.splitlines():
+                    if model_names(line):
+                        entries.append((endpoint + "#" + version.strip(), line, None))
+        for url, text, at in entries:
+            names = model_names(text)
+            if not names:
+                continue
+            phrase = r"(?:GPT[ -]?(?:(?:Sol|Astra|Luna|Terra|Image)[ -]+)?\d+(?:\.\d+)*(?:o)?(?:[ -](?:Sol|Astra|Luna|Terra|Codex))?|Claude[ -](?:(?:Opus|Sonnet|Haiku|Fable)[ -])?\d+(?:\.\d+)*|Gemini[ -]\d+(?:\.\d+)*(?:[ -](?:Pro|Flash|Argon))?|Grok[ -]\d+(?:\.\d+)*|DeepSeek[ -][RV]?\d+(?:\.\d+)*)"
+            release = re.search(r"\b(?:introducing|meet|added support for)\s+(?:the\s+)?(" + phrase + r")\b", text, re.I)
+            if release:
+                kind = "released"
+                names = model_names(release[1])
+            elif re.search(r"\b(upcoming|coming soon|will release|expected|preview)\b", text, re.I):
+                kind = "expected"
+            else:
+                continue
+            for model in names:
+                add(url, model, kind, text, at, url=url, basis="explicit official availability/support wording" if release else "official preview/expectation wording; not confirmed availability")
+    elif parser in ("manifold", "polymarket", "kalshi"):
+        data = json.loads(payload)
+        if parser == "manifold" and not isinstance(data, list):
+            raise ValueError("market list required")
+        if parser != "manifold" and not isinstance(data, dict):
+            raise ValueError("market object required")
+        markets = data if parser == "manifold" else data["markets"] if parser == "kalshi" else []
+        if parser == "polymarket":
+            markets = [dict(market, event_title=event.get("title", "")) for event in data["events"] for market in event.get("markets", [])]
+        for market in markets:
+            title = clean(market.get("question", market.get("title", "")))
+            text = market.get("event_title", "") + " " + title
+            if not re.search(r"\b(releas\w*|launch\w*)\b", text, re.I) or market.get("isResolved") or market.get("closed"):
+                continue
+            names = model_names(text)
+            if not names:
+                continue
+            if parser == "manifold":
+                p = probability(market.get("probability"))
+                at = date(market.get("closeTime"))
+                url = market.get("url", endpoint)
+                key = str(market["id"])
+                basis = "Manifold probability; market close time, not an announced release date"
+            elif parser == "polymarket":
+                outcomes = json.loads(market.get("outcomes", "[]"))
+                prices = json.loads(market.get("outcomePrices", "[]"))
+                if "Yes" not in outcomes or len(outcomes) != len(prices):
+                    continue
+                p = probability(prices[outcomes.index("Yes")])
+                at = date(market.get("endDate"))
+                key = str(market["id"])
+                url = "https://polymarket.com/market/" + market["slug"]
+                basis = "Yes outcome price (market inference); market end time, not an announced release date"
+            else:
+                bid, ask = probability(market.get("yes_bid_dollars")), probability(market.get("yes_ask_dollars"))
+                p = round((bid + ask) / 2, 6) if bid is not None and ask is not None and bid <= ask else None
+                at = date(market.get("close_time"))
+                key = market["ticker"]
+                url = endpoint
+                basis = "Yes bid/ask midpoint (market inference); market close time, not an announced release date"
+            if p is not None:
+                for model in names:
+                    add(key, model, "market", title, at, p, url, basis)
+    else:
+        raise ValueError("unknown parser")
+    return rows
+
+
+def diff(previous: dict[str, dict], current: dict[str, dict], threshold: float) -> list[dict]:
+    events = []
+    for key, value in sorted(current.items()):
+        before = previous.get(key)
+        if before == value:
+            continue
+        if before and value["kind"] == "market":
+            stable = ("model", "kind", "title", "at", "url", "basis")
+            if all(before.get(k) == value[k] for k in stable) and abs(value["p"] - before["p"]) < threshold:
+                continue
+        event = dict(value)
+        event["change"] = "first-seen" if before is None else "changed"
+        events.append(event)
+    return events
+
+
+def persist(db: sqlite3.Connection, source: str, current: dict[str, dict], fetched: str,
+            threshold: float) -> list[dict]:
+    previous = {key: json.loads(value) for key, value in db.execute(
+        "SELECT key,value FROM watch_snapshot WHERE source=?", (source,))}
+    events = diff({k: v for k, v in previous.items() if k != "@baseline"}, current, threshold) if previous else []
+    with db:
+        db.execute("DELETE FROM watch_snapshot WHERE source=?", (source,))
+        db.executemany("INSERT INTO watch_snapshot VALUES(?,?,?,?)", [
+            (source, key, json.dumps(value, sort_keys=True), fetched)
+            for key, value in {"@baseline": {}, **current}.items()])
+        for event in events:
+            event.update(ts=fetched, source=source)
+            detail = json.dumps({k: event[k] for k in ("title", "url", "basis", "change")}, sort_keys=True)
+            db.execute("INSERT INTO model_events(ts,model,kind,at,p,source,detail) VALUES(?,?,?,?,?,?,?)", (
+                fetched, event["model"], event["kind"], event["at"], event["p"], source, detail))
+    return events
+
+
+def fetch(source: dict, timeout: float) -> bytes:
+    endpoint = source["endpoint"]
+    if source["parser"] == "codex-cache":
+        path = Path(endpoint).expanduser()
+        if not path.exists():
+            path = Path("~/.local/state/north/codex-pooled/models_cache.json").expanduser()
+        return path.read_bytes()
+    request = urllib.request.Request(endpoint, headers={"User-Agent": "model-watch/1.0"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = response.read(8_000_001)
+        if len(payload) > 8_000_000:
+            raise ValueError("source exceeds size limit")
+        return payload
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sources", type=Path, default=SOURCES, help="verified source TOML")
+    parser.add_argument("--timeout", type=float, default=20, help="per-source read timeout in seconds")
+    args = parser.parse_args()
+    if not 0 < args.timeout <= 60:
+        parser.error("timeout must be greater than 0 and at most 60 seconds")
+    config = tomllib.loads(args.sources.read_text())
+    Path(DB).parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(DB, timeout=30) as db:
+        db.executescript(SCHEMA)
+        result: dict = {"events": [], "sources": []}
+        for source in config["sources"]:
+            try:
+                rows = normalize(source, fetch(source, args.timeout))
+                fetched = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                events = persist(db, source["name"], rows, fetched, config["market_move_threshold"])
+                result["events"].extend(events)
+                result["sources"].append({"source": source["name"], "records": len(rows), "events": len(events)})
+            except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as error:
+                status = "HTTP " + str(error.code) if isinstance(error, urllib.error.HTTPError) else type(error).__name__
+                result["sources"].append({"source": source["name"], "error": status})
+        print(json.dumps(result, sort_keys=True))
+    return 1 if any("error" in source for source in result["sources"]) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
