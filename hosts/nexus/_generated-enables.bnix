@@ -30,6 +30,7 @@
    :myConfig.modules.jq.enable (lib.mkDefault true)
    :myConfig.modules.libsecret.enable (lib.mkDefault true)
    :myConfig.modules.networkd.enable (lib.mkDefault true)
+   :myConfig.modules.nexus-hardening.enable (lib.mkDefault true)
    :myConfig.modules.poppler-utils.enable (lib.mkDefault true)
    :myConfig.modules.procs.enable (lib.mkDefault true)
    :myConfig.modules.sd.enable (lib.mkDefault true)
