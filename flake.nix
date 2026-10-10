@@ -25,6 +25,10 @@
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    disko = {
+      url = "github:nix-community/disko";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     kanata-git = {
       url = "github:jtroo/kanata";
       flake = false;
@@ -52,7 +56,7 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((whiterabbitEnvironmentApps: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((whiterabbitEnvironment: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, disko, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((whiterabbitEnvironmentApps: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((whiterabbitEnvironment: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -73,9 +77,9 @@
         hostConfig
         ({ config, pkgs, ... }: {
           networking.hostName = hostname;
-          sops.age.keyFile = "/var/lib/sops-nix/key.txt";
-          environment.sessionVariables.SOPS_AGE_KEY_FILE = "/var/lib/sops-nix/key.txt";
-          systemd.tmpfiles.rules = [
+          sops.age.keyFile = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) "/var/lib/sops-nix/key.txt";
+          environment.sessionVariables.SOPS_AGE_KEY_FILE = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) "/var/lib/sops-nix/key.txt";
+          systemd.tmpfiles.rules = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) [
             "z /var/lib/sops-nix/key.txt 0400 ${config.myConfig.modules.users.username} users -"
           ];
           environment.systemPackages = with pkgs; [ sops age ];
@@ -327,6 +331,12 @@
         hostname = "thinkpad-x1e";
         hostConfig = ./hosts/thinkpad-x1e/configuration.nix;
         hardwareConfig = ./hardware-configuration.nix;
+      };
+      nexus = self.lib.mkSystem {
+        hostname = "nexus";
+        hostConfig = ./hosts/nexus/configuration.nix;
+        hardwareConfig = ./hosts/nexus/hardware.nix;
+        extraModules = [ disko.nixosModules.disko ];
       };
     };
     darwinConfigurations = {

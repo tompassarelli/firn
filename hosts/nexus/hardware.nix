@@ -1,0 +1,48 @@
+{ config, lib, modulesPath, ... }:
+
+{
+  imports = [ "${modulesPath}/profiles/qemu-guest.nix" ];
+  options.myConfig.host.diskDevice = lib.mkOption {
+    type = lib.types.str;
+    default = "/dev/vda";
+    description = "Install disk: /dev/vda on DigitalOcean, /dev/sda on Hetzner";
+  };
+  config = {
+    boot.loader.grub.enable = true;
+    boot.loader.grub.efiSupport = true;
+    boot.loader.grub.efiInstallAsRemovable = true;
+    disko.devices.disk.main = {
+      type = "disk";
+      device = config.myConfig.host.diskDevice;
+      content = {
+        type = "gpt";
+        partitions = {
+          bios = {
+            size = "1M";
+            type = "EF02";
+            priority = 1;
+          };
+          ESP = {
+            size = "512M";
+            type = "EF00";
+            priority = 2;
+            content = {
+              type = "filesystem";
+              format = "vfat";
+              mountpoint = "/boot";
+              mountOptions = [ "umask=0077" ];
+            };
+          };
+          root = {
+            size = "100%";
+            content = {
+              type = "filesystem";
+              format = "ext4";
+              mountpoint = "/";
+            };
+          };
+        };
+      };
+    };
+  };
+}

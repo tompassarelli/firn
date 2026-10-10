@@ -1,0 +1,15 @@
+{ config, lib, pkgs, ... }:
+
+{
+  options.myConfig.modules.networkd.enable = lib.mkEnableOption "systemd-networkd with DHCP on every wired interface";
+  config = lib.mkIf config.myConfig.modules.networkd.enable {
+    networking.useNetworkd = true;
+    networking.useDHCP = false;
+    systemd.network.enable = true;
+    systemd.network.networks."10-ether" = {
+      matchConfig.Type = "ether";
+      networkConfig.DHCP = "yes";
+      linkConfig.RequiredForOnline = "routable";
+    };
+  };
+}

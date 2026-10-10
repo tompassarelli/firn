@@ -1,0 +1,11 @@
+#lang beagle/nix
+
+(ns enabled-tags)
+
+{:platform linux
+ :enabled
+  [[terminal -ghostty]
+   cli-tools
+   server]
+ :disabled [rebuild-nopasswd]
+}

@@ -705,6 +705,29 @@
              (str "SYNTAX ERROR: " absolute "\n" stderr
                (if (str/ends-with? stderr "\n") "" "\n"))))]))))
 
+(def nixos-toplevels-expression String
+  (str "configurations: builtins.concatStringsSep \"\" (builtins.map (name: "
+    "name + \" \" + configurations.${name}.config.system.build.toplevel.drvPath "
+    "+ \"\\n\") (builtins.attrNames configurations))"))
+
+(defn evaluate-nixos-toplevels [root String] Int
+  (match (host-run-capture-result
+           ["nix" "eval" "--raw" (str root "#nixosConfigurations")
+            "--apply" nixos-toplevels-expression]
+           "" max-process-output)
+    [(HostCaptureError errno)
+     (do
+       (host-err
+         (str "firn repo validate: cannot run nix eval: errno " errno "\n"))
+       1)]
+    [(HostCaptureOk status stdout stderr)
+     (if (= status 0)
+       (do (host-out stdout) 0)
+       (do
+         (host-err (str "TOPLEVEL EVALUATION FAILED\n" stderr
+                     (if (str/ends-with? stderr "\n") "" "\n")))
+         status))]))
+
 (defn run-validator
   [root String
    beagle-path String
@@ -728,6 +751,18 @@
          (if (empty? stderr) nil (host-err stderr))
          status)])))
 
+(defn validate-then-evaluate
+  [root String
+   beagle-path String
+   inputs (Vec String)] Int
+  (let [status Int (run-validator root beagle-path inputs)]
+    (if (= status 0)
+      (do
+        (host-err
+          "firn repo validate: [3/3] evaluating every nixosConfigurations toplevel...\n")
+        (evaluate-nixos-toplevels root))
+      status)))
+
 (defn run-validation
   [root String
    beagle-path String
@@ -740,14 +775,14 @@
            nix-inputs (Vec String) (transaction/filter-sorted-nix discovered)]
        (do
          (host-err
-           "firn repo validate: [1/2] syntax-checking generated .nix files...\n")
+           "firn repo validate: [1/3] syntax-checking generated .nix files...\n")
          (match (lint-nix-files root nix-inputs 0)
            [(OperationRejected message)
             (do (host-err message) 1)]
            [(OperationOk operation)
             (do
               (host-err
-                "firn repo validate: [2/2] schema-validating .bnix sources...\n")
+                "firn repo validate: [2/3] schema-validating .bnix sources...\n")
               (if (empty? bnix-inputs)
                 (do
                   (host-err
@@ -762,8 +797,8 @@
                        [(OperationRejected message)
                         (do (host-err message) 1)]
                        [(OperationOk operation)
-                        (run-validator root beagle-path bnix-inputs)])
-                     (run-validator root beagle-path bnix-inputs))])))])))]))
+                        (validate-then-evaluate root beagle-path bnix-inputs)])
+                     (validate-then-evaluate root beagle-path bnix-inputs))])))])))]))
 
 (defn repository-root [] (U String Nil)
   (let [explicit (U String Nil) (host-env "FIRN_REPO")]

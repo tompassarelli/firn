@@ -1,0 +1,41 @@
+{ config, lib, pkgs, ... }:
+
+{
+  myConfig.modules.ast-grep.enable = lib.mkDefault true;
+  myConfig.modules.atuin.enable = lib.mkDefault true;
+  myConfig.modules.bash.enable = lib.mkDefault true;
+  myConfig.modules.bat.enable = lib.mkDefault true;
+  myConfig.modules.bc.enable = lib.mkDefault true;
+  myConfig.modules.bitwarden-cli.enable = lib.mkDefault true;
+  myConfig.modules.btop.enable = lib.mkDefault true;
+  myConfig.modules.bubblewrap.enable = lib.mkDefault true;
+  myConfig.modules.curl.enable = lib.mkDefault true;
+  myConfig.modules.duf.enable = lib.mkDefault true;
+  myConfig.modules.dust.enable = lib.mkDefault true;
+  myConfig.modules.eza.enable = lib.mkDefault true;
+  myConfig.modules.fastfetch.enable = lib.mkDefault true;
+  myConfig.modules.ghostscript.enable = lib.mkDefault true;
+  myConfig.modules.git.enable = lib.mkDefault true;
+  myConfig.modules.gitleaks.enable = lib.mkDefault true;
+  myConfig.modules.glow.enable = lib.mkDefault true;
+  myConfig.modules.hyperfine.enable = lib.mkDefault true;
+  myConfig.modules.imagemagick.enable = lib.mkDefault true;
+  myConfig.modules.jq.enable = lib.mkDefault true;
+  myConfig.modules.libsecret.enable = lib.mkDefault true;
+  myConfig.modules.networkd.enable = lib.mkDefault true;
+  myConfig.modules.poppler-utils.enable = lib.mkDefault true;
+  myConfig.modules.procs.enable = lib.mkDefault true;
+  myConfig.modules.sd.enable = lib.mkDefault true;
+  myConfig.modules.sops-host-key.enable = lib.mkDefault true;
+  myConfig.modules.sox.enable = lib.mkDefault true;
+  myConfig.modules.ssh.enable = lib.mkDefault true;
+  myConfig.modules.starship.enable = lib.mkDefault true;
+  myConfig.modules.tealdeer.enable = lib.mkDefault true;
+  myConfig.modules.tree.enable = lib.mkDefault true;
+  myConfig.modules.unrar.enable = lib.mkDefault true;
+  myConfig.modules.unzip.enable = lib.mkDefault true;
+  myConfig.modules.wget.enable = lib.mkDefault true;
+  myConfig.modules.yazi.enable = lib.mkDefault true;
+  myConfig.modules.yq-go.enable = lib.mkDefault true;
+  myConfig.modules.zoxide.enable = lib.mkDefault true;
+}

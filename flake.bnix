@@ -15,6 +15,7 @@
      :inputs.nixpkgs.follows "nixpkgs"}
    :stylix {:url "github:danth/stylix/release-26.05"}
    :sops-nix {:url "github:Mic92/sops-nix" :inputs.nixpkgs.follows "nixpkgs"}
+   :disko {:url "github:nix-community/disko" :inputs.nixpkgs.follows "nixpkgs"}
    :kanata-git {:url "github:jtroo/kanata" :flake false}
    :glide {:url "github:tompassarelli/glide" :flake false}
    ;; --- GENERATED MODULE INPUTS (do not edit) ---
@@ -35,6 +36,7 @@
      nix-darwin
      stylix
      sops-nix
+     disko
      kanata-git
      glide
      ;; --- GENERATED MODULE ARGS (do not edit) ---
@@ -123,13 +125,20 @@
                  hostConfig
                  (nix/module [config pkgs ...]
                    {:networking.hostName hostname
-                    :sops.age.keyFile "/var/lib/sops-nix/key.txt"
+                    :sops.age.keyFile
+                     (nixpkgs.lib.mkIf
+                       (not config.myConfig.modules.sops-host-key.enable)
+                       "/var/lib/sops-nix/key.txt")
                     :environment.sessionVariables.SOPS_AGE_KEY_FILE
-                     "/var/lib/sops-nix/key.txt"
+                     (nixpkgs.lib.mkIf
+                       (not config.myConfig.modules.sops-host-key.enable)
+                       "/var/lib/sops-nix/key.txt")
                     :systemd.tmpfiles.rules
-                     [(s "z /var/lib/sops-nix/key.txt 0400 "
-                        config.myConfig.modules.users.username
-                        " users -")]
+                     (nixpkgs.lib.mkIf
+                       (not config.myConfig.modules.sops-host-key.enable)
+                       [(s "z /var/lib/sops-nix/key.txt 0400 "
+                          config.myConfig.modules.users.username
+                          " users -")])
                     :environment.systemPackages (nix/with pkgs [sops age])
                     :imports
                      (let
@@ -402,7 +411,13 @@
           (self.lib.mkSystem
             {:hostname       "thinkpad-x1e"
              :hostConfig     (p "./hosts/thinkpad-x1e/configuration.nix")
-             :hardwareConfig (p "./hardware-configuration.nix")})}
+             :hardwareConfig (p "./hardware-configuration.nix")})
+         :nexus
+          (self.lib.mkSystem
+            {:hostname       "nexus"
+             :hostConfig     (p "./hosts/nexus/configuration.nix")
+             :hardwareConfig (p "./hosts/nexus/hardware.nix")
+             :extraModules   [disko.nixosModules.disko]})}
        :darwinConfigurations
         {:ashashi
           (self.lib.mkDarwinSystem

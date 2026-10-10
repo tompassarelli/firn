@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  printf 'usage: nexus-stage-hostkey <empty-dir>\n' >&2
+  printf 'Decrypts the pre-seeded nexus SSH host key into <dir>/etc/ssh for\n' >&2
+  printf '`nixos-anywhere --extra-files <dir>`. Delete <dir> after the install.\n' >&2
+  exit 64
+}
+
+[[ $# -eq 1 ]] || usage
+out="$1"
+repo="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
+secret="$repo/secrets/nexus/hostkey.yaml"
+public="$repo/secrets/nexus/ssh_host_ed25519_key.pub"
+[[ -f "$secret" && -f "$public" ]] || { printf 'nexus-stage-hostkey: missing %s or %s\n' "$secret" "$public" >&2; exit 1; }
+if [[ -e "$out" ]] && [[ -n "$(ls -A "$out")" ]]; then
+  printf 'nexus-stage-hostkey: %s is not empty\n' "$out" >&2
+  exit 1
+fi
+
+umask 077
+install -d -m 0755 "$out/etc" "$out/etc/ssh"
+sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt \
+  sops -d --extract '["ssh_host_ed25519_key"]' "$secret" \
+  > "$out/etc/ssh/ssh_host_ed25519_key"
+chmod 0600 "$out/etc/ssh/ssh_host_ed25519_key"
+install -m 0644 "$public" "$out/etc/ssh/ssh_host_ed25519_key.pub"
+derived="$(ssh-keygen -y -f "$out/etc/ssh/ssh_host_ed25519_key" | cut -d' ' -f1,2)"
+[[ "$derived" == "$(cut -d' ' -f1,2 "$public")" ]] \
+  || { printf 'nexus-stage-hostkey: decrypted key does not match the committed public key\n' >&2; exit 1; }
+printf '%s\n' "$out"

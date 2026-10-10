@@ -27,12 +27,37 @@
     default = "${homeDir}/code";
     description = "Root of source checkouts (the ~/code convention)";
   };
+  options.myConfig.modules.users.mutable = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Allow imperative user changes (users.mutableUsers)";
+  };
+  options.myConfig.modules.users.authorizedKeys = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "SSH public keys allowed to log in as the primary user";
+  };
+  options.myConfig.modules.users.passwordHashSopsFile = lib.mkOption {
+    type = lib.types.nullOr lib.types.path;
+    default = null;
+    description = "sops file whose `password_hash` key holds the primary user's password hash";
+  };
   config = lib.mkIf config.myConfig.modules.users.enable {
+    users.mutableUsers = config.myConfig.modules.users.mutable;
     users.users.${username} = {
       shell = pkgs.bashInteractive;
       isNormalUser = true;
       home = homeDir;
       extraGroups = [ "wheel" "networkmanager" "plugdev" ];
+      openssh.authorizedKeys.keys = config.myConfig.modules.users.authorizedKeys;
+      hashedPasswordFile = lib.mkIf (config.myConfig.modules.users.passwordHashSopsFile != null) config.sops.secrets.user-password-hash.path;
+    };
+    sops.secrets = lib.mkIf (config.myConfig.modules.users.passwordHashSopsFile != null) {
+      "user-password-hash" = {
+        sopsFile = config.myConfig.modules.users.passwordHashSopsFile;
+        key = "password_hash";
+        neededForUsers = true;
+      };
     };
     security.sudo.extraConfig = ''
       Defaults timestamp_timeout=30

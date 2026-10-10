@@ -1,6 +1,16 @@
 keys:
   - &admin age1m96f6qynnkfh0elww5frpw55rmefl8pn7v02cue6c9ehp85wd3kq52w9r0
+  - &nexus age12h6h4q6mr9djnj3lmwkv5hthexghx0emj75xnt8hv76hmn7z9vysne9uyz
 creation_rules:
+  - path_regex: (^|/)secrets/nexus/(hostkey|console-admin)\.yaml$
+    key_groups:
+      - age:
+        - *admin
+  - path_regex: (^|/)secrets/nexus/[^/]+\.(yaml|json|env|ini)$
+    key_groups:
+      - age:
+        - *admin
+        - *nexus
   - path_regex: secrets/[^/]+\.(yaml|json|env|ini)$
     key_groups:
       - age:
