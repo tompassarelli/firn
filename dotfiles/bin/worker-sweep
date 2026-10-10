@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # worker-sweep: running Claude Code workers of one session with their tier,
 # context, minutes running and minutes idle. Flags STALLED (idle 10+ minutes
-# while running), HANDOFF (context 400k+) and PARKED (a pending safe-push, watch,
+# while running), OVERTIME (running 45+ minutes), HANDOFF (context 350k+) and PARKED (a pending safe-push, watch,
 # sleep or farm wait over 5 minutes). Each pass first records the session's
 # finished workers as runs in threads (worker-ledger), then appends one WAIT
 # line per serialized long wait: landing queue, GitHub Actions queue, serial
@@ -82,7 +82,7 @@ sweep() {
       | ([($now-$t1)/60, 0] | max | floor) as $idle
       | ([$last.message.content | arrays | .[] | select(.type=="tool_use")] | last | .input.command // "") as $cmd
       | ($pending and ($cmd | test("safe-push|gh run watch|sleep|until .*; do|farm test .*--wait")) and ((($now-($last.timestamp|ts))/60) > 5)) as $parked
-      | [ (if $idle>=10 then "STALLED" else empty end), (if $c>=400000 then "HANDOFF" else empty end), (if $parked then "PARKED" else empty end) ] as $flags
+      | [ (if $idle>=10 then "STALLED" else empty end), (if (($now-$t0)/60)>=45 then "OVERTIME" else empty end), (if $c>=350000 then "HANDOFF" else empty end), (if $parked then "PARKED" else empty end) ] as $flags
       | "\($id)\t\($t)\tctx=\($c/1000|floor)k\tran=\((($now-$t0)/60)|floor)m\tidle=\($idle)m\t\(if $waiting then "waiting-bg " else "" end)\($flags|join(","))"
     ' <"$f" 2>/dev/null
   done
@@ -228,7 +228,7 @@ fi
 while :; do
   out=$(sweep)
   flags=$(waits "$out")
-  if grep -qE 'STALLED|HANDOFF|PARKED' <<<"$out" || [ -n "$flags" ]; then
+  if grep -qE 'STALLED|OVERTIME|HANDOFF|PARKED' <<<"$out" || [ -n "$flags" ]; then
     date +%H:%M
     table <<<"$out"
     [ -z "$flags" ] || printf '%s\n' "$flags"
