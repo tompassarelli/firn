@@ -563,9 +563,9 @@ def cmd_ingest(db, a):
                     backfilled += db.execute(
                         "UPDATE runs SET spec = coalesce(spec, ?), scope = coalesce(scope, ?), surface = coalesce(surface, ?),"
                         " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?),"
-                        " expects_landing = coalesce(?, expects_landing) WHERE agent = ?",
+                        " expects_landing = coalesce(?, expects_landing), landed = coalesce(?, landed) WHERE agent = ?",
                         (f.get("spec"), f.get("scope"), f.get("surface"), f.get("verify"), f.get("lens"),
-                         r.get("flaws"), r.get("expects_landing"), r["id"])).rowcount
+                         r.get("flaws"), r.get("expects_landing"), r.get("landed"), r["id"])).rowcount
                 continue
             item = issue_ref(f.get("item") or r.get("item"))
             follows = f.get("follows") or r.get("follows")

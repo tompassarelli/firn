@@ -22,7 +22,8 @@ Briefs carry `Item: <repo#N>`, `Follows: <agent id>`, `Category: <name>`, option
 `Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and for adversarial
 reviewers `Lens: <lens>`; a reviewer report stating `Accepted flaws: N` counts N for its lens.
 A run succeeds when it reports Done (ruled out included) with no later Follows: run, and landed when it made
-a commit (a git commit or push in its transcript).
+a commit (a git commit or push in its transcript), where a commit counts as landed when it, or one with
+its subject, is on origin/main of a repo in ${LEDGER_REPOS:-~/code/*/main}, whoever pushed it.
 --recommend picks the cheapest tier at >= 80% success in the finest cell with >= 5 runs,
 backing off Surface, Verify, Scope, then Spec; a pricier tier replaces a cell's last pick only when 15 points better.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
@@ -47,33 +48,57 @@ done
 threads="$(dirname "$(readlink -f "$0")")/threads"
 
 # Per transcript: checks rerun after passing with no change between (repeats),
-# whether any push landed (landed), and whether it made a commit (committed). Shared by the Claude and Codex readers.
+# whether it made a commit (expects_landing), and whether a push succeeded or a commit of its (by hash or subject)
+# is on a repo's origin/main in $LEDGER_MAIN (landed). Shared by the Claude and Codex readers.
 export LEDGER_CHECKS_PY='
-import json, re
+import json, os, re
 CHECK = re.compile(r"\b(test|tests|check|typecheck|farm|sweep|parity|perf|bench)\b")
 CHANGE = re.compile(r"\b(git commit|apply_patch|sed -i|safe-push|git push)\b")
 LAND = re.compile(r"\b(safe-push|git push)\b")
 COMMIT = re.compile(r"\bgit\b[^|;&\n]*?\scommit\b|\$\{?\w+\}?\s+commit\b")
+SUBJECT = re.compile(r"\s-[a-zA-Z]*m[ =]?\s*(?:\"\$\(cat <<-?[\x27\"]?\w+[\x27\"]?\s*\n)?[\"\x27]?([^\"\x27\n]+)")
+MADE = re.compile(r"^\[[^\]\s]+(?: \([^)]*\))? ([0-9a-f]{7,40})\] (.+)$", re.M)
+def main_index():
+    shas, subjects = [], set()
+    try:
+        for line in open(os.environ.get("LEDGER_MAIN") or os.devnull):
+            sha, _, subject = line.rstrip("\n").partition(" ")
+            shas.append(sha)
+            subjects.add(subject.strip())
+    except OSError:
+        pass
+    return shas, subjects
 def norm(cmd):
     cmd = re.sub(r"^\s*cd\s+\S+\s*&&\s*", "", cmd)
     cmd = re.sub(r"^\s*CASE=\w\s+FACT=(\"[^\"]*\"|\x27[^\x27]*\x27)\s*", "", cmd)
     return " ".join(re.sub(r"\s--(wait|exit-status)\b|\s--out(=|\s+)\S+", "", cmd).split())
 def tally(steps):
-    """steps: (command, exit code or None, is_edit) in order."""
+    """steps: (command, exit code or None, is_edit[, output]) in order."""
     passed, repeats, landed, committed = set(), 0, 0, 0
-    for cmd, code, edit in steps:
+    made_shas, made_subjects = set(), set()
+    for cmd, code, edit, *output in steps:
         if edit or CHANGE.search(cmd or ""):
             passed.clear()
         if not cmd:
             continue
         if LAND.search(cmd) and code == 0:
             landed = 1
-        if COMMIT.search(cmd) and not code:
+        m = COMMIT.search(cmd)
+        if m and not code:
             committed = 1
+            s = SUBJECT.search(cmd, m.end())
+            if s:
+                made_subjects.add(s.group(1).strip())
+            for sha, subject in MADE.findall(str(output[0]) if output else ""):
+                made_shas.add(sha)
+                made_subjects.add(subject.strip())
         if CHECK.search(cmd) and code == 0:
             key = norm(cmd)
             repeats += key in passed
             passed.add(key)
+    if committed and not landed:
+        shas, subjects = main_index()
+        landed = int(bool(made_subjects & subjects) or any(s.startswith(p) for p in made_shas for s in shas))
     return {"repeats": repeats, "landed": landed, "expects_landing": committed | landed}
 '
 
@@ -87,6 +112,12 @@ fi
 projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
 known=$("$threads" run-ids) || exit 1
 recorded=$known
+LEDGER_MAIN=$(mktemp "${TMPDIR:-/tmp}/worker-ledger-main.XXXXXX") || exit 1
+export LEDGER_MAIN
+trap 'rm -f "$LEDGER_MAIN"' EXIT
+for repo in ${LEDGER_REPOS:-"$HOME"/code/*/main}; do
+  git -C "$repo" -c maintenance.auto=false -c gc.auto=0 log origin/main --since="${since:-30 days ago}" --format='%H %s' 2>/dev/null
+done >"$LEDGER_MAIN"
 [ "$backfill" -eq 0 ] || known=""
 rows=""
 
@@ -165,6 +196,8 @@ for line in open(sys.argv[1]):
             steps.append([cmd, None, c.get("name") in ("Edit", "Write", "MultiEdit")])
         elif c.get("type") == "tool_result" and c.get("tool_use_id") in calls:
             steps[calls[c["tool_use_id"]]][1] = 1 if c.get("is_error") else 0
+            body = c.get("content")
+            steps[calls[c["tool_use_id"]]].append(body if isinstance(body, str) else json.dumps(body))
 print(json.dumps(tally(steps)))' "$f" 2>/dev/null) || runs='{}'
   row=$(jq -c --argjson runs "${runs:-{\}}" '. + $runs' <<<"$row")
   rows+=$row$'\n'
@@ -295,6 +328,8 @@ for path in candidates:
                 codes = [int(c) for c in re.findall(r'exit_code\W+(-?\d+)', json.dumps(p.get("output")))]
                 for index, code in zip(cells.pop(p["call_id"]), codes):
                     steps[index][1] = code
+                    out = p.get("output")
+                    steps[index].append((out if isinstance(out, str) else json.dumps(out)).replace("\\n", "\n"))
         elif kind == "event_msg":
             if p.get("type") in ("task_started", "user_message"):
                 final = False

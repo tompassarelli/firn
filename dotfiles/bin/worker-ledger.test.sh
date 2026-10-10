@@ -49,15 +49,23 @@ printf '%s\n' \
   '{"type":"assistant","timestamp":"2026-10-08T00:03:00Z","requestId":"r2","message":{"model":"claude-haiku-5-5","usage":{"output_tokens":5},"content":[{"type":"text","text":"Done: committed."}]}}' \
   >"$subagents/agent-commit1.jsonl"
 printf '%s\n' '{"agentType":"worker"}' >"$subagents/agent-commit1.meta.json"
+sed -e 's/commit1/commit2/; s/commit -qm fix/commit -m \\"Unlanded change\\"/' "$subagents/agent-commit1.jsonl" >"$subagents/agent-commit2.jsonl"
+cp "$subagents/agent-commit1.meta.json" "$subagents/agent-commit2.meta.json"
+export LEDGER_REPOS=$scratch/repo
+git init -q "$LEDGER_REPOS" && git -C "$LEDGER_REPOS" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q --allow-empty -m fix &&
+  git -C "$LEDGER_REPOS" update-ref refs/remotes/origin/main HEAD
 "$repo/dotfiles/bin/worker-ledger" --since 2026-10-08 >/dev/null
 "$repo/dotfiles/bin/worker-ledger" --since 2026-10-08 >/dev/null
 python3 - "$THREADS_DB" <<'PY'
 import sqlite3,sys
 c=sqlite3.connect(sys.argv[1])
 e=dict(c.execute("select agent,expects_landing from runs").fetchall())
-assert (e['commit1'],e['haiku1'],e['repeater'])==(1,0,0),e
+assert (e['commit1'],e['commit2'],e['haiku1'],e['repeater'])==(1,1,0,0),e
 print('PASS a run expects a landing exactly when its transcript ran a git commit or push')
-r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1')").fetchall()
+l=dict(c.execute("select agent,landed from runs where agent like 'commit%'").fetchall())
+assert l=={'commit1':1,'commit2':0},l
+print('PASS a commit whose subject is on origin/main counts as landed though the run never pushed')
+r=c.execute("select agent,item,follows,tier,category,minutes,eta_min,tokens,peak_ctx,outcome from runs where agent not in ('haiku1','commit1','commit2')").fetchall()
 want=[('finished','firn#5','prior','gpt-6.1-sol medium','tooling',5,10,321,900,'done'),
       ('running','wisp#70',None,'gpt-6.1-sol medium','native-check',5,20,321,900,'done'),
       ('repeater','smashcraft#250',None,'gpt-6.1-sol high','balance-tuning',5,20,0,0,'done')]
