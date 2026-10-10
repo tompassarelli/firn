@@ -12,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -546,13 +547,19 @@ def location_config(path: Path) -> dict:
 
 
 def deliver_alert(alert: dict, timeout: float) -> None:
-    base = os.environ.get("NTFY_URL", "http://10.77.0.1:2586").rstrip("/")
+    """Through nexus-alert on nexus, which holds the publisher token; NTFY_URL posts directly (local test servers)."""
     topic = os.environ.get("NTFY_URGENT_TOPIC", "urgent")
     if not re.fullmatch(r"[A-Za-z0-9_-]+", topic):
         raise ValueError("invalid ntfy topic")
     title = "Socrates: location warning"
+    if not os.environ.get("NTFY_URL"):
+        remote = " ".join(shlex.quote(a) for a in ("nexus-alert", topic, alert["title"] + "\n" + alert["url"], title, alert["url"]))
+        subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "nexus", remote],
+                       check=True, capture_output=True, timeout=timeout + 15)
+        return
+    base = os.environ["NTFY_URL"].rstrip("/")
     headers = {"Title": title, "Priority": "5", "Click": alert["url"], "Tags": "warning", "Content-Type": "text/plain; charset=utf-8"}
-    token_file = os.environ.get("NTFY_TOKEN_FILE", "/run/secrets/ntfy-publisher-token")
+    token_file = os.environ.get("NTFY_TOKEN_FILE")
     if token_file:
         headers["Authorization"] = "Bearer " + Path(token_file).read_text().strip()
     request = urllib.request.Request(base + "/" + topic, data=(alert["title"] + "\n" + alert["url"]).encode(), headers=headers, method="POST")
@@ -595,7 +602,11 @@ def alerts_only(args: argparse.Namespace) -> int:
                     with db:
                         db.execute("BEGIN IMMEDIATE")
                         if qualifies and not db.execute("SELECT 1 FROM watch_alerts WHERE key=?", (alert["key"],)).fetchone():
-                            deliver_alert(alert, args.timeout)
+                            try:
+                                deliver_alert(alert, args.timeout)
+                            except (OSError, ValueError, subprocess.SubprocessError) as error:
+                                result["delivery_failed"] = type(error).__name__
+                                raise
                             db.execute("INSERT INTO watch_alerts VALUES(?,?,?,?,?)", (alert["key"], now, name, alert["title"], alert["url"]))
                             sent += 1
                         if "level" in alert:
@@ -606,7 +617,7 @@ def alerts_only(args: argparse.Namespace) -> int:
                 status = "HTTP " + str(error.code) if isinstance(error, urllib.error.HTTPError) else type(error).__name__
                 result["sources"].append({"source": name, "error": status})
         print(json.dumps(result, sort_keys=True))
-    return 1 if any("error" in source for source in result["sources"]) else 0
+    return 1 if "delivery_failed" in result else 0
 
 
 def main() -> int:
