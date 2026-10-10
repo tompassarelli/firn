@@ -80,7 +80,7 @@
       "/run/current-system/sw"
     ];
     runtimeEnv = {
-      ALLOWED_IPS = "10.77.0.2 10.77.0.3";
+      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone";
       AUTHORIZED_KEYS = authorizedKeys;
       USER_NAME = username;
       BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";

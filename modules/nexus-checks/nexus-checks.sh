@@ -2,28 +2,50 @@ CHECKS="logins units updates disk backup"
 TITLE_SUFFIX=""
 
 urgency_of() {
-  case "$1" in logins|lynis) echo urgent ;; *) echo normal ;; esac
+  case "$1" in logins*|lynis) echo urgent ;; *) echo normal ;; esac
+}
+
+peer_name() {
+  local ip=$1 peers=$2 pair
+  for pair in $peers; do
+    [ "${pair%%=*}" = "$ip" ] && { echo "${pair#*=}"; return; }
+  done
+  return 1
+}
+
+console_name() {
+  case "$1" in
+    tty1) echo "DigitalOcean web console" ;;
+    ttyS*) echo "serial console" ;;
+    *) echo "local console" ;;
+  esac
 }
 
 check_logins() {
-  local accepted=$1 sessions=$2 ips=$3 fps=$4 line ip fp tty seat bad=""
+  local accepted=$1 sessions=$2 peers=$3 fps=$4 seen=$5 line user ip fp peer id seat tty bad=""
   while IFS= read -r line; do
     [ -n "$line" ] || continue
+    user=$(printf '%s\n' "$line" | sed -nE 's/.* for (invalid user )?([^ ]+) from .*/\2/p')
     ip=$(printf '%s\n' "$line" | sed -nE 's/.* from ([^ ]+) port .*/\1/p')
     fp=$(printf '%s\n' "$line" | grep -oE 'SHA256:[A-Za-z0-9+/=]+' || true)
-    if ! printf ' %s ' "$ips" | grep -qF " $ip "; then
-      bad="${bad:+$bad; }ssh login from unexpected address ${ip:-unknown}"
+    if ! peer=$(peer_name "$ip" "$peers"); then
+      bad="${bad:+$bad; }SSH login as ${user:-unknown} from an address outside WireGuard (${ip:-unknown})"
     elif [ -z "$fp" ] || ! printf ' %s ' "$fps" | grep -qF " $fp "; then
-      bad="${bad:+$bad; }ssh login from $ip with an unknown key ${fp:-(no key)}"
+      bad="${bad:+$bad; }SSH login as ${user:-unknown} from $peer, unknown key (${fp:-no key})"
     fi
   done <<<"$accepted"
-  while read -r _ _ user seat _ _ tty _; do
+  while read -r id _ user seat _ _ tty _; do
     [ -n "${user:-}" ] || continue
+    printf ' %s ' "$seen" | grep -qF " $id " && continue
     if [ "${seat:--}" != "-" ] || [[ "${tty:--}" == tty* ]]; then
-      bad="${bad:+$bad; }console login by $user on ${tty:-$seat}"
+      bad="${bad:+$bad; }console login as $user on ${tty:-$seat} ($(console_name "${tty:-}"))"
     fi
   done <<<"$sessions"
   if [ -n "$bad" ]; then echo "fail: $bad"; else echo "ok"; fi
+}
+
+console_sessions() {
+  awk '$4 != "-" || $7 ~ /^tty/ {print $1}' <<<"$1" | paste -sd ' ' -
 }
 
 check_units() {
@@ -71,6 +93,14 @@ check_lynis() {
   if [ -n "$bad" ]; then echo "fail: lynis $bad"; else echo "ok"; fi
 }
 
+title_of() {
+  local reason=${2#fail: }
+  case "$1" in
+    logins*) echo "Nexus: ${reason%%; *}" | sed -E 's/, unknown key \(.*\)$/, unknown key/' ;;
+    *) echo "Nexus: $1 failing" ;;
+  esac
+}
+
 decide() {
   local prev=$1 notified=$2 result=$3 now=$4
   if [ "$result" = ok ]; then
@@ -87,8 +117,8 @@ apply() {
   [ -f "$state/$check.state" ] && read -r prev notified <"$state/$check.state"
   read -r action status stamp <<<"$(decide "$prev" "$notified" "$result" "$now")"
   case "$action" in
-    alert) nexus-alert "$(urgency_of "$check")" "${result#fail: }" "Nexus: $check failing$TITLE_SUFFIX" ;;
-    recover) nexus-alert normal "$check is healthy again." "Nexus: $check recovered$TITLE_SUFFIX" ;;
+    alert) nexus-alert "$(urgency_of "$check")" "${result#fail: }" "$(title_of "$check" "$result")$TITLE_SUFFIX" ;;
+    recover) [ "${check%%-*}" = logins ] || nexus-alert normal "$check is healthy again." "Nexus: $check recovered$TITLE_SUFFIX" ;;
   esac
   echo "$status $stamp" >"$state/$check.state"
 }
@@ -105,7 +135,11 @@ gather() {
         journalctl -u sshd.service -n 1 --cursor-file="$state/sshd.cursor" --no-pager >/dev/null
       fi
       accepted=$(printf '%s\n' "$log" | grep 'Accepted ' || true)
-      check_logins "$accepted" "$(loginctl list-sessions --no-legend)" "$ALLOWED_IPS" "$(ssh-keygen -lf "$AUTHORIZED_KEYS" | awk '{print $2}' | paste -sd ' ' -)" ;;
+      local sessions seen=""
+      sessions=$(loginctl list-sessions --no-legend)
+      [ -f "$state/console.seen" ] && seen=$(cat "$state/console.seen")
+      check_logins "$accepted" "$sessions" "$WG_PEERS" "$(ssh-keygen -lf "$AUTHORIZED_KEYS" | awk '{print $2}' | paste -sd ' ' -)" "$seen"
+      console_sessions "$sessions" >"$state/console.seen" ;;
     units)
       check_units "$(systemctl --failed --plain --no-legend)" "$(systemctl --user -M "$USER_NAME@" --failed --plain --no-legend 2>/dev/null || true)" ;;
     updates)
@@ -150,9 +184,12 @@ selftest() {
   state=$(mktemp -d)
   now=$(date +%s)
   TITLE_SUFFIX=" (self-test, no action needed)"
-  for check in $CHECKS lynis; do
+  local peers="10.77.0.2=laptop 10.77.0.3=phone"
+  for check in logins-console logins-key logins-outside units updates disk backup lynis; do
     case "$check" in
-      logins) result=$(check_logins "Accepted publickey for tom from 192.0.2.7 port 4242 ssh2: ED25519 SHA256:selftest" "" "10.77.0.2 10.77.0.3" "SHA256:known") ;;
+      logins-console) result=$(check_logins "" "7 1000 tom seat0 737 user tty1 no -" "$peers" "SHA256:known" "") ;;
+      logins-key) result=$(check_logins "Accepted publickey for tom from 10.77.0.2 port 4242 ssh2: ED25519 SHA256:selftest" "" "$peers" "SHA256:known" "") ;;
+      logins-outside) result=$(check_logins "Accepted publickey for tom from 192.0.2.7 port 4242 ssh2: ED25519 SHA256:known" "" "$peers" "SHA256:known" "") ;;
       units) result=$(check_units "selftest-broken.service loaded failed failed Self-test" "") ;;
       updates) result=$(check_updates "26.05.20200101.0000000" /a /a "$now" "$now") ;;
       disk) result=$(check_disk " 93%") ;;
