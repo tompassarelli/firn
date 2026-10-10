@@ -44,8 +44,23 @@
         scriptArgs = "%i";
         script = ''
           unit=$1
-          lines=$(journalctl -u "$unit" -n 10 --no-pager -o cat | tail -c 3500)
-          nexus-alert urgent "$(printf 'nexus: %s failed\n%s' "$unit" "$lines")"
+          name=''${unit%.service}
+          result=$(systemctl show "$unit" -p Result --value)
+          status=$(systemctl show "$unit" -p ExecMainStatus --value)
+          case "$result" in
+            exit-code) reason="it exited with error code $status" ;;
+            timeout) reason='it took too long and was stopped' ;;
+            signal) reason='it was killed by a signal' ;;
+            core-dump) reason='it crashed' ;;
+            oom-kill) reason='it ran out of memory' ;;
+            start-limit-hit) reason='it kept failing and systemd stopped restarting it' ;;
+            *) reason="systemd reports: ''${result:-unknown}" ;;
+          esac
+          title="Nexus: $name failed"
+          case "$name" in nexus-selftest-*) title="Nexus self-test (no action needed): $name failed" ;; esac
+          last=$(journalctl -u "$unit" -n 1 --no-pager -o cat | cut -c1-200)
+          lines=$(journalctl -u "$unit" -n 10 --no-pager -o cat | tail -c 3000)
+          nexus-alert urgent "$(printf '%s failed because %s.\nLast log line: %s\n\n%s' "$name" "$reason" "$last" "$lines")" "$title"
         '';
         serviceConfig = {
           Type = "oneshot";
@@ -81,11 +96,12 @@
     name = "nexus-alert";
     runtimeInputs = [ pkgs.curl pkgs.coreutils ];
     text = ''
-      usage() { echo 'usage: nexus-alert urgent|normal TEXT' >&2; exit 2; }
-      [ $# -eq 2 ] || usage
+      usage() { echo 'usage: nexus-alert urgent|normal TEXT [TITLE]' >&2; exit 2; }
+      [ $# -eq 2 ] || [ $# -eq 3 ] || usage
       case "$1" in urgent) prio=5 ;; normal) prio=3 ;; *) usage ;; esac
+      title=''${3:-Nexus}
       token=$(cat ${config.sops.secrets.ntfy-publisher-token.path})
-      curl -fsS -o /dev/null -H @<(printf 'Authorization: Bearer %s\nPriority: %s\n' "$token" "$prio") \
+      curl -fsS -o /dev/null -H @<(printf 'Authorization: Bearer %s\nPriority: %s\nTitle: %s\n' "$token" "$prio" "$title") \
         --data-binary "$2" "${baseUrl}/$1"
     '';
   }))) (builtins.getAttr "ntfy-auth.env" config.sops.templates))) config.sops.placeholder)) "${flakeRoot}/secrets/nexus/ntfy.yaml")) "http://${listen}")) "10.77.0.1:${builtins.toString port}")) 2586)) config.myConfig.modules.users.username)
