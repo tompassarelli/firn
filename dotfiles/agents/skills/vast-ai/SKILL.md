@@ -18,3 +18,4 @@ written: 2026-10-10
 - No card is saved, so auto top-up is off; adding a card or enabling it is Tom's billing choice, so recommend it rather than doing it.
 - Treat vast.ai like any rented server (Tom's call, 2026-10-10): private game files may go there when a job runs faster there; destroy the instance and volume when it ends.
 - At each session end, report the balance, running instances and volumes, and confirm none is left billing.
+- Rent hosts of 64 threads or fewer for Bun fields: a 256-thread EPYC 7B12 at $0.53/h ran cpuField about 10× slower than GitHub runners (load 764, ~5 matches/s; 2026-10-10), so effective cores per dollar overstates big shared hosts.
