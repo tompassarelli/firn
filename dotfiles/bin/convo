@@ -2,152 +2,495 @@
 """:"
 exec "${CONVO_PYTHON:-$HOME/.local/libexec/convo/python3}" "$0" "$@"
 ":"""
-"""convo — full-text search over local agent conversation transcripts.
+"""convo: find past agent work across Claude Code and Codex transcripts.
 
-Indexes JSONL transcripts under the configured North account homes, Codex homes
-and Claude Code's projects directory into a SQLite FTS5 index at
-~/.local/state/convo/index.db, then searches it.
-
-The index is self-sufficient: it stores the extracted message text alongside
-the postings, so a query never opens a transcript. The whole indexable text of
-a 87 GiB corpus is under a gigabyte — the transcripts are base64 image payload
-and compaction replays, not conversation. Keeping the text here is what lets
-the sources be compressed, moved, or archived underneath it. The (file, offset)
-locator survives as provenance for the path:line each hit prints.
-
-`convo compress` is the other half: it rewrites closed Codex rollouts as
-`.jsonl.zst`, which the indexer reads transparently. Claude Code transcripts
-are index-only: Claude resumes and reads them in place, so no root holding
-them grants compression.
+A pure core (record decoding, query planning, ranking, rendering) sits above a
+thin shell (discovery, SQLite indexing, compression, CLI). The index stores
+each distinct message text once, so a query never opens a transcript and the
+sources may be compressed underneath it.
 """
 
 import argparse
+from collections import namedtuple
 import fcntl
 import hashlib
 import json
 import os
 import re
-import shlex
 import sqlite3
-import subprocess
 import sys
 import time
 
 HOME = os.path.expanduser("~")
-# north-data is the canonical tree; ~/.local/state/north is a symlink to it.
-# Scanning both would read the same 75 GiB twice.
 ROOT = os.path.realpath(os.environ.get(
     "CONVO_ROOT", os.path.join(HOME, "code/north-data/accounts")))
 STATE = os.environ.get("CONVO_STATE", os.path.join(HOME, ".local/state/convo"))
-DB = os.path.join(STATE, "index.db")
-LOCK = os.path.join(STATE, "index.lock")
+SCHEMA_VERSION = 4
+DB = os.path.join(STATE, f"index-v{SCHEMA_VERSION}.db")
+LOCK = DB + ".lock"
 
-# A line longer than this is a compaction replay, a base64 image, or a dumped
-# build log. None of those are conversation, and all of them are unbounded.
 LINE_CAP = 1 << 20
-# Longest single extracted message kept. Anything past this is machine output.
 TEXT_CAP = 32 << 10
 CHUNK = 1 << 20
-COMMIT_EVERY = 20000
+BATCH = 5000
+HEAD_BYTES = 4096
+LOCK_WAIT_S = 1.5
+CANDIDATES = 400
+RELAX_BELOW = 3
+SHOW_CAP = 8000
 
 ZSTD = os.environ.get("CONVO_ZSTD", "zstd")
-# -3 with a 128 MiB window. The window is the whole story on this corpus: a
-# Codex rollout repeats its entire history in every compaction record, tens of
-# megabytes apart, so the default window finds 1.5x and this finds 19x. 2^27 is
-# exactly the standard decoder's maximum, so `zstd -d` reads it back with no
-# flags — anything larger would need --memory= at every read site forever.
+# 2^27 is the standard decoder's window limit, so plain `zstd -d` reads these back.
 ZSTD_ARGS = ("-3", "--long=27")
-# A transcript is compressible once nothing can still be appending to it.
 CLOSED_AFTER_S = 48 * 3600
-# Ratios measured 2026-08-12 over a stratified 90-file sample at the settings
-# above, keyed by file size. Only ever used to project a --dry-run; a real run
-# reports the ratio it actually achieved.
 BAND_RATIOS = ((256 << 20, 15.83), (64 << 20, 7.13), (8 << 20, 5.70),
                (1 << 20, 4.25), (0, 4.00))
 
-SCHEMA_VERSION = "3"
-# Bytes hashed from the head of a file to detect rewrite-in-place. An append
-# preserves the head; a truncate-and-rewrite almost never does. The hash is
-# always of the *logical* (uncompressed) content, so it survives compression.
-HEAD_BYTES = 4096
-
-# `files.size`/`files.off` are logical byte counts of the uncompressed
-# transcript; `files.dsize` is what the file costs on disk. They differ only
-# for a compressed source, and keeping size logical is what lets
-# `off == size` mean "fully indexed" across a compress or a restore.
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT);
-CREATE TABLE IF NOT EXISTS files(
-  id INTEGER PRIMARY KEY,
-  path TEXT UNIQUE NOT NULL,
-  dev INTEGER, ino INTEGER,
-  size INTEGER NOT NULL DEFAULT 0,
-  dsize INTEGER NOT NULL DEFAULT 0,
-  zst INTEGER NOT NULL DEFAULT 0,
-  mtime REAL,
-  head TEXT,
-  off INTEGER NOT NULL DEFAULT 0,
-  nline INTEGER NOT NULL DEFAULT 0,
-  provider TEXT, account TEXT, project TEXT, session_id TEXT,
-  title TEXT, cwd TEXT, branch TEXT,
-  first_ts TEXT, last_ts TEXT,
-  nmsg INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS files_session ON files(session_id);
-CREATE INDEX IF NOT EXISTS files_project ON files(project);
-CREATE TABLE IF NOT EXISTS msg(
-  id INTEGER PRIMARY KEY,
-  file_id INTEGER NOT NULL,
-  line INTEGER NOT NULL,
-  off INTEGER NOT NULL,
-  blk INTEGER NOT NULL DEFAULT 0,
-  ts TEXT, role TEXT,
-  content TEXT
-);
-CREATE INDEX IF NOT EXISTS msg_file ON msg(file_id);
-CREATE INDEX IF NOT EXISTS msg_ts ON msg(ts);
-CREATE VIRTUAL TABLE IF NOT EXISTS ftx USING fts5(
-  text, content='', contentless_delete=1,
-  tokenize='unicode61 remove_diacritics 2'
-);
+CREATE TABLE meta(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE files(
+  id INTEGER PRIMARY KEY, path TEXT UNIQUE NOT NULL, dev INTEGER, ino INTEGER,
+  size INTEGER NOT NULL DEFAULT 0, dsize INTEGER NOT NULL DEFAULT 0,
+  zst INTEGER NOT NULL DEFAULT 0, mtime REAL, head TEXT,
+  off INTEGER NOT NULL DEFAULT 0, nline INTEGER NOT NULL DEFAULT 0,
+  provider TEXT, account TEXT, project TEXT, session_id TEXT, agent TEXT,
+  title TEXT, cwd TEXT, branch TEXT, first_ts TEXT, last_ts TEXT,
+  nmsg INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX files_session ON files(session_id);
+CREATE TABLE msg(
+  id INTEGER PRIMARY KEY, file_id INTEGER NOT NULL, line INTEGER NOT NULL,
+  ts TEXT, role TEXT, tool TEXT, body INTEGER NOT NULL,
+  dup INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX msg_file ON msg(file_id, line);
+CREATE INDEX msg_ts ON msg(ts);
+CREATE INDEX msg_body ON msg(body);
+CREATE TABLE body(id INTEGER PRIMARY KEY, h INTEGER NOT NULL UNIQUE,
+  first INTEGER NOT NULL, text TEXT NOT NULL);
+CREATE VIRTUAL TABLE ftx USING fts5(text, content='', contentless_delete=1,
+  tokenize='porter unicode61 remove_diacritics 2');
 """
 
+ROLES = ("user", "assistant", "thinking", "tool", "system")
+PROVIDERS = {"claude": "anthropic", "codex": "openai"}
+PROVIDER_NAME = {v: k for k, v in PROVIDERS.items()}
 
-# ---------------------------------------------------------------- discovery
+
+# ------------------------------------------------------------- core: records
+
+TOOL_KEYS = ("skill", "command", "cmd", "file_path", "path", "pattern", "query",
+             "prompt", "description", "old_string", "new_string", "url",
+             "content")
+INJECTED = ("base directory for this skill:", "[request interrupted by user",
+            "stop hook feedback:", "caveat:", "[image:", "# agents.md instructions",
+            "this session is being continued from a previous conversation",
+            "another claude session sent", "the coordinator sent a message",
+            "[system notification", "[north real-time ping")
+TAG = re.compile(r"</?(?:task-notification|system-reminder|local-command-[a-z]+|command-[a-z]+|"
+                 r"user-prompt-submit-hook|environment_context|user_instructions|"
+                 r"recommended_plugins|codex_internal_context|turn_aborted|image|"
+                 r"subagent_notification)\b")
+
+
+def clip(s):
+    return s.strip()[:TEXT_CAP] if isinstance(s, str) else ""
+
+
+def speaker(role, text):
+    """Harness-injected text recorded under the user role is `system`."""
+    if role == "user" and (TAG.match(text) or text[:80].lower().startswith(INJECTED)):
+        return "system"
+    return role
+
+
+def tool_text(name, args):
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+        except ValueError:
+            parsed = None
+        if isinstance(parsed, dict):
+            args = parsed
+    if isinstance(args, dict):
+        parts = [f"{k}={args[k]}" for k in TOOL_KEYS
+                 if isinstance(args.get(k), str) and args[k].strip()]
+        body = "\n".join(parts) if parts else json.dumps(args)[:2000]
+    else:
+        body = args if isinstance(args, str) else ""
+    return clip(f"{name} {body}")
+
+
+def extract_claude(d):
+    """Claude Code record -> ([(role, text, tool)], meta)."""
+    meta = {}
+    for src, key in (("sessionId", "session_id"), ("cwd", "cwd"),
+                     ("gitBranch", "branch"), ("slug", "slug")):
+        if isinstance(d.get(src), str) and d[src]:
+            meta[key] = d[src]
+    t = d.get("type")
+    if t == "ai-title":
+        if isinstance(d.get("aiTitle"), str) and d["aiTitle"]:
+            meta["title"] = d["aiTitle"]
+        return [], meta
+    m = d.get("message")
+    if t not in ("user", "assistant") or not isinstance(m, dict):
+        return [], meta
+    c = m.get("content")
+    blocks = [{"type": "text", "text": c}] if isinstance(c, str) else (
+        c if isinstance(c, list) else [])
+    injected = t == "user" and (d.get("isMeta") or d.get("isCompactSummary"))
+    out = []
+    for b in blocks:
+        if not isinstance(b, dict):
+            continue
+        kind, tool = b.get("type"), None
+        if kind == "text":
+            role, s = t, clip(b.get("text"))
+        elif kind == "thinking":
+            role, s = "thinking", clip(b.get("thinking"))
+        elif kind == "tool_use":
+            tool = b.get("name") or "tool"
+            role, s = "tool", tool_text(tool, b.get("input"))
+        else:
+            continue
+        if s:
+            out.append(("system" if injected else speaker(role, s), s, tool))
+    return out, meta
+
+
+def extract_codex(d):
+    """Codex rollout record -> ([(role, text, tool)], meta)."""
+    p, t = d.get("payload"), d.get("type")
+    if not isinstance(p, dict):
+        return [], {}
+    if t == "session_meta":
+        meta = {}
+        sid = p.get("session_id") or p.get("id")
+        if isinstance(sid, str) and sid:
+            meta["session_id"] = sid
+            if isinstance(p.get("id"), str) and p["id"] != sid:
+                meta["agent"] = p["id"]
+        for src, key in (("cwd", "cwd"), ("agent_nickname", "title")):
+            if isinstance(p.get(src), str) and p[src]:
+                meta[key] = p[src]
+        return [], meta
+    if t != "response_item":
+        return [], {}
+    kind, out = p.get("type"), []
+    if kind == "message" and p.get("role") != "developer":
+        role = p.get("role") or "user"
+        c = p.get("content")
+        texts = [c] if isinstance(c, str) else [
+            b.get("text") for b in (c if isinstance(c, list) else [])
+            if isinstance(b, dict) and b.get("type") in ("input_text", "output_text", "text")]
+        out = [(speaker(role, s), s, None) for s in map(clip, texts) if s]
+    elif kind == "reasoning":
+        blocks = [b for key in ("summary", "content")
+                  if isinstance(p.get(key), list) for b in p[key]]
+        out = [("thinking", s, None) for s in
+               (clip(b.get("text")) for b in blocks if isinstance(b, dict)) if s]
+    elif kind in ("function_call", "custom_tool_call"):
+        tool = p.get("name") or "tool"
+        args = p.get("arguments") if p.get("arguments") is not None else p.get("input")
+        out = [("tool", tool_text(tool, args), tool)]
+    return out, {}
+
+
+def wanted(kind, line):
+    """Cheap byte test that rejects records the decoder would drop anyway."""
+    if kind == "codex":
+        head = line[:200]
+        return b"response_item" in head or b"session_meta" in head
+    return CLAUDE_KEEP.search(line) is not None
+
+
+CLAUDE_KEEP = re.compile(rb'"type": ?"(?:user|assistant|ai-title)"')
+
+
+def scan_lines(fh, start, chunk=CHUNK):
+    """Yield (start, end, bytes or None) per complete line; None past LINE_CAP."""
+    base = line_start = start
+    buf, over = bytearray(), False
+    while True:
+        data = fh.read(chunk)
+        if not data:
+            return
+        pos = 0
+        while True:
+            nl = data.find(b"\n", pos)
+            if nl < 0:
+                seg = data[pos:]
+                if not over:
+                    if len(buf) + len(seg) > LINE_CAP:
+                        over, buf = True, bytearray()
+                    else:
+                        buf += seg
+                break
+            seg = data[pos:nl]
+            line = None if over or len(buf) + len(seg) > LINE_CAP else bytes(buf + seg)
+            end = base + nl + 1
+            yield line_start, end, line
+            buf, over, pos, line_start = bytearray(), False, nl + 1, end
+        base += len(data)
+
+
+def text_hash(text):
+    """(64-bit signed hash, text safe to store) for one message."""
+    try:
+        raw = text.encode()
+    except UnicodeEncodeError:
+        text = text.encode("utf-8", "replace").decode()
+        raw = text.encode()
+    return int.from_bytes(hashlib.blake2b(raw, digest_size=8).digest(),
+                          "big", signed=True), text
+
+
+def short_project(project):
+    s = project or ""
+    for pre in ("-home-tom-code-client-", "-home-tom-code-", "-home-tom-"):
+        if s.startswith(pre):
+            return s[len(pre):]
+    return "home" if s == "-home-tom" else (s.lstrip("-") or "?")
+
+
+# ---------------------------------------------------------- core: queries
+
+WORD = re.compile(r"\w+")
+OPERATORS = ("AND", "OR", "NOT")
+
+
+Plan = namedtuple("Plan", "match partial literal terms")
+
+
+def quote(s):
+    return '"' + s.replace('"', '""') + '"'
+
+
+def plan_query(text, exact=False, strict=False):
+    words = [w.lower() for w in WORD.findall(text)]
+    if not words:
+        return None
+    plain = " ".join(quote(w) for w in words)
+    if exact:
+        lit = " ".join(text.split())
+        return Plan([quote(lit)], None, lit, words)
+    parts, explicit = [], False
+    for tok in re.findall(r'"[^"]*"?|[()]|[^\s()"]+', text):
+        if tok in OPERATORS or tok in ("(", ")"):
+            explicit = True
+            parts.append(tok)
+        elif re.fullmatch(r"\w+\*", tok):
+            parts.append(quote(tok[:-1]) + "*")
+        elif WORD.search(tok.strip('"')):
+            parts.append(quote(tok.strip('"')))
+    match = [" ".join(parts)] + ([plain] if explicit else [])
+    distinct = list(dict.fromkeys(words))
+    partial = (" OR ".join(quote(w) for w in distinct)
+               if not (explicit or strict) and len(distinct) > 1 else None)
+    return Plan(match, partial, None, words)
+
+
+def norm(s):
+    return " ".join(s.split()).lower()
+
+
+UNITS = {"h": 3600, "d": 86400, "w": 7 * 86400, "m": 30 * 86400, "y": 365 * 86400}
+
+
+def parse_when(s, now):
+    """`12h`, `3d`, `2w`, `6m`, `1y`, or an ISO date -> UTC ISO string."""
+    m = re.fullmatch(r"(\d+)\s*([hdwmy])", s.strip())
+    if m:
+        return time.strftime("%Y-%m-%dT%H:%M:%S",
+                             time.gmtime(now - int(m.group(1)) * UNITS[m.group(2)]))
+    if re.fullmatch(r"\d{4}-\d\d-\d\d([T ][\d:.]+Z?)?", s.strip()):
+        return s.strip().replace(" ", "T")
+    raise ValueError(f"cannot read time {s!r}: use 12h, 3d, 2w, 6m, 1y or YYYY-MM-DD")
+
+
+# ---------------------------------------------------------- core: ranking
+
+ROLE_WEIGHT = {"user": 1.0, "assistant": 1.0, "thinking": 0.8, "tool": 0.8,
+               "system": 0.4}
+CONVO_CALL = re.compile(r"(?:^|[\s;&|(`'\"=])convo(?:\s|$)")
+STACK = (1.0, 0.5, 0.25)
+PHRASE_BOOST = 3.0
+
+
+def stem(term):
+    return term[:max(4, len(term) - 2)]
+
+
+def is_convo_call(hit):
+    return hit["role"] == "tool" and bool(CONVO_CALL.search(hit["text"]))
+
+
+def phrase_of(terms):
+    """The query words as typed, adjacent and in order."""
+    if len(terms) < 2:
+        return None
+    return re.compile(r"\b" + r"\W+".join(map(re.escape, terms)) + r"\b", re.I)
+
+
+def weigh(hit, phrase=None):
+    w = -hit["bm25"] * ROLE_WEIGHT.get(hit["role"], 1.0)
+    return w * PHRASE_BOOST if phrase and phrase.search(hit["text"]) else w
+
+
+def rank_messages(hits, self_ids=frozenset(), keep_calls=False, terms=()):
+    """Weighted hits, best first; the caller's own session sorts last."""
+    phrase = phrase_of(terms)
+    kept = [dict(h, w=weigh(h, phrase)) for h in hits if keep_calls or not is_convo_call(h)]
+    return sorted(kept, key=lambda h: (h["session"] in self_ids, -h["w"], -h["id"]))
+
+
+def rank_sessions(hits, terms, self_ids=frozenset(), keep_calls=False, coverage=False):
+    """Group hits by session: best hit plus decaying credit for the next two.
+
+    With `coverage` (the OR fallback), a session's score is scaled by the
+    square of the share of query terms its hits contain.
+    """
+    groups = {}
+    for h in rank_messages(hits, self_ids, keep_calls, terms):
+        g = groups.setdefault(h["session"], {"session": h["session"], "best": h,
+                                             "scores": [], "hits": 0, "seen": set()})
+        g["hits"] += 1
+        g["scores"].append(h["w"])
+        if coverage:
+            low = h["text"].lower()
+            g["seen"].update(t for t in terms if stem(t) in low)
+    keys = set(map(stem, terms))
+    for g in groups.values():
+        g["score"] = sum(w * s for w, s in zip(STACK, g["scores"]))
+        if coverage and keys:
+            g["score"] *= (len(set(map(stem, g["seen"]))) / len(keys)) ** 2
+    return sorted(groups.values(), key=lambda g: (
+        g["session"] in self_ids, -g["score"], -g["best"]["id"]))
+
+
+def snippet(text, terms, width=200):
+    """The `width`-character window holding the most distinct query terms."""
+    flat = " ".join(text.split())
+    if len(flat) <= width:
+        return flat
+    low = flat.lower()
+    keys = set(map(stem, terms))
+    pos = sorted((m.start(), k) for k in keys for m in re.finditer(re.escape(k), low))[:400]
+    best, most = 0, 0
+    for i, (p, _) in enumerate(pos):
+        n = len({k for q, k in pos[i:] if q < p + width * 3 // 4})
+        if n > most:
+            best, most = p, n
+    a = max(0, min(best - width // 4, len(flat) - width))
+    return ("…" if a else "") + flat[a:a + width] + ("…" if a + width < len(flat) else "")
+
+
+# --------------------------------------------------------- core: rendering
+
+class Palette:
+    def __init__(self, on):
+        b, d, c, y, o = ("\033[1m", "\033[2m", "\033[36m", "\033[33m", "\033[0m") if on \
+            else ("",) * 5
+        self.bold, self.dim, self.cyan, self.yellow, self.off = b, d, c, y, o
+
+
+def stamp(ts):
+    return (ts or "")[:16].replace("T", " ")
+
+
+def who(h):
+    return f"{h['role']}:{h['tool']}" if h.get("tool") else h["role"]
+
+
+def describe(info, h):
+    sid = os.path.basename(h["session"] or "")[:8]
+    agent = f"/{h['agent'][:8]}" if h.get("agent") else ""
+    return sid + agent, short_project(info.get("project") or h.get("project"))
+
+
+def full_lines(h, indent="   "):
+    text = h["text"][:SHOW_CAP]
+    more = len(h["text"]) - len(text)
+    lines = [indent + ln for ln in text.splitlines() if ln.strip()]
+    return lines + ([f"{indent}… {more} more chars: convo show {h['id']} --full"] if more else [])
+
+
+def render_sessions(groups, infos, terms, pal, full=False):
+    out = []
+    for i, g in enumerate(groups, 1):
+        if g.get("partial") and (i == 1 or not groups[i - 2].get("partial")):
+            out.append(f"{pal.dim}no message in these sessions has every word; "
+                       f"ranked by words covered{pal.off}")
+        h, info = g["best"], infos.get(g["session"], {})
+        sid, proj = describe(info, h)
+        title = (info.get("title") or "")[:60]
+        out.append(f"{pal.dim}{i:2d}{pal.off} {pal.bold}{sid}{pal.off}  {stamp(h['ts'])}  "
+                   f"{pal.cyan}{proj}{pal.off}  {title}  "
+                   f"{pal.dim}({info.get('provider', '?')}, {g['hits']} hit{'s' * (g['hits'] != 1)}){pal.off}")
+        if full:
+            out.append(f"   {pal.yellow}{who(h)}{pal.off} [{h['id']}]")
+            out.extend(full_lines(h))
+        else:
+            out.append(f"   {pal.yellow}{who(h)}{pal.off} · {snippet(h['text'], terms)}  "
+                       f"{pal.dim}[{h['id']}]{pal.off}")
+    out.append(f"{pal.dim}open: convo show <id>  ·  transcripts: convo session <session>{pal.off}")
+    return out
+
+
+def render_messages(hits, infos, terms, pal, full=False, partial=False):
+    out = []
+    if partial:
+        out.append(f"{pal.dim}no message has every term; showing partial matches{pal.off}")
+    for i, h in enumerate(hits, 1):
+        sid, proj = describe(infos.get(h["session"], {}), h)
+        head = (f"{pal.dim}{i:2d}{pal.off} {stamp(h['ts'])}  {pal.bold}{sid}{pal.off}  "
+                f"{pal.cyan}{proj}{pal.off}  {pal.yellow}{who(h)}{pal.off}")
+        if full:
+            out.append(f"{head}  [{h['id']}]")
+            out.extend(full_lines(h))
+        else:
+            out.append(f"{head} · {snippet(h['text'], terms, 160)}  {pal.dim}[{h['id']}]{pal.off}")
+    return out
+
+
+def as_json(h, info, terms, hits=None, full=False):
+    row = {"session": h["session"], "agent": h.get("agent"), "title": info.get("title"),
+           "project": short_project(info.get("project") or h.get("project")),
+           "provider": info.get("provider"), "id": h["id"], "ts": h["ts"],
+           "role": h["role"], "tool": h.get("tool"),
+           "snippet": snippet(h["text"], terms), "path": h["path"], "line": h["line"]}
+    if hits is not None:
+        row["hits"] = hits
+    if full:
+        row["text"] = h["text"]
+    return row
+
+
+# ------------------------------------------------------- shell: discovery
 
 class Unreconciled(Exception):
-    """A configured transcript root could not participate in this refresh."""
+    """A configured transcript root could not take part in this refresh."""
+
+
+SESSION_FILE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.jsonl(?:\.zst)?")
 
 
 def transcript_roots():
-    """Return configured (root, provider, account, layout), de-duplicated by real path.
-
-    Layout "accounts" holds ``<provider>/<account>/sessions`` (Codex) and
-    ``<provider>/<account>/projects`` (Claude Code); "codex" is a direct
-    CODEX_HOME holding ``sessions``; "claude" is Claude Code's ``projects``
-    directory itself.  Symlinked North projections resolve to one identity and
-    cannot duplicate messages in the index.
-    """
-    override = os.environ.get("CONVO_ROOT")
-    if override:
+    """Configured (root, provider, account, layout), de-duplicated by real path."""
+    if os.environ.get("CONVO_ROOT"):
         candidates = [(ROOT, "", "", "accounts", True, "CONVO_ROOT")]
     else:
-        codex_home = os.environ.get("CODEX_HOME")
-        pooled_home = os.environ.get("NORTH_CODEX_POOLED_HOME")
-        claude_dir = os.environ.get("CLAUDE_CONFIG_DIR")
+        codex, pooled = os.environ.get("CODEX_HOME"), os.environ.get("NORTH_CODEX_POOLED_HOME")
+        claude = os.environ.get("CLAUDE_CONFIG_DIR")
         candidates = [
             (ROOT, "", "", "accounts", False, "account transcript root"),
-            (codex_home, "openai", "configured", "codex", bool(codex_home),
-             "CODEX_HOME"),
-            (pooled_home, "openai", "pooled", "codex", bool(pooled_home),
-             "NORTH_CODEX_POOLED_HOME"),
-            (os.path.join(HOME, ".local/state/north/codex-pooled"),
-             "openai", "pooled", "codex", False, "default pooled transcript root"),
-            (os.path.join(claude_dir, "projects") if claude_dir else None,
-             "anthropic", "local", "claude", bool(claude_dir),
-             "CLAUDE_CONFIG_DIR projects"),
-            (os.path.join(HOME, ".claude/projects"),
-             "anthropic", "local", "claude", False, "Claude Code projects root"),
+            (codex, "openai", "configured", "codex", bool(codex), "CODEX_HOME"),
+            (pooled, "openai", "pooled", "codex", bool(pooled), "NORTH_CODEX_POOLED_HOME"),
+            (os.path.join(HOME, ".local/state/north/codex-pooled"), "openai", "pooled",
+             "codex", False, "default pooled transcript root"),
+            (claude and os.path.join(claude, "projects"), "anthropic", "local", "claude",
+             bool(claude), "CLAUDE_CONFIG_DIR projects"),
+            (os.path.join(HOME, ".claude/projects"), "anthropic", "local", "claude",
+             False, "Claude Code projects root"),
         ]
     out, seen = [], set()
     for root, provider, account, layout, required, label in candidates:
@@ -159,379 +502,105 @@ def transcript_roots():
                 raise Unreconciled(f"{label} is unavailable: {canonical}")
             continue
         try:
-            with os.scandir(canonical):
-                pass
+            os.scandir(canonical).close()
         except OSError as e:
             raise Unreconciled(f"{label} is unreadable: {canonical}: {e}") from e
-        if canonical in seen:
-            continue
-        seen.add(canonical)
-        out.append((canonical, provider, account, layout))
+        if canonical not in seen:
+            seen.add(canonical)
+            out.append((canonical, provider, account, layout))
     return out
 
 
-# What each on-disk layout may have done to it. Only Codex rollouts are ever
-# compressed: Claude Code reads its own transcripts in place to resume.
-CODEX = ("codex", True)
-CLAUDE = ("claude", False)
-
-
-SESSION_FILE = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.jsonl(?:\.zst)?")
-
-
-def claude_files(base, walk_error):
-    """Yield (dirpath, filenames, project) for Claude Code's projects layout.
-
-    Only ``<project>/<session>.jsonl`` and
-    ``<project>/<session>/subagents/*.jsonl`` are transcripts; the rest of a
-    session directory (scratchpads, tool-result spills) is agent output.
-    """
+def listdir(path):
     try:
-        projects = sorted(os.listdir(base))
+        return sorted(os.listdir(path))
     except OSError as e:
-        walk_error(e)
-        return
-    for project in projects:
+        raise Unreconciled(f"configured transcript tree is unreadable: {path}: {e}") from e
+
+
+def claude_dirs(base):
+    """Only <project>/<session>.jsonl and <project>/<session>/subagents/*.jsonl."""
+    for project in listdir(base):
         pdir = os.path.join(base, project)
         if not os.path.isdir(pdir):
             continue
-        try:
-            entries = sorted(os.listdir(pdir))
-        except OSError as e:
-            walk_error(e)
-            continue
+        entries = listdir(pdir)
         yield pdir, [e for e in entries if SESSION_FILE.fullmatch(e)], project
         for name in entries:
             sub = os.path.join(pdir, name, "subagents")
             if os.path.isdir(sub):
-                try:
-                    yield sub, sorted(os.listdir(sub)), project
-                except OSError as e:
-                    walk_error(e)
+                yield sub, listdir(sub), project
+
+
+def codex_dirs(base):
+    def fail(e):
+        raise Unreconciled(f"configured transcript tree is unreadable: {e.filename}: {e}")
+    for dirpath, dirnames, filenames in os.walk(base, onerror=fail):
+        dirnames.sort()
+        yield dirpath, sorted(filenames), ""
 
 
 def discover(roots=None):
-    """Yield (logical, disk, provider, account, project_hint, kind) per transcript.
+    """Yield (logical, disk, provider, account, project_hint, kind, stat).
 
-    `kind` is CODEX or CLAUDE: which decoder reads it and whether it may be
-    compressed.
-
-    `logical` always names the `.jsonl`; `disk` is what actually exists, which
-    may be `<logical>.zst`. Identity is the logical path, so compressing a
-    transcript never forks it into two index entries. When both forms exist —
-    a sweep interrupted between writing the archive and unlinking the source —
-    the uncompressed one wins, because it is the one a writer could still be
-    appending to.
+    `logical` names the `.jsonl`; `disk` may be `<logical>.zst`. When both
+    exist the plain file wins, because a writer may still append to it. A file
+    reached twice through symlinks or hardlinks is yielded once.
     """
-    seen_paths, seen_files = set(), set()
-
-    def walk_error(error):
-        raise Unreconciled(
-            f"configured transcript tree is unreadable: {error.filename}: {error}"
-        )
-
-    def codex_files(base):
-        for dirpath, dirnames, filenames in os.walk(base, onerror=walk_error):
-            dirnames.sort()
-            yield dirpath, sorted(filenames), ""
-
-    for root, direct_provider, direct_account, layout in (
-            transcript_roots() if roots is None else roots):
+    seen = set()
+    for root, provider0, account0, layout in (transcript_roots() if roots is None else roots):
         if layout == "claude":
-            trees = [(direct_provider, direct_account, root, CLAUDE)]
+            trees = [(provider0, account0, root, "claude")]
         elif layout == "codex":
-            trees = [(direct_provider, direct_account or os.path.basename(root),
-                      os.path.join(root, "sessions"), CODEX)]
+            trees = [(provider0, account0 or os.path.basename(root),
+                      os.path.join(root, "sessions"), "codex")]
         else:
-            trees = []
-            for provider in sorted(os.listdir(root)):
-                pdir = os.path.join(root, provider)
-                if not os.path.isdir(pdir):
-                    continue
-                for account in sorted(os.listdir(pdir)):
-                    adir = os.path.join(pdir, account)
-                    trees.append((provider, account,
-                                  os.path.join(adir, "sessions"), CODEX))
-                    trees.append((provider, account,
-                                  os.path.join(adir, "projects"), CLAUDE))
+            trees = [(p, a, os.path.join(root, p, a, sub), kind)
+                     for p in listdir(root) if os.path.isdir(os.path.join(root, p))
+                     for a in listdir(os.path.join(root, p))
+                     for sub, kind in (("sessions", "codex"), ("projects", "claude"))]
         for provider, account, base, kind in trees:
             if not os.path.isdir(base):
                 continue
-            walk = (claude_files(base, walk_error) if kind is CLAUDE
-                    else codex_files(base))
-            for dirpath, filenames, hint in walk:
-                here = set(filenames)
-                for fn in filenames:
+            walk = claude_dirs(base) if kind == "claude" else codex_dirs(base)
+            for dirpath, names, hint in walk:
+                here = set(names)
+                for fn in names:
                     if fn.endswith(".jsonl"):
-                        logical = disk = os.path.join(dirpath, fn)
-                    elif fn.endswith(".jsonl.zst"):
-                        if fn[:-4] in here:
-                            continue
-                        logical = os.path.join(dirpath, fn[:-4])
-                        disk = os.path.join(dirpath, fn)
+                        logical = disk = f"{dirpath}/{fn}"
+                    elif fn.endswith(".jsonl.zst") and fn[:-4] not in here:
+                        logical, disk = f"{dirpath}/{fn[:-4]}", f"{dirpath}/{fn}"
                     else:
                         continue
-                    # Configured roots can overlap through symlinks, hardlinks,
-                    # or bind mounts. Preserve the first spelling for provenance
-                    # while suppressing the same canonical path or disk object.
-                    path_identity = os.path.realpath(logical)
                     try:
                         st = os.stat(disk)
-                        file_identity = (st.st_dev, st.st_ino)
                     except OSError:
-                        file_identity = None
-                    if (path_identity in seen_paths
-                            or (file_identity is not None
-                                and file_identity in seen_files)):
                         continue
-                    seen_paths.add(path_identity)
-                    if file_identity is not None:
-                        seen_files.add(file_identity)
-                    yield logical, disk, provider, account, hint, kind
+                    if (st.st_dev, st.st_ino) in seen:
+                        continue
+                    seen.add((st.st_dev, st.st_ino))
+                    yield logical, disk, provider, account, hint, kind, st
 
 
-# ------------------------------------------------------------- line reader
-
-def scan_lines(fh, start):
-    """Yield (line_start, line_end, line_bytes_or_None) for complete lines.
-
-    `fh` must already be positioned at `start`, which is only a base for the
-    offsets reported — the reader never seeks, so a decompressor pipe works
-    exactly like a file.
-
-    Memory is bounded by LINE_CAP regardless of input: a 59 MB line is
-    consumed and discarded without ever being materialised. Only lines
-    terminated by a newline are yielded, so a session being appended to
-    right now never produces a torn record.
-    """
-    base = start
-    line_start = start
-    buf = bytearray()
-    over = False
-    while True:
-        chunk = fh.read(CHUNK)
-        if not chunk:
-            return
-        pos = 0
-        while True:
-            nl = chunk.find(b"\n", pos)
-            if nl < 0:
-                seg = chunk[pos:]
-                if not over:
-                    if len(buf) + len(seg) > LINE_CAP:
-                        over = True
-                        buf = bytearray()
-                    else:
-                        buf += seg
-                break
-            seg = chunk[pos:nl]
-            if over or len(buf) + len(seg) > LINE_CAP:
-                line = None
-            else:
-                buf += seg
-                line = bytes(buf)
-            end = base + nl + 1
-            yield line_start, end, line
-            buf = bytearray()
-            over = False
-            pos = nl + 1
-            line_start = end
-        base += len(chunk)
-
-
-# -------------------------------------------------------------- extraction
-
-def _clip(s):
-    if not isinstance(s, str):
-        return ""
-    s = s.strip()
-    return s[:TEXT_CAP] if len(s) > TEXT_CAP else s
-
-
-def _tool_text(name, args):
-    """Compact rendering of a tool invocation: what was run, not what it printed."""
-    if isinstance(args, str):
-        body = args
-    elif isinstance(args, dict):
-        keep = ("skill", "command", "file_path", "path", "pattern", "query", "prompt",
-                "description", "old_string", "new_string", "url", "content")
-        parts = []
-        for k in keep:
-            v = args.get(k)
-            if isinstance(v, str) and v.strip():
-                parts.append(f"{k}={v}")
-        body = "\n".join(parts) if parts else json.dumps(args)[:2000]
-    else:
-        body = ""
-    return _clip(f"{name} {body}")
-
-
-def extract_claude(d):
-    """Claude Code record -> (list[(role, text)], meta_updates).
-
-    Reads `message.content` the way worker-sweep does: text, thinking and
-    tool_use blocks. tool_result and image blocks are machine output.
-    """
-    out = []
-    meta = {}
-    t = d.get("type")
-    for k, key in (("sessionId", "session_id"), ("cwd", "cwd"),
-                   ("gitBranch", "branch")):
-        if isinstance(d.get(k), str) and d[k]:
-            meta[key] = d[k]
-    if t == "ai-title" and d.get("aiTitle"):
-        meta["title"] = d["aiTitle"]
-        return out, meta
-    if d.get("slug"):
-        meta["slug"] = d["slug"]
-    if t not in ("user", "assistant"):
-        return out, meta
-    m = d.get("message")
-    if not isinstance(m, dict):
-        return out, meta
-    c = m.get("content")
-    if isinstance(c, str):
-        s = _clip(c)
-        if s:
-            out.append((t, s))
-        return out, meta
-    if not isinstance(c, list):
-        return out, meta
-    for b in c:
-        if not isinstance(b, dict):
-            continue
-        bt = b.get("type")
-        if bt == "text":
-            s = _clip(b.get("text"))
-            if s:
-                out.append((t, s))
-        elif bt == "thinking":
-            s = _clip(b.get("thinking"))
-            if s:
-                out.append(("thinking", s))
-        elif bt == "tool_use":
-            s = _tool_text(b.get("name") or "tool", b.get("input"))
-            if s:
-                out.append(("tool", s))
-    return out, meta
-
-
-def extract_openai(d):
-    out = []
-    meta = {}
-    t = d.get("type")
-    p = d.get("payload")
-    if not isinstance(p, dict):
-        return out, meta
-    if t == "session_meta":
-        for k, key in (("session_id", "session_id"), ("cwd", "cwd")):
-            if p.get(k):
-                meta[key] = p[k]
-        if p.get("id"):
-            meta.setdefault("session_id", p["id"])
-        if p.get("agent_nickname"):
-            meta["title"] = p["agent_nickname"]
-        return out, meta
-    # event_msg replays what response_item already holds; compacted replays the
-    # whole conversation. Indexing either double-counts.
-    if t != "response_item":
-        return out, meta
-    pt = p.get("type")
-    if pt == "message":
-        role = p.get("role") or "user"
-        if role == "developer":
-            return out, meta  # injected system boilerplate, identical every session
-        c = p.get("content")
-        if isinstance(c, str):
-            s = _clip(c)
-            if s:
-                out.append((role, s))
-        elif isinstance(c, list):
-            for b in c:
-                if isinstance(b, dict) and b.get("type") in (
-                        "input_text", "output_text", "text"):
-                    s = _clip(b.get("text"))
-                    if s:
-                        out.append((role, s))
-    elif pt == "reasoning":
-        for b in (p.get("summary") or []):
-            if isinstance(b, dict):
-                s = _clip(b.get("text"))
-                if s:
-                    out.append(("thinking", s))
-        c = p.get("content")
-        if isinstance(c, list):
-            for b in c:
-                if isinstance(b, dict):
-                    s = _clip(b.get("text"))
-                    if s:
-                        out.append(("thinking", s))
-    elif pt in ("function_call", "custom_tool_call"):
-        s = _tool_text(p.get("name") or "tool",
-                       p.get("arguments") if p.get("arguments") is not None
-                       else p.get("input"))
-        if s:
-            out.append(("tool", s))
-    # *_output payloads are command output: deliberately not indexed.
-    return out, meta
-
-
-def slug_of(cwd):
-    return cwd.replace("/", "-") if cwd else ""
-
-
-def short_project(project):
-    if not project:
-        return "?"
-    s = project
-    for pre in ("-home-tom-code-client-", "-home-tom-code-", "-home-tom-"):
-        if s.startswith(pre):
-            s = s[len(pre):]
-            break
-    return s.lstrip("-") or "home"
-
-
-# ----------------------------------------------------------------- indexing
-
-def head_hash(path):
-    """Fingerprint of a fixed-length prefix, or None if the file is shorter.
-
-    The length must not depend on the file's size: hashing "as much as there
-    is" would change on every append and make each append look like a rewrite.
-    A file below the window is re-read in full instead, which costs nothing.
-    """
-    try:
-        with open(path, "rb") as fh:
-            b = fh.read(HEAD_BYTES)
-    except OSError:
-        return None
-    return hashlib.sha256(b).hexdigest() if len(b) == HEAD_BYTES else None
-
+# -------------------------------------------------------- shell: indexing
 
 class Source:
-    """A transcript opened for reading, compressed or not.
-
-    A `.zst` source is a decompressor pipe: it can only be read forward from
-    zero, so it is never resumed mid-file. That costs nothing, because a
-    compressed transcript is closed by definition and is read exactly once.
-    The head fingerprint is taken from the decompressed bytes, so it means the
-    same thing before and after a sweep.
-    """
+    """A transcript opened for forward reading; `.zst` goes through a pipe."""
 
     def __init__(self, disk, start):
-        self.proc = None
-        self._head = None
+        self.proc, self._head = None, None
         if disk.endswith(".zst"):
-            if start:
-                raise ValueError("a compressed transcript is read from zero")
-            self.proc = subprocess.Popen(
-                [ZSTD, "-dcq", "--", disk],
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            self.fh = self.proc.stdout
-            self._head = bytearray()
+            import subprocess
+            self.proc = subprocess.Popen([ZSTD, "-dcq", "--", disk],
+                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.fh, self._head = self.proc.stdout, bytearray()
         else:
             self.fh = open(disk, "rb", buffering=0)
             self.fh.seek(start)
+            try:
+                os.posix_fadvise(self.fh.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+            except (AttributeError, OSError):
+                pass
 
     def read(self, n):
         b = self.fh.read(n)
@@ -540,590 +609,633 @@ class Source:
         return b
 
     def head(self):
-        """Fingerprint of the logical head, or None if it was not captured."""
-        if self._head is None or len(self._head) < HEAD_BYTES:
-            return None
         return hashlib.sha256(bytes(self._head)).hexdigest()
 
-    def advise(self, flag):
-        try:
-            os.posix_fadvise(self.fh.fileno(), 0, 0, flag)
-        except (AttributeError, OSError):
-            pass
-
     def close(self):
-        """Close, returning False if a decompressor reported a bad archive."""
-        ok = True
-        if self.proc is not None:
-            self.fh.close()
-            ok = self.proc.wait() == 0
-        else:
-            self.fh.close()
-        return ok
+        self.fh.close()
+        return self.proc is None or self.proc.wait() == 0
 
 
-class StaleIndex(Exception):
-    """The index on disk was written by a different schema version."""
+def head_hash(path, n):
+    """Hash of the first n bytes: an append keeps it, a rewrite changes it."""
+    try:
+        with open(path, "rb") as fh:
+            b = fh.read(n)
+    except OSError:
+        return None
+    return hashlib.sha256(b).hexdigest() if len(b) == n else None
 
 
 def connect(readonly=False):
-    os.makedirs(STATE, exist_ok=True)
-    if readonly and os.path.exists(DB):
+    if readonly:
         con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
-        # A read-only connection cannot rebuild, and querying a foreign schema
-        # raises somewhere deep in a SELECT instead. Say what happened here,
-        # where the fix can be named.
-        try:
-            row = con.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
-        except sqlite3.DatabaseError:
-            row = None
-        if row is None or row[0] != SCHEMA_VERSION:
-            con.close()
-            raise StaleIndex(row[0] if row else "unknown")
     else:
+        os.makedirs(STATE, exist_ok=True)
         con = sqlite3.connect(DB)
-        con.executescript(SCHEMA)
-        row = con.execute("SELECT v FROM meta WHERE k='schema'").fetchone()
-        if row is None or row[0] != SCHEMA_VERSION:
-            # The index is a derived artefact: rebuilding is always correct and
-            # always cheaper than a migration nobody will test.
-            for stmt in ("DROP TABLE IF EXISTS ftx", "DROP TABLE IF EXISTS msg",
-                         "DROP TABLE IF EXISTS files"):
-                con.execute(stmt)
-            con.commit()
-            con.executescript(SCHEMA)
-            con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('schema',?)",
-                        (SCHEMA_VERSION,))
-            con.commit()
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA synchronous=NORMAL")
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE name = 'ftx'").fetchone():
+            con.executescript(f"BEGIN;{SCHEMA}COMMIT;")
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA synchronous=NORMAL")
     con.execute("PRAGMA temp_store=MEMORY")
     con.execute("PRAGMA cache_size=-64000")
     con.row_factory = sqlite3.Row
     return con
 
 
-class Progress:
-    def __init__(self, total_files, total_bytes, quiet=False):
-        self.tf, self.tb = total_files, total_bytes
-        self.f = self.b = self.m = 0
-        self.t0 = time.time()
-        self.last = 0.0
-        self.quiet = quiet or not sys.stderr.isatty()
-        self.ever = False
+def forget(con, fid):
+    """Drop a file's messages; texts it introduced move to their next occurrence."""
+    firsts = con.execute(
+        "SELECT m.id, m.body FROM msg m JOIN body b ON b.id = m.body AND b.first = m.id "
+        "WHERE m.file_id = ?", (fid,)).fetchall()
+    con.executemany("DELETE FROM ftx WHERE rowid = ?", [(r[0],) for r in firsts])
+    con.execute("DELETE FROM msg WHERE file_id = ?", (fid,))
+    for _, bid in firsts:
+        nxt = con.execute("SELECT MIN(id) FROM msg WHERE body = ?", (bid,)).fetchone()[0]
+        if nxt is None:
+            con.execute("DELETE FROM body WHERE id = ?", (bid,))
+        else:
+            con.execute("UPDATE body SET first = ? WHERE id = ?", (nxt, bid))
+            con.execute("UPDATE msg SET dup = 0 WHERE id = ?", (nxt,))
+            con.execute("INSERT INTO ftx(rowid, text) SELECT ?, text FROM body WHERE id = ?",
+                        (nxt, bid))
+    con.execute("UPDATE files SET off = 0, nline = 0, nmsg = 0 WHERE id = ?", (fid,))
 
-    def tick(self, force=False):
+
+def store(con, fid, pend, next_id):
+    """Insert pending (line, ts, role, tool, text); each distinct text is indexed once."""
+    hashed = [text_hash(p[4]) for p in pend]
+    known = {}
+    uniq = list({h for h, _ in hashed})
+    for i in range(0, len(uniq), 500):
+        part = uniq[i:i + 500]
+        known.update(con.execute(
+            f"SELECT h, id FROM body WHERE h IN ({','.join('?' * len(part))})", part))
+    msgs, bodies = [], []
+    for (line, ts, role, tool, _), (h, text) in zip(pend, hashed):
+        mid = next_id
+        next_id += 1
+        bid = known.get(h)
+        if bid is None:
+            bid = known[h] = mid
+            bodies.append((mid, h, mid, text))
+        msgs.append((mid, fid, line, ts, role, tool, bid, int(bid != mid)))
+    con.executemany("INSERT INTO msg(id, file_id, line, ts, role, tool, body, dup) "
+                    "VALUES(?,?,?,?,?,?,?,?)", msgs)
+    con.executemany("INSERT INTO body(id, h, first, text) VALUES(?,?,?,?)", bodies)
+    con.executemany("INSERT INTO ftx(rowid, text) VALUES(?,?)", [(b[0], b[3]) for b in bodies])
+    con.execute("INSERT OR REPLACE INTO meta(k, v) VALUES('next_id', ?)", (str(next_id),))
+    return next_id
+
+
+def same_inode(path, st):
+    try:
+        o = os.stat(path)
+    except OSError:
+        return False
+    return (o.st_dev, o.st_ino) == (st.st_dev, st.st_ino)
+
+
+def plan_refresh(con, roots):
+    """Return (todo, adopted): files to read and archives adopted without reading."""
+    cur = con.cursor()
+    cur.row_factory = None
+    known = {r[0]: r[1:] for r in cur.execute("SELECT path, dev, ino, dsize, zst, mtime FROM files")}
+    by_ino = {(v[0], v[1]): p for p, v in known.items()}
+    todo, adopted = [], 0
+    for path, disk, provider, account, hint, kind, st in discover(roots):
+        is_zst, v, alias = disk != path, known.get(path), path
+        if v is None:
+            alias = by_ino.get((st.st_dev, st.st_ino))
+            if alias is None or not same_inode(alias, st):
+                todo.append((path, disk, provider, account, hint, kind, st, None, False))
+                continue
+        elif (v[:4] == (st.st_dev, st.st_ino, st.st_size, int(is_zst))
+              and abs(st.st_mtime - (v[4] or 0)) < 1e-3):
+            continue
+        row = con.execute("SELECT id, path, dev, ino, size, dsize, zst, mtime, head, off, nline "
+                          "FROM files WHERE path = ?", (alias,)).fetchone()
+        if alias != path:
+            con.execute("UPDATE files SET path = ? WHERE id = ?", (path, row["id"]))
+        same = abs(st.st_mtime - (row["mtime"] or 0)) < 1e-3
+        if (bool(row["zst"]) == is_zst and row["ino"] == st.st_ino and row["dev"] == st.st_dev
+                and st.st_size == row["dsize"] and same):
+            continue
+        complete = row["size"] > 0 and row["off"] == row["size"]
+        if (is_zst != bool(row["zst"]) and complete and same
+                and (is_zst or st.st_size == row["size"])):
+            con.execute("UPDATE files SET zst=?, dev=?, ino=?, dsize=?, mtime=? WHERE id=?",
+                        (int(is_zst), st.st_dev, st.st_ino, st.st_size, st.st_mtime, row["id"]))
+            adopted += 1
+            continue
+        h = None if is_zst else head_hash(path, min(row["size"], HEAD_BYTES))
+        reset = (is_zst or row["ino"] != st.st_ino or row["dev"] != st.st_dev
+                 or st.st_size < row["off"] or st.st_size == row["dsize"]
+                 or h is None or h != row["head"])
+        todo.append((path, disk, provider, account, hint, kind, st, row, reset))
+    return todo, adopted
+
+
+def read_file(con, item, next_id, progress):
+    """Index one transcript from its last offset. Returns (next_id, added)."""
+    path, disk, provider, account, hint, kind, st, row, reset = item
+    is_zst = disk != path
+    if row is not None and reset:
+        forget(con, row["id"])
+    if row is None:
+        agent = None
+        if os.path.basename(os.path.dirname(path)) == "subagents":
+            agent = os.path.basename(path)[:-6].removeprefix("agent-")
+        fid = con.execute(
+            "INSERT INTO files(path, dev, ino, provider, account, project, agent) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (path, st.st_dev, st.st_ino, provider, account, hint, agent)).lastrowid
+        start = line_no = 0
+    else:
+        fid = row["id"]
+        start, line_no = (0, 0) if reset else (row["off"], row["nline"])
+    extract = extract_claude if kind == "claude" else extract_codex
+    meta, pend, added, first_ts, last_ts, off = {}, [], 0, None, None, start
+    try:
+        src = Source(disk, start)
+    except OSError:
+        return next_id, 0
+    try:
+        for ls, le, line in scan_lines(src, start):
+            line_no, off = line_no + 1, le
+            progress.b += le - ls
+            if line is None or not wanted(kind, line):
+                continue
+            try:
+                d = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(d, dict):
+                continue
+            msgs, mu = extract(d)
+            meta.update(mu)
+            ts = d.get("timestamp") if isinstance(d.get("timestamp"), str) else None
+            if ts:
+                first_ts, last_ts = first_ts or ts, ts
+            pend.extend((line_no, ts, role, tool, text) for role, text, tool in msgs)
+            if len(pend) >= BATCH:
+                next_id = store(con, fid, pend, next_id)
+                added += len(pend)
+                progress.m += len(pend)
+                save(con, fid, off, line_no, meta, hint, first_ts, last_ts, len(pend))
+                pend = []
+                con.commit()
+                progress.tick()
+        next_id = store(con, fid, pend, next_id)
+        added += len(pend)
+        progress.m += len(pend)
+        if not is_zst and st.st_size > 16 << 20:
+            try:
+                os.posix_fadvise(src.fh.fileno(), 0, 0, os.POSIX_FADV_DONTNEED)
+            except (AttributeError, OSError):
+                pass
+    finally:
+        intact = src.close()
+    if not intact:
+        forget(con, fid)
+        con.execute("UPDATE files SET size=0, dsize=0 WHERE id=?", (fid,))
+        con.commit()
+        sys.stderr.write(f"convo: unreadable archive, skipped: {disk}\n")
+        return next_id, 0
+    save(con, fid, off, line_no, meta, hint, first_ts, last_ts, len(pend))
+    con.execute(
+        "UPDATE files SET size=?, dsize=?, zst=?, mtime=?, head=?, dev=?, ino=? WHERE id=?",
+        (off if is_zst else st.st_size, st.st_size, int(is_zst), st.st_mtime,
+         src.head() if is_zst else head_hash(path, min(st.st_size, HEAD_BYTES)), st.st_dev, st.st_ino,
+         fid))
+    return next_id, added
+
+
+def save(con, fid, off, line_no, meta, hint, first_ts, last_ts, n):
+    """Checkpoint a file's offset with the metadata and count read up to it."""
+    con.execute(
+        "UPDATE files SET off=?, nline=?, "
+        "session_id=COALESCE(?, session_id), agent=COALESCE(?, agent), "
+        "title=COALESCE(?, title, ?), cwd=COALESCE(?, cwd), branch=COALESCE(?, branch), "
+        "project=COALESCE(NULLIF(?, ''), project), first_ts=COALESCE(first_ts, ?), "
+        "last_ts=COALESCE(?, last_ts), nmsg=nmsg+? WHERE id=?",
+        (off, line_no, meta.get("session_id"), meta.get("agent"), meta.get("title"),
+         meta.get("slug"), meta.get("cwd"), meta.get("branch"), slug(meta.get("cwd")) or hint,
+         first_ts, last_ts, n, fid))
+
+
+def slug(cwd):
+    return cwd.replace("/", "-") if cwd else ""
+
+
+class Progress:
+    def __init__(self, files, total, quiet):
+        self.tf, self.tb, self.f, self.b, self.m = files, total, 0, 0, 0
+        self.t0, self.last = time.time(), 0.0
+        self.on = not quiet and sys.stderr.isatty()
+
+    def tick(self):
         now = time.time()
-        if not force and now - self.last < 1.0:
+        if not self.on or now - self.last < 1.0:
             return
         self.last = now
-        el = now - self.t0
-        rate = self.b / el if el > 0 else 0
-        if self.quiet:
-            return
-        eta = ""
-        if rate > 0 and self.tb > self.b:
-            r = (self.tb - self.b) / rate
-            eta = f" eta {int(r // 60)}m{int(r % 60):02d}s"
-        sys.stderr.write(
-            f"\r\033[Kindexing {self.f}/{self.tf} files  "
-            f"{self.b / 1073741824:.1f}/{self.tb / 1073741824:.1f} GiB  "
-            f"{rate / 1048576:.0f} MiB/s  {self.m} msgs{eta}")
-        sys.stderr.flush()
-        self.ever = True
+        rate = self.b / max(now - self.t0, 1e-9)
+        eta = (self.tb - self.b) / rate if rate else 0
+        sys.stderr.write(f"\r\033[Kindexing {self.f}/{self.tf} files  "
+                         f"{self.b / 2**30:.1f}/{self.tb / 2**30:.1f} GiB  "
+                         f"{self.m} msgs  eta {int(eta // 60)}m{int(eta % 60):02d}s")
 
     def done(self):
-        if self.ever and not self.quiet:
+        if self.on:
             sys.stderr.write("\r\033[K")
-            sys.stderr.flush()
 
 
 def index(con, quiet=False, verbose=False):
-    """Incremental index pass. Returns (files_touched, msgs_added, bytes_read)."""
-    try:
-        os.nice(10)  # a cold build must not compete with the user's work
-    except OSError:
-        pass
-
+    """Incremental pass over every configured root. Returns (files, msgs, bytes)."""
     roots = transcript_roots()
-    reconciled_roots = json.dumps(
-        [{"root": root, "provider": provider, "account": account,
-          "layout": layout}
-         for root, provider, account, layout in roots],
-        sort_keys=True, separators=(",", ":"))
-
-    def record_reconciliation():
-        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_index',?)",
-                    (str(time.time()),))
-        con.execute("INSERT OR REPLACE INTO meta(k,v) VALUES('last_roots',?)",
-                    (reconciled_roots,))
-        con.commit()
-
-    known = {}
-    for r in con.execute(
-            "SELECT id,path,dev,ino,size,dsize,zst,mtime,head,off,nline "
-            "FROM files"):
-        known[r["path"]] = r
-
-    def adopt(row, st, zst):
-        """Record a new on-disk form of an already fully-indexed transcript."""
-        con.execute(
-            "UPDATE files SET zst=?,dev=?,ino=?,dsize=?,mtime=? WHERE id=?",
-            (1 if zst else 0, st.st_dev, st.st_ino, st.st_size,
-             st.st_mtime, row["id"]))
-
-    todo = []
-    total_new = 0
-    adopted = 0
-    for path, disk, provider, account, hint, kind in discover(roots):
-        try:
-            st = os.stat(disk)
-        except OSError:
-            continue
-        is_zst = disk != path
-        row = known.get(path)
-        if row is not None:
-            if (bool(row["zst"]) == is_zst
-                    and row["ino"] == st.st_ino and row["dev"] == st.st_dev
-                    and st.st_size == row["dsize"]
-                    and abs(st.st_mtime - (row["mtime"] or 0)) < 0.001):
-                continue  # untouched: not opened at all
-            # A transcript that was indexed to its last byte holds no more
-            # information, so changing how it is stored costs nothing: adopt
-            # the new form without re-reading it. This is what makes a sweep
-            # over the whole corpus free for the index rather than a rebuild.
-            complete = row["size"] > 0 and row["off"] == row["size"]
-            if is_zst != bool(row["zst"]) and complete:
-                if is_zst or st.st_size == row["size"]:
-                    adopt(row, st, is_zst)
-                    adopted += 1
-                    continue
-            if is_zst:
-                todo.append((path, disk, provider, account, hint, kind, st, row,
-                             True))
-                total_new += row["size"] or st.st_size
-                continue
-            # Size or mtime moved, so the file must be looked at. Anything but
-            # a pure append invalidates every byte offset already recorded for
-            # it, and a stale offset silently misattributes a message — so
-            # re-read from zero unless the head still matches.
-            h = head_hash(path)
-            reset = (row["ino"] != st.st_ino or row["dev"] != st.st_dev
-                     or st.st_size < row["off"]
-                     or h is None or h != row["head"])
-            todo.append((path, disk, provider, account, hint, kind, st, row,
-                         reset))
-            total_new += st.st_size if reset else max(0, st.st_size - row["off"])
-        else:
-            todo.append((path, disk, provider, account, hint, kind, st, None,
-                         False))
-            total_new += st.st_size
-
+    todo, adopted = plan_refresh(con, roots)
     if adopted:
         con.commit()
-    if not todo:
-        # A successful no-op pass is still a reconciliation checkpoint.  A
-        # query may rely on this marker to distinguish fresh emptiness from an
-        # index that has never observed the configured roots.
-        record_reconciliation()
-        return 0, 0, 0
-
-    prog = Progress(len(todo), total_new, quiet=quiet)
-    nmsg_total = 0
-    nbytes = 0
-    next_id = con.execute("SELECT COALESCE(MAX(id),0)+1 FROM msg").fetchone()[0]
-
-    for path, disk, provider, account, hint, kind, st, row, reset in todo:
-        extract = extract_claude if kind is CLAUDE else extract_openai
-        fid = row["id"] if row else None
-        is_zst = disk != path
-        start = 0 if (row is None or reset or is_zst) else row["off"]
-        line_no = 0 if (row is None or reset or is_zst) else row["nline"]
-
-        if reset and fid is not None:
-            con.execute(
-                "DELETE FROM ftx WHERE rowid IN "
-                "(SELECT id FROM msg WHERE file_id=?)", (fid,))
-            con.execute("DELETE FROM msg WHERE file_id=?", (fid,))
-            con.execute("UPDATE files SET off=0,nline=0,nmsg=0 WHERE id=?", (fid,))
-            con.commit()
-
-        if fid is None:
-            project = hint or ""
-            cur = con.execute(
-                "INSERT INTO files(path,dev,ino,size,mtime,off,nline,"
-                "provider,account,project) VALUES(?,?,?,?,?,0,0,?,?,?)",
-                (path, st.st_dev, st.st_ino, 0, 0.0, provider, account, project))
-            fid = cur.lastrowid
-
-        meta = {}
-        pend = []
-        added = 0
-        off = start
-        first_ts = None
-        last_ts = None
-        def flush(final_off):
-            # msg.id and ftx.rowid are the same number by construction — ids are
-            # assigned here rather than inferred from last_insert_rowid(), so a
-            # snippet can never be resolved against the wrong message.
-            nonlocal pend, added, next_id
-            if pend:
-                con.executemany(
-                    "INSERT INTO msg(id,file_id,line,off,blk,ts,role,content) "
-                    "VALUES(?,?,?,?,?,?,?,?)",
-                    [(next_id + i,) + p[0] + (p[1],)
-                     for i, p in enumerate(pend)])
-                con.executemany(
-                    "INSERT INTO ftx(rowid,text) VALUES(?,?)",
-                    [(next_id + i, p[1]) for i, p in enumerate(pend)])
-                next_id += len(pend)
-                added += len(pend)
-                pend = []
-            con.execute("UPDATE files SET off=?,nline=? WHERE id=?",
-                        (final_off, line_no, fid))
-            con.commit()
-
+    total = sum(it[6].st_size - (0 if it[7] is None or it[8] else it[7]["off"]) for it in todo)
+    if total > 64 << 20:
         try:
-            src = Source(disk, start)
-        except (OSError, ValueError):
-            continue
-        try:
-            src.advise(os.POSIX_FADV_SEQUENTIAL)
-            for ls, le, line in scan_lines(src, start):
-                line_no += 1
-                off = le
-                nbytes += le - ls
-                prog.b += le - ls
-                if line is None:
-                    continue
-                # Cheap Codex prefix reject: drops compaction replays, token
-                # counts, world_state and event_msg duplicates before parsing.
-                # Claude records carry their type anywhere in the line.
-                if kind is CODEX:
-                    head = line[:200]
-                    if (b"response_item" not in head
-                            and b"session_meta" not in head):
-                        continue
-                if not line.strip():
-                    continue
-                try:
-                    d = json.loads(line)
-                except Exception:
-                    continue
-                if not isinstance(d, dict):
-                    continue
-                msgs, mu = extract(d)
-                for k, v in mu.items():
-                    if v:
-                        meta[k] = v
-                ts = d.get("timestamp")
-                if isinstance(ts, str) and ts:
-                    if first_ts is None:
-                        first_ts = ts
-                    last_ts = ts
-                for i, (role, text) in enumerate(msgs):
-                    pend.append((
-                        (fid, line_no, ls, i, ts if isinstance(ts, str) else None,
-                         role), text))
-                if len(pend) >= COMMIT_EVERY:
-                    prog.m += len(pend)
-                    flush(off)
-                    prog.tick()
-            prog.m += len(pend)
-            flush(off)
-            src.advise(os.POSIX_FADV_DONTNEED)
-        finally:
-            intact = src.close()
-
-        if not intact:
-            # A truncated or corrupt archive would otherwise be recorded as a
-            # complete transcript and never looked at again. Drop what it gave
-            # us and leave the row untouched, so the next pass retries it.
-            con.execute(
-                "DELETE FROM ftx WHERE rowid IN "
-                "(SELECT id FROM msg WHERE file_id=?)", (fid,))
-            con.execute("DELETE FROM msg WHERE file_id=?", (fid,))
-            con.execute(
-                "UPDATE files SET off=0,nline=0,nmsg=0,size=0,dsize=0 WHERE id=?",
-                (fid,))
+            os.nice(10)
+        except OSError:
+            pass
+    progress = Progress(len(todo), total, quiet)
+    next_id = max(1 + con.execute("SELECT COALESCE(MAX(id), 0) FROM msg").fetchone()[0],
+                  1 + con.execute("SELECT COALESCE(MAX(id), 0) FROM body").fetchone()[0],
+                  int(con.execute("SELECT COALESCE(MAX(v), 0) FROM meta WHERE k = 'next_id'")
+                      .fetchone()[0]))
+    added = uncommitted = 0
+    for item in todo:
+        next_id, n = read_file(con, item, next_id, progress)
+        added, uncommitted = added + n, uncommitted + n
+        if uncommitted >= BATCH:
             con.commit()
-            sys.stderr.write(f"convo: unreadable archive, skipped: {disk}\n")
-            prog.f += 1
-            continue
-
-        project = meta.get("cwd") and slug_of(meta["cwd"]) or hint
-        con.execute(
-            # dev/ino are refreshed here and not only at insert: a transcript
-            # replaced by rename gets a new inode, and a row still naming the
-            # old one reports "changed" on every pass and re-reads forever.
-            "UPDATE files SET size=?,dsize=?,zst=?,mtime=?,head=?,dev=?,ino=?,"
-            "session_id=COALESCE(?,session_id),"
-            "title=COALESCE(?,title,?),cwd=COALESCE(?,cwd),"
-            "branch=COALESCE(?,branch),project=COALESCE(NULLIF(?,''),project),"
-            "first_ts=COALESCE(first_ts,?),last_ts=COALESCE(?,last_ts),"
-            "nmsg=nmsg+? WHERE id=?",
-            # For an archive the logical size is what we actually consumed:
-            # a trailing partial line is not a record and never will be one.
-            (off if is_zst else st.st_size, st.st_size, 1 if is_zst else 0,
-             st.st_mtime, src.head() if is_zst else head_hash(path),
-             st.st_dev, st.st_ino,
-             meta.get("session_id"),
-             meta.get("title"), meta.get("slug"), meta.get("cwd"),
-             meta.get("branch"), project, first_ts, last_ts, added, fid))
-        con.commit()
-        nmsg_total += added
-        prog.f += 1
-        if verbose and added:
-            sys.stderr.write(f"\r\033[K{added:6d} msgs  {path}\n")
-        prog.tick()
-
-    prog.tick(force=True)
-    prog.done()
-    record_reconciliation()
-    return len(todo), nmsg_total, nbytes
+            uncommitted = 0
+        progress.f += 1
+        if verbose and n:
+            sys.stderr.write(f"\r\033[K{n:6d} msgs  {item[0]}\n")
+        progress.tick()
+    progress.done()
+    con.execute("INSERT OR REPLACE INTO meta(k, v) VALUES('last_index', ?), ('last_roots', ?)",
+                (str(time.time()), json.dumps([r[0] for r in roots])))
+    con.commit()
+    return len(todo), added, progress.b
 
 
-def with_lock(fn, *a, **kw):
-    """Run fn holding the index lock; return None if another run holds it."""
+def refresh(quiet=False, verbose=False, wait=LOCK_WAIT_S, rebuild=False):
+    """Run an incremental pass under the index lock; None if the lock stayed busy."""
     os.makedirs(STATE, exist_ok=True)
     fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o644)
     try:
+        deadline = time.monotonic() + wait
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    return None
+                time.sleep(0.02)
+        for suffix in ("", "-wal", "-shm") if rebuild else ():
+            try:
+                os.unlink(DB + suffix)
+            except FileNotFoundError:
+                pass
+        con = connect()
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            return None
-        return fn(*a, **kw)
+            return index(con, quiet=quiet, verbose=verbose)
+        finally:
+            con.close()
     finally:
         os.close(fd)
 
 
-def refresh(con, quiet=False, verbose=False):
-    """Reconcile live roots, reporting whether the lock was acquired."""
-    result = with_lock(index, con, quiet=quiet, verbose=verbose)
-    return result is not None, result
+# ---------------------------------------------------------- shell: queries
+
+COLUMNS = ("m.id, m.file_id, m.line, m.ts, m.role, m.tool, m.body, {score} AS bm25, "
+           "f.session_id, f.agent, f.path, f.project, f.provider")
+FIRST_PASSING = ("WITH h AS MATERIALIZED (SELECT {columns} FROM ftx JOIN msg o ON o.id = ftx.rowid "
+                 "JOIN msg m ON m.body = o.body JOIN files f ON f.id = m.file_id WHERE {where}) "
+                 "SELECT MIN(id) AS id, file_id, line, ts, role, tool, body, bm25, session_id, "
+                 "agent, path, project, provider FROM h GROUP BY body ORDER BY bm25 LIMIT ?")
 
 
-# ------------------------------------------------------------------ search
+class Filters:
+    def __init__(self, args, now):
+        self.where, self.params = [], []
+        if args.role:
+            roles = [r.strip() for r in args.role.split(",") if r.strip()]
+            bad = [r for r in roles if r not in ROLES]
+            if bad:
+                raise ValueError(f"unknown role {bad[0]!r}: use {', '.join(ROLES)}")
+            self.add(f"m.role IN ({','.join('?' * len(roles))})", *roles)
+        if args.tool:
+            self.add("m.tool = ? COLLATE NOCASE", args.tool)
+        if args.project:
+            self.add("f.project LIKE ?", f"%{args.project}%")
+        if args.provider:
+            self.add("f.provider = ?", PROVIDERS[args.provider])
+        if args.since:
+            self.add("m.ts >= ?", parse_when(args.since, now))
+        if args.until:
+            self.add("m.ts < ?", parse_when(args.until, now))
+        if args.session:
+            sid = args.session.strip().lower().split("/")[-1].removeprefix("agent-")
+            self.add("m.file_id IN (SELECT id FROM files WHERE session_id LIKE ? "
+                     "OR agent LIKE ?)", sid + "%", sid + "%")
+        self.keep_calls = bool(args.role or args.tool)
+        self.session = bool(args.session)
 
-WORD = re.compile(r"[0-9A-Za-z_]+")
-
-
-def make_snippet(text, terms, width=220):
-    if not text:
-        return ""
-    flat = " ".join(text.split())
-    low = flat.lower()
-    pos = -1
-    for t in terms:
-        p = low.find(t)
-        if p >= 0 and (pos < 0 or p < pos):
-            pos = p
-    if pos < 0:
-        return flat[:width] + ("…" if len(flat) > width else "")
-    a = max(0, pos - width // 3)
-    b = min(len(flat), a + width)
-    s = flat[a:b]
-    return ("…" if a > 0 else "") + s + ("…" if b < len(flat) else "")
-
-
-def fts_query(args):
-    if args.exact:
-        esc = args.query.replace('"', '""')
-        return f'"{esc}"'
-    q = args.query.strip()
-    if args.all_terms:
-        toks = WORD.findall(q)
-        return " AND ".join(toks) if toks else q
-    return q
+    def add(self, clause, *params):
+        self.where.append(clause)
+        self.params.extend(params)
 
 
-def parse_since(s):
-    if not s:
-        return None
-    m = re.fullmatch(r"(\d+)([dwmy])", s.strip())
-    if m:
-        n = int(m.group(1))
-        days = {"d": 1, "w": 7, "m": 30, "y": 365}[m.group(2)] * n
-        return time.strftime("%Y-%m-%d", time.gmtime(time.time() - days * 86400))
-    return s
+def as_hits(con, rows):
+    texts = {}
+    ids = list({r["body"] for r in rows})
+    for i in range(0, len(ids), 500):
+        part = ids[i:i + 500]
+        texts.update(con.execute(
+            f"SELECT id, text FROM body WHERE id IN ({','.join('?' * len(part))})", part))
+    return [{"id": r["id"], "line": r["line"], "ts": r["ts"], "role": r["role"],
+             "tool": r["tool"], "bm25": r["bm25"], "session": r["session_id"] or r["path"],
+             "agent": r["agent"], "path": r["path"], "project": r["project"],
+             "text": texts.get(r["body"], "")} for r in rows]
 
 
-def cmd_search(con, args):
-    q = fts_query(args)
-    where = ["ftx MATCH ?"]
-    params = [q]
-    if args.project:
-        where.append("f.project LIKE ?")
-        params.append(f"%{args.project}%")
-    if args.role:
-        where.append("m.role = ?")
-        params.append(args.role)
-    since = parse_since(args.since)
-    if since:
-        where.append("m.ts >= ?")
-        params.append(since)
-    if args.session:
-        where.append("f.session_id = ?")
-        params.append(args.session)
-    sql = (
-        "SELECT m.id, m.line, m.content, m.ts, m.role, f.path, f.project, "
-        "f.session_id, f.title, f.provider, f.branch, bm25(ftx) AS rank "
-        "FROM ftx JOIN msg m ON m.id = ftx.rowid "
-        "JOIN files f ON f.id = m.file_id "
-        f"WHERE {' AND '.join(where)} ORDER BY rank LIMIT ?")
-    params.append(args.limit)
-    try:
-        rows = con.execute(sql, params).fetchall()
-    except sqlite3.OperationalError as e:
-        # People type questions, and a stray ':' or '(' is FTS5 syntax. Retry
-        # as a plain conjunction of words before giving up on them.
-        toks = WORD.findall(args.query)
-        if not toks:
-            sys.stderr.write(f"convo: bad query: {e}\n")
-            return 2
-        params[0] = " AND ".join(toks)
+def fetch(con, expr, flt, k, literal=None):
+    """Top k hits by bm25. A text is indexed at its first occurrence, so with
+    filters every occurrence is searched and the first one that passes is kept."""
+    text_of = "o.body" if flt.where else "m.body"
+    where = ["ftx MATCH ?"] + flt.where
+    if literal:
+        con.create_function("has_literal", 1, lambda t: literal in norm(t or ""),
+                            deterministic=True)
+        where.append(f"has_literal((SELECT text FROM body WHERE id = {text_of}))")
+    columns = COLUMNS.format(score="bm25(ftx)")
+    if flt.where:
+        sql = FIRST_PASSING.format(columns=columns, where=" AND ".join(where))
+    else:
+        sql = (f"SELECT {columns} FROM ftx JOIN msg m ON m.id = ftx.rowid "
+               f"JOIN files f ON f.id = m.file_id WHERE {' AND '.join(where)} "
+               "ORDER BY bm25 LIMIT ?")
+    return as_hits(con, con.execute(sql, [expr] + flt.params + [k]).fetchall())
+
+
+def recent(con, flt, k):
+    where = flt.where if flt.session else ["m.dup = 0"] + flt.where
+    sql = (f"SELECT {COLUMNS.format(score='0')} FROM msg m JOIN files f ON f.id = m.file_id "
+           f"WHERE {' AND '.join(where) or '1'} ORDER BY m.ts DESC LIMIT ?")
+    return as_hits(con, con.execute(sql, flt.params + [k]).fetchall())
+
+
+def session_info(con, sessions):
+    """Per session: title, project and provider, preferring the main transcript."""
+    keys = [s for s in sessions if s]
+    info = {}
+    for i in range(0, len(keys), 500):
+        part = keys[i:i + 500]
+        for r in con.execute(
+                "SELECT session_id, title, project, provider, agent FROM files "
+                f"WHERE session_id IN ({','.join('?' * len(part))}) "
+                "ORDER BY agent IS NOT NULL, nmsg DESC", part):
+            d = info.setdefault(r["session_id"], {
+                "project": r["project"], "provider": PROVIDER_NAME.get(r["provider"], r["provider"])})
+            d.setdefault("title", None)
+            if not d["title"] and r["title"]:
+                d["title"] = r["title"]
+    return info
+
+
+def self_sessions():
+    return frozenset(v for v in (os.environ.get("CLAUDE_CODE_SESSION_ID"),
+                                 os.environ.get("CODEX_THREAD_ID")) if v)
+
+
+def gather(con, expr, flt, terms, mine, literal=None, coverage=False):
+    """Hits and ranked sessions; widens the candidate set while it is full and
+    every candidate was dropped, so a miss is never an artefact of the limit."""
+    k = CANDIDATES
+    while True:
+        hits = fetch(con, expr, flt, k, literal)
+        groups = rank_sessions(hits, terms, mine, flt.keep_calls, coverage)
+        if groups or len(hits) < k:
+            return hits, groups
+        k *= 8
+
+
+def cmd_search(con, args, pal):
+    now = time.time()
+    flt = Filters(args, now)
+    mine = self_sessions()
+    text = " ".join(args.query)
+    if not text.strip():
+        return emit_messages(con, recent(con, flt, args.limit or 20), [], args, pal, False)
+    plan = plan_query(text, exact=args.exact, strict=args.all_terms)
+    if plan is None:
+        sys.stderr.write("convo: the query has no searchable words\n")
+        return 2
+    hits, groups, partial = [], [], False
+    for expr in plan.match:
         try:
-            rows = con.execute(sql, params).fetchall()
-        except sqlite3.OperationalError as e2:
-            sys.stderr.write(f"convo: bad query: {e2}\n")
-            return 2
-    if not rows:
-        print(f"no matches for {q}")
+            hits, groups = gather(con, expr, flt, plan.terms, mine,
+                                  plan.literal and norm(plan.literal))
+            break
+        except sqlite3.OperationalError:
+            continue
+    limit = args.limit or (20 if args.messages else 10)
+    if len(groups) < RELAX_BELOW and plan.partial:
+        known = {g["session"] for g in groups}
+        loose, extra = gather(con, plan.partial, flt, plan.terms, mine, coverage=True)
+        extra = [g for g in extra if g["session"] not in known]
+        for g in extra:
+            g["partial"] = True
+        groups = sorted(groups + extra, key=lambda g: g["session"] in mine)
+        if not hits:
+            hits, partial = loose, True
+    if not groups:
+        print(f"no matches for {text!r}" + (" with these filters" if flt.where else ""))
         return 1
-    terms = [t.lower() for t in WORD.findall(args.query)] or [args.query.lower()]
-    # The snippet comes from the index, never from the transcript: rendering a
-    # page of results opens no files at all, so the sources are free to be
-    # compressed or archived.
-    out = [(r, make_snippet(r["content"], terms)) for r in rows]
+    if args.messages:
+        return emit_messages(con, rank_messages(hits, mine, flt.keep_calls, plan.terms)[:limit],
+                             plan.terms, args, pal, partial)
+    groups = groups[:limit]
+    infos = session_info(con, [g["session"] for g in groups])
     if args.json:
-        print(json.dumps([{
-            "ts": r["ts"], "role": r["role"], "project": r["project"],
-            "session": r["session_id"], "title": r["title"],
-            "path": r["path"], "line": r["line"], "snippet": s,
-        } for r, s in out], indent=1))
-        return 0
-    for i, (r, s) in enumerate(out, 1):
-        ts = (r["ts"] or "")[:16].replace("T", " ")
-        title = r["title"] or ""
-        sid = (r["session_id"] or "")[:8]
-        print(f"{C.dim}{i:3d}.{C.off} {C.bold}{ts}{C.off}  "
-              f"{C.cyan}{short_project(r['project']):<22}{C.off} "
-              f"{C.dim}{sid}{C.off}  {title}")
-        print(f"     {C.yellow}{r['role']}{C.off} · {s}")
-        print(f"     {C.dim}{r['path']}:{r['line']}{C.off}")
+        print_json([dict(as_json(g["best"], infos.get(g["session"], {}), plan.terms,
+                                 g["hits"], args.full), partial=g.get("partial", False))
+                    for g in groups])
+    else:
+        print("\n".join(render_sessions(groups, infos, plan.terms, pal, args.full)))
     return 0
 
 
-def cmd_session(con, args):
-    sid = args.id.strip().lower()
+def print_json(rows):
+    print("[\n" + ",\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n]")
+
+
+def emit_messages(con, hits, terms, args, pal, partial):
+    if not hits:
+        print("no messages match these filters")
+        return 1
+    infos = session_info(con, [h["session"] for h in hits])
+    if args.json:
+        print_json([dict(as_json(h, infos.get(h["session"], {}), terms, full=args.full),
+                         partial=partial) for h in hits])
+    else:
+        print("\n".join(render_messages(hits, infos, terms, pal, args.full, partial)))
+    return 0
+
+
+def cmd_show(con, args, pal):
+    rc, rows = 0, []
+    for ref in args.query:
+        mid = int(re.sub(r"\D", "", ref) or 0)
+        r = con.execute(
+            "SELECT m.id, m.file_id, m.line, m.ts, m.role, m.tool, b.text, f.session_id, "
+            "f.agent, f.path, f.project, f.title, f.provider FROM msg m "
+            "JOIN body b ON b.id = m.body JOIN files f ON f.id = m.file_id WHERE m.id = ?",
+            (mid,)).fetchone()
+        if r is None:
+            sys.stderr.write(f"convo: no message {ref}\n")
+            rc = 1
+            continue
+        h = dict(r)
+        if args.json:
+            h["session"] = h["session_id"] or h["path"]
+            info = {"title": h["title"], "project": h["project"],
+                    "provider": PROVIDER_NAME.get(h["provider"], h["provider"])}
+            rows.append(as_json(h, info, [], full=True))
+            continue
+        text = h["text"][:SHOW_CAP if not args.full else TEXT_CAP]
+        agent = f" · agent {h['agent']}" if h["agent"] else ""
+        print(f"{pal.bold}{h['session_id']}{pal.off}{agent} · "
+              f"{pal.cyan}{short_project(h['project'])}{pal.off} · {h['title'] or ''} · "
+              f"{PROVIDER_NAME.get(h['provider'], h['provider'])}")
+        print(f"{stamp(h['ts'])}  {pal.yellow}{who(h)}{pal.off}  [{h['id']}]  "
+              f"{pal.dim}{h['path']}:{h['line']}{pal.off}")
+        print(text)
+        if len(h["text"]) > len(text):
+            print(f"{pal.dim}… {len(h['text']) - len(text)} more chars (--full){pal.off}")
+        ctx = args.context
+        if ctx:
+            near = con.execute(
+                "SELECT * FROM (SELECT m.id, m.line, m.ts, m.role, m.tool, b.text FROM msg m "
+                "JOIN body b ON b.id = m.body WHERE m.file_id = ? AND (m.line, m.id) < (?, ?) "
+                "ORDER BY m.line DESC, m.id DESC LIMIT ?) UNION ALL "
+                "SELECT * FROM (SELECT m.id, m.line, m.ts, m.role, m.tool, b.text FROM msg m "
+                "JOIN body b ON b.id = m.body WHERE m.file_id = ? AND (m.line, m.id) > (?, ?) "
+                "ORDER BY m.line, m.id LIMIT ?)",
+                (h["file_id"], h["line"], h["id"], ctx) * 2).fetchall()
+            near.sort(key=lambda n: (n["line"], n["id"]))
+            print(f"{pal.dim}context{pal.off}")
+            for n in near:
+                n = dict(n)
+                mark = "↑" if (n["line"], n["id"]) < (h["line"], h["id"]) else "↓"
+                print(f"  {mark} [{n['id']}] {stamp(n['ts'])[11:]}  {pal.yellow}{who(n)}{pal.off} · "
+                      f"{snippet(n['text'], [], 150)}")
+    if args.json:
+        print_json(rows)
+    return rc
+
+
+def cmd_session(con, args, pal):
+    sid = args.query[0].strip().lower().split("/")[-1].removeprefix("agent-")
     rows = con.execute(
-        "SELECT * FROM files WHERE session_id = ? OR path LIKE ? "
-        "ORDER BY nmsg DESC, first_ts", (sid, f"%{sid}%")).fetchall()
-    # Sidecars (workflow journals, empty spool files) carry the id in their
-    # path but hold no conversation; they are noise unless asked for.
-    empty = [r for r in rows if not r["nmsg"]]
-    if not getattr(args, "verbose", False):
-        rows = [r for r in rows if r["nmsg"]]
+        "SELECT * FROM files WHERE session_id LIKE ? OR agent LIKE ? "
+        "ORDER BY agent IS NOT NULL, first_ts", (sid + "%", sid + "%")).fetchall()
+    sessions = {r["session_id"] for r in rows}
+    if len(sessions) > 1:
+        print(f"{sid} matches {len(sessions)} sessions; give more characters:")
+        for s in sorted(sessions, key=str)[:args.limit or 20]:
+            print(f"  {s}")
+        return 0
+    live = [r for r in rows if r["nmsg"]]
+    shown = rows if args.verbose else live
+    limit = args.limit or 20
+    if shown:
+        full = rows[0]["session_id"]
+        print(f"{pal.bold}{full}{pal.off}  {len(live)} transcripts")
+        main = next((r for r in rows if not r["agent"] and r["nmsg"]), None)
+        if main is not None:
+            ask = con.execute(
+                "SELECT b.text FROM msg m JOIN body b ON b.id = m.body "
+                "WHERE m.file_id = ? AND m.role = 'user' ORDER BY m.line LIMIT 1",
+                (main["id"],)).fetchone()
+            if ask:
+                print(f"  ask · {snippet(ask[0], [], 200)}")
+        for r in shown[:limit]:
+            span = f"{stamp(r['first_ts'])} → {stamp(r['last_ts'])[11:]}"
+            agent = f"agent {r['agent'][:12]}  " if r["agent"] else ""
+            print(f"  {pal.cyan}{short_project(r['project'])}{pal.off}  {span}  "
+                  f"{r['nmsg']} msgs  {agent}{r['title'] or ''}")
+            print(f"    {pal.dim}{r['path']}{pal.off}")
+        if len(shown) > limit:
+            print(f"  {pal.dim}… {len(shown) - limit} more (-n){pal.off}")
+        if len(rows) > len(live) and not args.verbose:
+            print(f"  {pal.dim}({len(rows) - len(live)} files without messages; -v lists them){pal.off}")
     mentions = []
-    try:
-        esc = sid.replace('"', '""')
-        mentions = con.execute(
-            "SELECT m.line, m.ts, m.role, f.path, f.project, f.session_id, "
-            "f.title FROM ftx JOIN msg m ON m.id = ftx.rowid "
-            "JOIN files f ON f.id = m.file_id "
-            "WHERE ftx MATCH ? LIMIT ?", (f'"{esc}"', args.limit)).fetchall()
-    except sqlite3.OperationalError:
-        pass
-    if not rows and not mentions:
+    if len(sid) >= 6:
+        try:
+            mentions = con.execute(
+                "SELECT f.session_id, COUNT(*) n, MAX(m.ts) last FROM ftx "
+                "JOIN msg m ON m.id = ftx.rowid JOIN files f ON f.id = m.file_id "
+                "WHERE ftx MATCH ? AND COALESCE(f.session_id, '') NOT LIKE ? "
+                "GROUP BY f.session_id ORDER BY last DESC LIMIT ?",
+                (quote(sid), sid + "%", limit)).fetchall()
+        except sqlite3.OperationalError:
+            pass
+    if not shown and not mentions:
         print(f"no transcript or mention found for {sid}")
         return 1
-    if rows:
-        print(f"{C.bold}transcripts owned by {sid}{C.off}")
-        for r in rows[:args.limit]:
-            span = f"{(r['first_ts'] or '')[:16]} → {(r['last_ts'] or '')[:16]}"
-            print(f"  {C.cyan}{short_project(r['project']):<22}{C.off} "
-                  f"{span.replace('T', ' ')}  {r['nmsg']} msgs  "
-                  f"{r['title'] or ''}")
-            print(f"    {C.dim}{r['path']}{C.off}")
-        if len(rows) > args.limit:
-            print(f"  {C.dim}… {len(rows) - args.limit} more{C.off}")
-        if empty:
-            print(f"  {C.dim}({len(empty)} sidecar file(s) with no "
-                  f"conversation; -v to list){C.off}")
     if mentions:
-        print(f"\n{C.bold}mentioned in {len(mentions)} indexed message(s){C.off}")
+        print(f"{pal.bold}mentioned in {len(mentions)} other session(s){pal.off}")
         for r in mentions:
-            ts = (r["ts"] or "")[:16].replace("T", " ")
-            print(f"  {ts}  {C.cyan}{short_project(r['project']):<22}{C.off}"
-                  f"{r['role']:<10} {C.dim}{r['path']}:{r['line']}{C.off}")
+            print(f"  {(r['session_id'] or '?')[:8]}  {stamp(r['last'])}  {r['n']} msgs")
     return 0
 
 
-def cmd_status(con, args):
-    f = con.execute(
-        "SELECT COUNT(*) n, SUM(size) b, SUM(dsize) d, SUM(nmsg) m, "
-        "SUM(zst) z FROM files").fetchone()
-    size = os.path.getsize(DB) if os.path.exists(DB) else 0
-    wal = DB + "-wal"
-    if os.path.exists(wal):
-        size += os.path.getsize(wal)
-    last = con.execute("SELECT v FROM meta WHERE k='last_index'").fetchone()
-    roots = con.execute("SELECT v FROM meta WHERE k='last_roots'").fetchone()
+def cmd_status(con, args, pal):
+    f = con.execute("SELECT COUNT(*) n, SUM(size) b, SUM(dsize) d, SUM(nmsg) m, SUM(zst) z "
+                    "FROM files").fetchone()
+    texts = con.execute("SELECT COUNT(*) FROM body").fetchone()[0]
+    size = sum(os.path.getsize(DB + s) for s in ("", "-wal") if os.path.exists(DB + s))
+    meta = dict(con.execute("SELECT k, v FROM meta").fetchall())
     logical, disk = f["b"] or 0, f["d"] or 0
-    print(f"index    {DB}")
-    print(f"size     {size / 1048576:.1f} MiB")
-    print(f"corpus   {logical / 1073741824:.1f} GiB in {f['n']} transcripts")
-    print(f"on disk  {disk / 1073741824:.1f} GiB  ({f['z'] or 0} compressed"
-          + (f", {logical / disk:.2f}x)" if disk else ")"))
-    print(f"messages {f['m'] or 0}")
-    if last:
-        age = time.time() - float(last["v"])
-        print(f"updated  {age:.0f}s ago")
-    if roots:
-        try:
-            print(f"roots    {len(json.loads(roots['v']))} reconciled")
-        except (TypeError, ValueError):
-            print("roots    unknown")
-    print(f"ratio    {100 * size / (f['b'] or 1):.2f}% of corpus bytes")
-    top = con.execute(
-        "SELECT project, SUM(nmsg) m FROM files GROUP BY project "
-        "ORDER BY m DESC LIMIT 8").fetchall()
-    print("\ntop projects")
-    for r in top:
+    print(f"index    {DB}  {size / 2**20:.1f} MiB")
+    print(f"corpus   {logical / 2**30:.1f} GiB in {f['n']} transcripts, "
+          f"{disk / 2**30:.1f} GiB on disk ({f['z'] or 0} compressed)")
+    print(f"messages {f['m'] or 0} ({texts} distinct texts)")
+    if "last_index" in meta:
+        print(f"updated  {time.time() - float(meta['last_index']):.0f}s ago")
+    if "last_roots" in meta:
+        print(f"roots    {len(json.loads(meta['last_roots']))} reconciled")
+    print("top projects")
+    for r in con.execute("SELECT project, SUM(nmsg) m FROM files GROUP BY project "
+                         "ORDER BY m DESC LIMIT 8"):
         print(f"  {short_project(r['project']):<28} {r['m']}")
     return 0
 
 
-# ------------------------------------------------------------- compression
+# ------------------------------------------------------- shell: compression
 
-UUID_RE = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
+UUID_RE = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
 
 class Unsafe(Exception):
-    """Raised when closure cannot be proven. Never caught to continue a file."""
+    """Closure cannot be proven. Never caught to continue a file."""
 
 
 def open_files():
-    """(paths, unseen): every transcript held open by a running process.
+    """(paths, unseen, others): transcripts any process holds open, read from /proc.
 
-    Reads /proc directly rather than shelling out, because the answer has to
-    be exact: this set is the difference between compressing a dead transcript
-    and corrupting a live session.
-
-    `unseen` is the honest hole: the names of THIS USER's processes that have
-    marked themselves non-dumpable — ssh-agent, sd-pam, a setuid helper — and
-    so hide their fd table from their own owner. No tool on the machine sees
-    past that, lsof included. They are named in the sweep's report rather than
-    assumed empty. Other users' hidden processes are counted, not named: they
-    are ordinary system noise, hundreds of them, and a line nobody reads is
-    not a safety check. The age window and the post-compression re-stat are
-    what actually stand between any of them and a lost write.
+    `unseen` names this user's non-dumpable processes, whose fd tables no tool
+    can read; other users' hidden processes are only counted.
     """
-    live = set()
-    unseen = []
-    others = 0
-    me = os.getuid()
+    live, unseen, others, me = set(), [], 0, os.getuid()
     for pid in os.listdir("/proc"):
         if not pid.isdigit():
             continue
@@ -1131,7 +1243,7 @@ def open_files():
         try:
             names = os.listdir(fdd)
         except FileNotFoundError:
-            continue  # the process exited between listing and reading
+            continue
         except OSError:
             if pid_uid(pid) == me:
                 unseen.append(pid_comm(pid))
@@ -1140,13 +1252,10 @@ def open_files():
             continue
         for n in names:
             try:
-                t = os.readlink(os.path.join(fdd, n))
+                t = os.readlink(os.path.join(fdd, n)).removesuffix(" (deleted)")
             except OSError:
                 continue
-            if t.endswith(" (deleted)"):
-                t = t[:-10]
-            if t.startswith("/") and (t.endswith(".jsonl")
-                                      or t.endswith(".jsonl.zst")):
+            if t.startswith("/") and (t.endswith(".jsonl") or t.endswith(".jsonl.zst")):
                 live.add(t)
     return live, unseen, others
 
@@ -1171,12 +1280,9 @@ def pid_uid(pid):
 
 
 def coordinator_ids():
-    """Session ids the coordinator currently accounts for.
-
-    A failure here is fatal to the sweep. The roster is one of the two pieces
-    of positive evidence that a transcript is closed; without it there is no
-    safe file, only unexamined ones.
-    """
+    """Session ids the coordinator accounts for; failure aborts the sweep."""
+    import shlex
+    import subprocess
     cmd = shlex.split(os.environ.get("CONVO_ROSTER_CMD", "north agents --json"))
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
@@ -1184,25 +1290,18 @@ def coordinator_ids():
         raise Unsafe(f"could not ask the coordinator which sessions are live: {e}")
     if r.returncode != 0:
         raise Unsafe("the coordinator refused to report live sessions: "
-                     + (r.stderr.strip().splitlines() or ["exit "
-                        + str(r.returncode)])[-1])
+                     + (r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[-1])
     try:
         d = json.loads(r.stdout)
-    except Exception as e:
+    except ValueError as e:
         raise Unsafe(f"the coordinator roster was not readable JSON: {e}")
-    if d.get("version") != "north:agent-roster:v1" or not isinstance(
-            d.get("agents"), list):
+    if d.get("version") != "north:agent-roster:v1" or not isinstance(d.get("agents"), list):
         raise Unsafe("the coordinator roster is not north:agent-roster:v1")
-    ids = set()
-    for row in d["agents"]:
-        if isinstance(row, dict):
-            for v in row.values():
-                if isinstance(v, str):
-                    ids.update(m.lower() for m in UUID_RE.findall(v))
-    return ids
+    return {m.lower() for row in d["agents"] if isinstance(row, dict)
+            for v in row.values() if isinstance(v, str) for m in UUID_RE.findall(v)}
 
 
-def fsync_dir(path):
+def fsync_path(path):
     fd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(fd)
@@ -1211,29 +1310,24 @@ def fsync_dir(path):
 
 
 def round_trips(archive, original):
-    """True when decompressing `archive` reproduces `original` byte for byte."""
-    d = subprocess.Popen([ZSTD, "-dcq", "--", archive],
-                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    import subprocess
+    d = subprocess.Popen([ZSTD, "-dcq", "--", archive], stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL)
     try:
-        c = subprocess.Popen(["cmp", "-s", "-", "--", original],
-                             stdin=d.stdout, stderr=subprocess.DEVNULL)
+        c = subprocess.Popen(["cmp", "-s", "-", "--", original], stdin=d.stdout,
+                             stderr=subprocess.DEVNULL)
     finally:
         d.stdout.close()
     return c.wait() == 0 and d.wait() == 0
 
 
 def compress_one(path, st):
-    """Replace `path` with `path`.zst. Returns the archive's size.
-
-    Order is: write, verify, prove the source never moved, publish, unlink.
-    An interruption anywhere leaves the original in place — the source is only
-    ever removed after its replacement has been read back and matched.
-    """
+    """Write, verify, prove the source never moved, publish, then unlink."""
+    import subprocess
     dst = path + ".zst"
     tmp = f"{dst}.tmp{os.getpid()}"
     try:
         if os.path.exists(dst) and round_trips(dst, path):
-            # A previous run was interrupted after publishing the archive.
             os.unlink(path)
             return os.path.getsize(dst)
         r = subprocess.run([ZSTD, *ZSTD_ARGS, "-q", "-f", "-o", tmp, "--", path],
@@ -1246,18 +1340,12 @@ def compress_one(path, st):
         if (now.st_ino, now.st_dev, now.st_size, now.st_mtime) != (
                 st.st_ino, st.st_dev, st.st_size, st.st_mtime):
             raise Unsafe("the transcript was written during compression")
-        fd = os.open(tmp, os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
-        # The archive stands in for the transcript, so it carries its mtime:
-        # everything that reasons about session age keeps working.
+        fsync_path(tmp)
         os.utime(tmp, (st.st_atime, st.st_mtime))
         os.replace(tmp, dst)
-        fsync_dir(os.path.dirname(path))
+        fsync_path(os.path.dirname(path))
         os.unlink(path)
-        fsync_dir(os.path.dirname(path))
+        fsync_path(os.path.dirname(path))
         return os.path.getsize(dst)
     finally:
         try:
@@ -1266,125 +1354,84 @@ def compress_one(path, st):
             pass
 
 
-def projected(size):
-    for floor, ratio in BAND_RATIOS:
-        if size >= floor:
-            return size / ratio
-    return size
-
-
 def gib(n):
-    return f"{n / 1073741824:.2f} GiB"
+    return f"{n / 2**30:.2f} GiB"
 
 
-def cmd_compress(args):
-    root_note = f"{C.dim}{', '.join(r[0] for r in transcript_roots())}{C.off}"
+def cmd_compress(args, pal):
+    roots = transcript_roots()
     cutoff = time.time() - args.older_than * 3600
-    live, unseen, hidden_others = open_files()
+    live, unseen, hidden = open_files()
     roster = coordinator_ids()
-
-    eligible = []
-    skip_open = skip_live = skip_hot = index_only = 0
-    warm_bytes = 0
-    total = 0
-    for path, disk, _prov, _acct, _hint, kind in discover():
+    eligible, total, index_only = [], 0, 0
+    skip_open = skip_live = skip_hot = warm = 0
+    for path, disk, _p, _a, _h, kind, st in discover(roots):
         if disk != path:
-            continue  # already an archive
-        if not kind[1]:
+            continue
+        if kind == "claude":
             index_only += 1
             continue
         total += 1
-        try:
-            st = os.stat(path)
-        except OSError:
-            continue
         if path in live or path + ".zst" in live:
             skip_open += 1
-            continue
-        if any(sid in path.lower() for sid in roster):
+        elif any(sid in path.lower() for sid in roster):
             skip_live += 1
-            continue
-        if st.st_mtime > cutoff:
-            skip_hot += 1
-            warm_bytes += st.st_size
-            continue
-        eligible.append((path, st))
-
+        elif st.st_mtime > cutoff:
+            skip_hot, warm = skip_hot + 1, warm + st.st_size
+        else:
+            eligible.append((path, st))
     eligible.sort(key=lambda e: -e[1].st_size)
-    if args.max_files:
-        eligible = eligible[:args.max_files]
+    eligible = eligible[:args.max_files] if args.max_files else eligible
     ebytes = sum(st.st_size for _, st in eligible)
-
-    print(f"corpus     {total} uncompressed transcripts under {root_note}")
-    print(f"never      {index_only} Claude transcripts (index-only roots)")
+    print(f"corpus     {total} uncompressed transcripts under "
+          f"{pal.dim}{', '.join(r[0] for r in roots)}{pal.off}")
+    print(f"never      {index_only} Claude transcripts (index-only)")
     print(f"eligible   {len(eligible)} files  {gib(ebytes)}  "
-          f"(untouched for {args.older_than}h, no open fd, not on the roster)")
-    print(f"held back  {skip_hot} still warm ({gib(warm_bytes)}) · "
-          f"{skip_open} open by a process · "
+          f"(untouched for {args.older_than:g}h, no open fd, not on the roster)")
+    print(f"held back  {skip_hot} still warm ({gib(warm)}) · {skip_open} open by a process · "
           f"{skip_live} named by a coordinator lane")
     if unseen:
         names = sorted(set(unseen))
-        shown = ", ".join(names[:6]) + (f", +{len(names) - 6}" if len(names) > 6
-                                        else "")
-        print(f"unseen     {len(unseen)} of this user's processes hide their "
-              f"open files from every tool ({shown})")
-    if hidden_others:
-        print(f"           {hidden_others} more belong to other users")
+        print(f"unseen     {len(unseen)} of this user's processes hide their open files "
+              f"({', '.join(names[:6])}{f', +{len(names) - 6}' if len(names) > 6 else ''})")
+    if hidden:
+        print(f"           {hidden} more belong to other users")
     if not eligible:
         return 0
     if args.dry_run:
-        after = sum(projected(st.st_size) for _, st in eligible)
-        print(f"projected  {gib(ebytes)} → {gib(after)}  "
-              f"saving {gib(ebytes - after)} "
+        after = sum(next(st.st_size / r for floor, r in BAND_RATIOS if st.st_size >= floor)
+                    for _, st in eligible)
+        print(f"projected  {gib(ebytes)} → {gib(after)}  saving {gib(ebytes - after)} "
               f"({ebytes / after:.2f}x, from measured band ratios)")
         return 0
-
-    t0 = time.time()
-    done = failed = 0
-    was = after = 0
+    t0, done, failed, was, after = time.time(), 0, 0, 0, 0
     for i, (path, st) in enumerate(eligible, 1):
         try:
             after += compress_one(path, st)
-            was += st.st_size
-            done += 1
-        except Unsafe as e:
-            failed += 1
-            sys.stderr.write(f"convo: left alone: {path}: {e}\n")
-        except OSError as e:
+            was, done = was + st.st_size, done + 1
+        except (Unsafe, OSError) as e:
             failed += 1
             sys.stderr.write(f"convo: left alone: {path}: {e}\n")
         if not args.quiet and sys.stderr.isatty():
-            sys.stderr.write(f"\r\033[Kcompressing {i}/{len(eligible)}  "
-                             f"{gib(after)} written")
-            sys.stderr.flush()
+            sys.stderr.write(f"\r\033[Kcompressing {i}/{len(eligible)}  {gib(after)} written")
     if not args.quiet and sys.stderr.isatty():
         sys.stderr.write("\r\033[K")
-    print(f"compressed {done} files  {gib(was)} → {gib(after)}  "
-          f"saving {gib(was - after)}"
-          + (f" ({was / after:.2f}x)" if after else "")
-          + f"  in {time.time() - t0:.0f}s")
+    print(f"compressed {done} files  {gib(was)} → {gib(after)}  saving {gib(was - after)}"
+          + (f" ({was / after:.2f}x)" if after else "") + f"  in {time.time() - t0:.0f}s")
     if failed:
-        print(f"{C.yellow}left alone {failed} file(s) — see above{C.off}")
+        print(f"{pal.yellow}left alone {failed} file(s); see above{pal.off}")
     return 0
 
 
-def cmd_restore(args):
-    """Turn `.jsonl.zst` back into `.jsonl`.
-
-    zstd frames carry a content checksum that `-d` verifies, so a decompression
-    that exits zero is the integrity proof here; the archive is only unlinked
-    after the transcript is back on disk and synced.
-    """
+def cmd_restore(args, pal):
+    """Turn `.jsonl.zst` back into `.jsonl`; zstd's frame checksum proves integrity."""
+    import subprocess
     rc = 0
     for name in args.query:
-        logical = name[:-4] if name.endswith(".jsonl.zst") else name
+        logical = name.removesuffix(".zst")
         src = logical + ".zst"
-        if not os.path.exists(src):
-            sys.stderr.write(f"convo: no archive at {src}\n")
-            rc = 1
-            continue
-        if os.path.exists(logical):
-            sys.stderr.write(f"convo: {logical} already exists\n")
+        if not os.path.exists(src) or os.path.exists(logical):
+            sys.stderr.write(f"convo: {'no archive at ' + src if not os.path.exists(src) else logical + ' already exists'}\n")
             rc = 1
             continue
         tmp = f"{logical}.tmp{os.getpid()}"
@@ -1397,15 +1444,11 @@ def cmd_restore(args):
                 continue
             st = os.stat(src)
             os.utime(tmp, (st.st_atime, st.st_mtime))
-            fd = os.open(tmp, os.O_RDONLY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
+            fsync_path(tmp)
             os.replace(tmp, logical)
-            fsync_dir(os.path.dirname(logical))
+            fsync_path(os.path.dirname(logical))
             os.unlink(src)
-            fsync_dir(os.path.dirname(logical))
+            fsync_path(os.path.dirname(logical))
             print(f"restored {logical} ({gib(os.path.getsize(logical))})")
         finally:
             try:
@@ -1415,180 +1458,148 @@ def cmd_restore(args):
     return rc
 
 
-class C:
-    bold = dim = cyan = yellow = off = ""
+# ------------------------------------------------------------------- CLI
 
-    @classmethod
-    def enable(cls, on):
-        if on:
-            cls.bold, cls.dim, cls.off = "\033[1m", "\033[2m", "\033[0m"
-            cls.cyan, cls.yellow = "\033[36m", "\033[33m"
+CMDS = ("search", "show", "session", "status", "index", "compress", "restore")
+VALUE_OPTS = {"-n", "--limit", "-p", "--project", "-r", "--role", "-t", "--tool",
+              "--since", "--until", "-s", "--session", "--provider", "--color",
+              "-C", "--context", "--older-than", "--max-files"}
+
+EPILOG = """\
+commands:
+  convo [search] TERMS     sessions ranked by relevance (default command)
+  convo show ID…           one message in full, with -C neighbours
+  convo session ID         a session's transcripts, its first ask, and mentions
+  convo status | index [--full] | compress [--dry-run] | restore FILE…
+
+query:
+  words must all appear in one message; a token with punctuation
+  (c289-ko-bottom, tools/x.ts) is matched as a phrase; "quoted phrase",
+  AND/OR/NOT, ( ) and prefix* work. Stemmed: test matches tests.
+  A message holding the words as typed, adjacent and in order, ranks higher.
+  When fewer than three sessions have a message with every word, sessions
+  covering the most words follow, marked partial (-a disables this).
+  -x matches the literal string.
+
+output:
+  one entry per session: id prefix, best-hit time, project, title, hit count,
+  then the best message's role, snippet and [id]. -m lists messages instead.
+  --json keys: session agent title project provider id ts role tool snippet
+  path line hits partial (text with --full; show --json always has text).
+  Times are UTC.
+
+exit: 0 found · 1 conclusive miss · 2 inconclusive (index busy, root
+missing, -u) or bad usage. Calls to convo itself are not results; the
+current session (CLAUDE_CODE_SESSION_ID, CODEX_THREAD_ID) ranks last.
+
+examples:
+  convo stage backdrop contrast           where was this discussed?
+  convo -r user --since 3d tests          what did the human say?
+  convo -t Bash -x 'wisp pad --helper'    which exact command ran?
+  convo -r user --since 1d                newest human messages, no query
+  convo show 4276825 -C 3                 read a hit with context
+"""
 
 
-CMDS = ("index", "session", "status", "compress", "restore")
-VALUE_OPTS = {"-n", "--limit", "-p", "--project", "-r", "--role", "--since",
-              "-s", "--session", "--color", "--older-than", "--max-files"}
-
-
-def split_cmd(argv):
-    """Pull out a leading subcommand, tolerating options before it.
-
-    argparse cannot have both an open positional and subparsers, so the
-    subcommand is removed here and the rest is parsed as a query.
-    """
-    i = 0
+def parse_args(argv):
+    i, cmd = 0, None
     while i < len(argv):
         a = argv[i]
         if a in VALUE_OPTS:
             i += 2
-            continue
-        if a.startswith("-"):
+        elif a.startswith("-"):
             i += 1
-            continue
-        if a in CMDS:
-            return a, argv[:i] + argv[i + 1:]
-        break
-    return None, argv
-
-
-def main(argv=None):
-    argv = list(sys.argv[1:] if argv is None else argv)
-    cmd, argv = split_cmd(argv)
-
+        else:
+            if a in CMDS:
+                cmd, argv = a, argv[:i] + argv[i + 1:]
+            break
     p = argparse.ArgumentParser(
-        prog="convo",
-        description="search local agent conversation transcripts")
-    p.add_argument("query", nargs="*", help="search terms (FTS5 syntax)")
-    p.add_argument("-s", "--session", metavar="UUID",
-                   help="restrict search to one session id")
-    p.add_argument("-x", "--exact", action="store_true",
-                   help="exact phrase match (use for ids and literal strings)")
+        prog="convo", formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="find past agent work across Claude Code and Codex transcripts",
+        epilog=EPILOG)
+    p.add_argument("query", nargs="*", help="search terms, or the id for show/session")
+    p.add_argument("-x", "--exact", action="store_true", help="literal string")
     p.add_argument("-a", "--all-terms", action="store_true",
-                   help="require every term (default: FTS5 syntax as given)")
-    p.add_argument("-p", "--project", metavar="NAME", help="filter by project")
+                   help="no partial-match fallback")
     p.add_argument("-r", "--role", metavar="ROLE",
-                   help="user|assistant|thinking|tool")
-    p.add_argument("--since", metavar="N[dwmy]", help="only newer than")
-    p.add_argument("-n", "--limit", type=int, default=20)
+                   help="user|assistant|thinking|tool|system, comma-separated")
+    p.add_argument("-t", "--tool", metavar="NAME", help="tool calls of one tool (Bash, Skill…)")
+    p.add_argument("-p", "--project", metavar="NAME", help="project name substring")
+    p.add_argument("-s", "--session", metavar="ID", help="session or subagent id prefix")
+    p.add_argument("--provider", choices=tuple(PROVIDERS), help="claude or codex")
+    p.add_argument("--since", metavar="WHEN", help="12h, 3d, 2w, 6m, 1y or YYYY-MM-DD")
+    p.add_argument("--until", metavar="WHEN", help="same forms as --since")
+    p.add_argument("-m", "--messages", action="store_true", help="list messages, not sessions")
+    p.add_argument("-n", "--limit", type=int, default=0,
+                   help="results (10 sessions or 20 messages)")
+    p.add_argument("--full", action="store_true",
+                   help="whole message text; with index: rebuild from scratch")
+    p.add_argument("-C", "--context", type=int, default=2, metavar="N",
+                   help="show: neighbouring messages (default 2)")
     p.add_argument("--json", action="store_true")
     p.add_argument("-u", "--no-update", action="store_true",
-                   help="skip the incremental index refresh")
+                   help="skip the refresh; a miss is then inconclusive")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("--color", choices=("auto", "always", "never"), default="auto")
-    p.add_argument("--full", action="store_true",
-                   help="index: rebuild from scratch")
-    p.add_argument("--dry-run", action="store_true",
-                   help="compress: report what would be compressed, touch nothing")
-    p.add_argument("--older-than", type=float, metavar="HOURS",
-                   default=CLOSED_AFTER_S / 3600,
+    p.add_argument("--dry-run", action="store_true", help="compress: report only")
+    p.add_argument("--older-than", type=float, metavar="HOURS", default=CLOSED_AFTER_S / 3600,
                    help="compress: only transcripts untouched this long")
     p.add_argument("--max-files", type=int, default=0, metavar="N",
-                   help="compress: stop after the N largest eligible files")
-    p.epilog = ("subcommands: index [--full] | session <uuid> | status\n"
-                "             compress [--dry-run] | restore <file>…\n"
-                "examples:\n"
-                "  convo policy graph            search everything\n"
-                "  convo -x 'exact phrase'       literal match\n"
-                "  convo session <uuid>          locate one session, no grep\n"
-                "  convo compress --dry-run      what a sweep would reclaim\n")
-    p.formatter_class = argparse.RawDescriptionHelpFormatter
+                   help="compress: only the N largest eligible files")
     args = p.parse_args(argv)
-    args.cmd = cmd
-    if cmd == "session":
-        if not args.query:
-            p.error("session needs a session id")
-        args.id = args.query[0]
+    args.cmd = cmd or "search"
+    if args.cmd in ("show", "session", "restore") and not args.query:
+        p.error(f"{args.cmd} needs an argument")
+    return p, args
 
-    C.enable(args.color == "always"
-             or (args.color == "auto" and sys.stdout.isatty()))
 
+def main(argv=None):
+    p, args = parse_args(list(sys.argv[1:] if argv is None else argv))
+    pal = Palette(args.color == "always" or (args.color == "auto" and sys.stdout.isatty()))
     if args.cmd == "restore":
-        if not args.query:
-            p.error("restore needs at least one path")
-        return cmd_restore(args)
-
+        return cmd_restore(args, pal)
     if args.cmd == "compress":
-        # Index before rewriting: a transcript the index has already read to
-        # its last byte is adopted in its compressed form for free, while one
-        # it has not must be decompressed in full to catch up.
-        if not (args.dry_run or args.no_update):
-            con = connect()
-            refresh(con, quiet=args.quiet)
-            con.close()
-        return cmd_compress(args)
-
+        if not (args.dry_run or args.no_update) and os.path.exists(DB):
+            refresh(quiet=args.quiet)
+        return cmd_compress(args, pal)
     if args.cmd == "index":
-        if args.full and os.path.exists(DB):
-            for suf in ("", "-wal", "-shm"):
-                try:
-                    os.unlink(DB + suf)
-                except OSError:
-                    pass
-        con = connect()
         t0 = time.time()
-        ok, r = refresh(con, quiet=args.quiet, verbose=args.verbose)
+        r = refresh(quiet=args.quiet, verbose=args.verbose, rebuild=args.full)
         if r is None:
             sys.stderr.write("convo: another index run holds the lock\n")
             return 2
-        nf, nm, nb = r
-        el = time.time() - t0
-        print(f"indexed {nm} messages from {nf} changed files "
-              f"({nb / 1073741824:.2f} GiB read) in {el:.1f}s")
+        print(f"indexed {r[1]} messages from {r[0]} changed files "
+              f"({r[2] / 2**30:.2f} GiB read) in {time.time() - t0:.1f}s")
         return 0
-
-    # Query-time refresh: cheap when nothing changed, so no daemon or timer.
-    reconciled = not args.no_update
-    refresh_issue = "update disabled" if args.no_update else None
-    if not args.no_update:
-        con = connect()
-        reconciled, _ = refresh(con, quiet=args.quiet, verbose=args.verbose)
-        con.close()
-        if not reconciled:
-            refresh_issue = "index lock busy"
-
+    if args.cmd == "search" and not args.query and not any(
+            (args.role, args.tool, args.project, args.session, args.since, args.until,
+             args.provider)):
+        p.print_help()
+        return 0
     if not os.path.exists(DB):
-        sys.stderr.write("convo: no index yet; run `convo index`\n")
-        return 1
-    try:
-        con = connect(readonly=True)
-    except StaleIndex as e:
-        sys.stderr.write(
-            f"convo: the index on disk is schema {e}, this convo speaks "
-            f"{SCHEMA_VERSION}; run `convo index` to rebuild it\n")
-        return 1
+        sys.stderr.write("convo: no index yet; build it once with `convo index` "
+                         "(reads every transcript; run it under a machine-capacity lease)\n")
+        return 2
+    issue = "update disabled" if args.no_update else None
+    if not args.no_update and refresh(quiet=True) is None:
+        issue = "index lock busy"
+    con = connect(readonly=True)
     try:
         if args.cmd == "status":
-            return cmd_status(con, args)
-        if args.cmd == "session":
-            rc = cmd_session(con, args)
-            if rc == 1 and not reconciled:
-                sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
-                                 "retry session lookup\n")
-                return 2
-            return rc
-        if args.session and not args.query:
-            rc = cmd_session(con, argparse.Namespace(
-                id=args.session, limit=args.limit))
-            if rc == 1 and not reconciled:
-                sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
-                                 "retry session lookup\n")
-                return 2
-            return rc
-        if not args.query:
-            p.print_help()
-            return 0
-        args.query = " ".join(args.query)
-        rc = cmd_search(con, args)
-        if rc == 1 and not reconciled:
-            # A stale index cannot prove absence while another process is
-            # reconciling configured roots.  Make the uncertainty explicit.
-            sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
-                             "retry search\n")
+            return cmd_status(con, args, pal)
+        if args.cmd == "show":
+            return cmd_show(con, args, pal)
+        try:
+            rc = cmd_session(con, args, pal) if args.cmd == "session" else cmd_search(con, args, pal)
+        except ValueError as e:
+            sys.stderr.write(f"convo: {e}\n")
             return 2
-        if rc == 0 and not reconciled:
-            sys.stderr.write(f"convo: refresh inconclusive ({refresh_issue}); "
-                             "results may be stale\n")
+        if issue and rc == 1:
+            sys.stderr.write(f"convo: refresh inconclusive ({issue}); a miss proves nothing\n")
+            return 2
+        if issue and rc == 0 and not args.no_update:
+            sys.stderr.write(f"convo: refresh inconclusive ({issue}); results may be stale\n")
         return rc
     finally:
         con.close()

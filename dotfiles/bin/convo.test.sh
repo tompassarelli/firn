@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# Behavioural tests for dotfiles/bin/convo. Uses a synthetic corpus under a
-# temp CONVO_ROOT/CONVO_STATE, so the real index is never touched.
+# convo: properties over the pure core, then one recorded scenario per boundary
+# (Claude and Codex JSONL, zstd archives, SQLite, the lock) on a synthetic
+# corpus under temp CONVO_ROOT/CONVO_STATE, so the real index is never touched.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CONVO="$ROOT/dotfiles/bin/convo"
-unset CODEX_HOME NORTH_CODEX_POOLED_HOME CLAUDE_CONFIG_DIR
+unset CODEX_HOME NORTH_CODEX_POOLED_HOME CLAUDE_CONFIG_DIR CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
 fixture="$(mktemp -d)"
 trap 'rm -rf "${fixture:?}"' EXIT
 fail() { printf 'convo.test.sh:%s: %s\n' "${BASH_LINENO[0]}" "$1" >&2; exit 1; }
 
-# The live command owns its Python interpreter instead of depending on an
-# ambient python3 in PATH.  --help exits before any optional external tool is
-# needed, so an empty PATH proves the launcher boundary directly.
 runtime_home="$fixture/runtime-home"
 mkdir -p "$runtime_home/.local/libexec/convo"
 test_python="${CONVO_TEST_PYTHON:-$(command -v python3 || true)}"
@@ -28,6 +26,72 @@ ln -s "$test_python" "$fixture/test-bin/python3"
 export PATH="$fixture/test-bin:$PATH"
 export CONVO_PYTHON="$test_python"
 
+# ---- properties over the pure core (fixed seed) ----------------------------
+python3 - "$CONVO" <<'PY'
+import importlib.machinery, importlib.util, io, random, sqlite3, sys
+loader = importlib.machinery.SourceFileLoader("convo", sys.argv[1])
+convo = importlib.util.module_from_spec(importlib.util.spec_from_loader("convo", loader))
+loader.exec_module(convo)
+rng = random.Random(20261010)
+WORDS = ["deck", "pink", "c289-ko-bottom", "tools/x.ts", "AND", "OR", "NOT", "(", ")",
+         '"', "*", "orch*", "naïve", "7,200/7,200", "--render", "a.b", ":", "^", "-", "'"]
+
+db = sqlite3.connect(":memory:")
+db.execute("CREATE VIRTUAL TABLE t USING fts5(text, tokenize='porter unicode61 remove_diacritics 2')")
+db.execute("INSERT INTO t VALUES('deck pink c289 ko bottom tools x ts naive')")
+for _ in range(3000):
+    text = " ".join(rng.choice(WORDS) for _ in range(rng.randint(0, 6)))
+    plan = convo.plan_query(text, exact=rng.random() < 0.2)
+    if plan is None:
+        assert not convo.WORD.search(text), text
+        continue
+    ok = False
+    for expr in plan.match:
+        try:
+            db.execute("SELECT rowid FROM t WHERE t MATCH ?", (expr,)).fetchall()
+            ok = True
+            break
+        except sqlite3.OperationalError:
+            pass
+    assert ok, f"no expression parses for {text!r}: {plan.match}"
+    if plan.partial:
+        db.execute("SELECT rowid FROM t WHERE t MATCH ?", (plan.partial,)).fetchall()
+
+convo.LINE_CAP = 40
+for _ in range(400):
+    lines = [bytes(rng.choice(b"ab{}\" ") for _ in range(rng.randint(0, 70)))
+             for _ in range(rng.randint(0, 12))]
+    data = b"\n".join(lines) + (b"\n" if rng.random() < 0.5 else b"")
+    got = list(convo.scan_lines(io.BytesIO(data), 0, chunk=rng.randint(1, 64)))
+    want, start = [], 0
+    for ln in data.split(b"\n")[:-1]:
+        want.append((start, start + len(ln) + 1, ln if len(ln) <= 40 else None))
+        start += len(ln) + 1
+    assert got == want, (data, got, want)
+
+for _ in range(500):
+    words = [rng.choice(["alpha", "beta", "gamma", "tests", "x" * rng.randint(1, 30)])
+             for _ in range(rng.randint(1, 120))]
+    text, term = " ".join(words), rng.choice(words)
+    snip = convo.snippet(text, [term], 80)
+    assert len(snip) <= 82, snip
+    assert convo.stem(term) in snip.lower(), (term, snip)
+
+calls = {"role": "tool", "text": "Bash command=convo deck pink"}
+for _ in range(300):
+    hits = [dict(rng.choice([calls, {"role": "assistant", "text": "deck"},
+                             {"role": "user", "text": "pink deck"}]),
+                 id=i, bm25=-rng.random() * 10, session=rng.choice("ABCD"))
+            for i in range(rng.randint(1, 30))]
+    groups = convo.rank_sessions(hits, ["deck"], frozenset("A"))
+    order = [g["session"] for g in groups]
+    assert len(order) == len(set(order))
+    assert "A" not in order[:-1], order
+    assert sum(g["hits"] for g in groups) == sum(not convo.is_convo_call(h) for h in hits)
+    assert all(not convo.is_convo_call(g["best"]) for g in groups)
+print("convo core properties: ok")
+PY
+
 export CONVO_ROOT="$fixture/corpus"
 export CONVO_STATE="$fixture/state"
 adir="$CONVO_ROOT/openai/acct/sessions/2026/08/01"
@@ -36,8 +100,14 @@ mkdir -p "$adir" "$odir" "$CONVO_STATE"
 
 has() { grep -q -- "$2" <<<"$1" || fail "expected /$2/ in: $1"; }
 hasnt() { if grep -q -- "$2" <<<"$1"; then fail "unexpected /$2/ in: $1"; fi; }
-# convo exits non-zero when nothing matches; assert that, without tripping set -e
-nomatch() { if "$CONVO" --color=never "$1" >/dev/null 2>&1; then fail "$2"; fi; }
+nomatch() { local rc=0; "$CONVO" --color=never "$1" >/dev/null 2>&1 || rc=$?; [ "$rc" -eq 1 ] || fail "$2 (exit $rc)"; }
+q() { "$CONVO" --color=never "$@"; }
+
+set +e
+out="$(q ANYTHING 2>&1)"; rc=$?
+set -e
+[ "$rc" -eq 2 ] || fail "a query without an index returned $rc"
+has "$out" "convo index"
 
 SID=11111111-2222-3333-4444-555555555555
 
@@ -57,13 +127,14 @@ with open(apath, "w") as f:
     f.write(a("user", "how do we handle QUARKFISH routing", "2026-08-01T10:00:00Z") + "\n")
     f.write(a("assistant", "QUARKFISH routing goes through the dispatcher",
               "2026-08-01T10:00:05Z") + "\n")
-    # tool_result must not be indexed: it is machine output, not conversation
-    f.write(json.dumps({"type": "response_item",
-                        "timestamp": "2026-08-01T10:00:06Z",
+    f.write(json.dumps({"type": "response_item", "timestamp": "2026-08-01T10:00:06Z",
                         "payload": {"type": "custom_tool_call_output",
                                     "output": "SECRETOUTPUTTOKEN"}}) + "\n")
-    # push the file past the head-fingerprint window so that appending to it
-    # exercises the real incremental path rather than the small-file reset
+    f.write(a("user", "<environment_context> INJECTEDTOKEN </environment_context>",
+              "2026-08-01T10:00:07Z") + "\n")
+    f.write(json.dumps({"type": "response_item", "timestamp": "2026-08-01T10:00:08Z",
+                        "payload": {"type": "function_call", "name": "exec_command",
+                                    "arguments": json.dumps({"cmd": "make c289-ko-bottom"})}}) + "\n")
     for i in range(40):
         f.write(a("assistant", f"filler line {i} " + "padding " * 12,
                   "2026-08-01T10:%02d:00Z" % (10 + i)) + "\n")
@@ -71,17 +142,15 @@ with open(opath, "w") as f:
     f.write(json.dumps({"type": "session_meta", "timestamp": "2026-08-02T09:00:00Z",
                         "payload": {"id": "99999999-8888-7777-6666-555555555555",
                                     "cwd": "/synthetic/demo"}}) + "\n")
-    f.write(json.dumps({"type": "response_item", "timestamp": "2026-08-02T09:00:01Z",
-                        "payload": {"type": "message", "role": "assistant",
-                                    "content": [{"type": "output_text",
-                                                 "text": "codex says WOMBATSTONE"}]}}) + "\n")
-    # a compacted replay must not be double-indexed
+    f.write(a("assistant", "codex says WOMBATSTONE", "2026-08-02T09:00:01Z") + "\n")
+    f.write(a("assistant", "QUARKFISH routing goes through the dispatcher",
+              "2026-08-02T09:00:01Z") + "\n")
+    f.write(a("assistant", "c289 then ko later bottom", "2026-08-02T09:00:01Z") + "\n")
     f.write(json.dumps({"type": "compacted", "timestamp": "2026-08-02T09:00:02Z",
                         "payload": {"replacement_history": [
                             {"type": "message", "role": "assistant",
                              "content": [{"type": "output_text",
                                           "text": "codex says WOMBATSTONE"}]}]}}) + "\n")
-    # developer boilerplate must not be indexed
     f.write(json.dumps({"type": "response_item", "timestamp": "2026-08-02T09:00:03Z",
                         "payload": {"type": "message", "role": "developer",
                                     "content": [{"type": "input_text",
@@ -98,7 +167,7 @@ d, sid = sys.argv[1:3]
 def rec(t, content, ts, **kw):
     return json.dumps({"type": t, "sessionId": sid, "cwd": "/synthetic/claude",
                        "timestamp": ts, "message": {"role": t, "content": content},
-                       **kw}) + "\n"
+                       **kw}, separators=(",", ":")) + "\n"
 with open(os.path.join(d, sid + ".jsonl"), "w") as f:
     f.write(json.dumps({"type": "ai-title", "sessionId": sid,
                         "aiTitle": "Claude demo"}) + "\n")
@@ -107,9 +176,12 @@ with open(os.path.join(d, sid + ".jsonl"), "w") as f:
         {"type": "thinking", "thinking": "consider PELICANTHINK"},
         {"type": "text", "text": "PELICANGATE is open"},
         {"type": "tool_use", "id": "t1", "name": "Skill",
-         "input": {"skill": "machine-capacity"}}], "2026-08-08T10:00:05Z"))
+         "input": {"skill": "machine-capacity"}},
+        {"type": "tool_use", "id": "t2", "name": "Bash",
+         "input": {"command": "convo PELICANGATE"}}], "2026-08-08T10:00:05Z"))
     f.write(rec("user", [{"type": "tool_result", "tool_use_id": "t1",
                           "content": "CLAUDETOOLRESULT"}], "2026-08-08T10:00:06Z"))
+    f.write(rec("user", "<task-notification> PELICANGATE worker done", "2026-08-08T10:00:07Z"))
 with open(os.path.join(d, sid, "subagents", "agent-a1.jsonl"), "w") as f:
     f.write(rec("assistant", [{"type": "text", "text": "subagent says HERONLOOP"}],
                 "2026-08-08T10:01:00Z", isSidechain=True))
@@ -122,56 +194,116 @@ PY
 "$CONVO" index >/dev/null
 
 # ---- Claude Code transcripts are decoded --------------------------------
-out="$("$CONVO" --color=never PELICANGATE -n 5)"
+out="$(q PELICANGATE)"
 has "$out" "Claude demo"
-[ "$(grep -c 'PELICANGATE' <<<"$out")" -eq 2 ] || fail "expected the user and assistant PELICANGATE messages"
-has "$("$CONVO" --color=never -r thinking PELICANTHINK)" PELICANTHINK
-has "$("$CONVO" --color=never -r tool -x 'Skill skill=machine-capacity')" "tool ·"
-has "$("$CONVO" --color=never HERONLOOP)" "agent-a1.jsonl"
-has "$("$CONVO" --color=never session "$CSID")" "$CSID.jsonl"
+has "$out" "77777777 .*(claude, 3 hits)"
+out="$(q -m PELICANGATE)"
+has "$out" "user · please check PELICANGATE"
+has "$out" "system · <task-notification>"
+hasnt "$out" "command=convo"
+has "$(q -r user -m PELICANGATE)" "please check"
+hasnt "$(q -r user -m PELICANGATE)" "task-notification"
+has "$(q -r tool PELICANGATE)" "command=convo"
+has "$(q -r thinking PELICANTHINK)" PELICANTHINK
+has "$(q -t skill -x 'Skill skill=machine-capacity')" "tool:Skill"
+has "$(q HERONLOOP)" "77777777/a1"
+has "$(q -s a1 subagent)" HERONLOOP
+has "$(q session 7777)" "agent-a1.jsonl"
+has "$(q session "$CSID")" "ask · please check PELICANGATE status"
 nomatch CLAUDETOOLRESULT "a Claude tool_result was indexed"
 nomatch SCRATCHTOKEN "a non-session file was indexed as a transcript"
 
-# ---- search finds both rollouts ------------------------------------------
-out="$("$CONVO" --color=never QUARKFISH -n 5)"
-has "$out" QUARKFISH
+# ---- the caller's own session ranks last -----------------------------------
+out="$(CLAUDE_CODE_SESSION_ID="$CSID" q QUARKFISH PELICANGATE)"
+has "$out" "has every word"
+first="$(grep -m1 -E '^ *1 ' <<<"$out")"
+hasnt "$first" 77777777
+
+# ---- Codex rollouts -------------------------------------------------------
+out="$(q QUARKFISH)"
 has "$out" "Demo session"
 has "$out" "demo"
-out="$("$CONVO" --color=never WOMBATSTONE -n 5)"
-has "$out" WOMBATSTONE
-[ "$(grep -c WOMBATSTONE <<<"$out")" -eq 1 ] || fail "compacted replay was double-indexed"
+[ "$(grep -c 'QUARKFISH routing goes' <<<"$out")" -eq 1 ] || fail "a repeated text was indexed twice"
+has "$(q -m WOMBATSTONE)" WOMBATSTONE
+[ "$(q -m WOMBATSTONE | grep -c WOMBATSTONE)" -eq 1 ] || fail "compacted replay was double-indexed"
+has "$(q -r system INJECTEDTOKEN)" INJECTEDTOKEN
+nomatch SECRETOUTPUTTOKEN "tool output was indexed"
+nomatch BOILERPLATETOKEN "developer message was indexed"
+out="$(q -m c289-ko-bottom)"
+has "$out" "make c289-ko-bottom"
+hasnt "$out" "c289 then ko"
+has "$(q -t exec_command make)" "cmd=make c289-ko-bottom"
 
-# ---- machine output and injected boilerplate stay out of the index -------
-nomatch SECRETOUTPUTTOKEN "tool_result was indexed"
-nomatch BOILERPLATETOKEN "developer msg was indexed"
-
-# ---- reported path:line is exact ----------------------------------------
-loc="$("$CONVO" --color=never QUARKFISH -n 1 --json | python3 -c 'import json,sys; r=json.load(sys.stdin)[0]; print(r["path"], r["line"])')"
-path="${loc% *}"; line="${loc##* }"
+# ---- a hit opens to its exact source -------------------------------------
+read -r id path line < <(q --json -m QUARKFISH routing -r user |
+  python3 -c 'import json,sys; r=json.load(sys.stdin)[0]; print(r["id"], r["path"], r["line"])')
 sed -n "${line}p" "$path" | grep -q QUARKFISH || fail "line $line of $path lacks the match"
+out="$(q show "$id" -C 1)"
+has "$out" "how do we handle QUARKFISH routing"
+has "$out" "↓ .*QUARKFISH routing goes through"
+has "$(q show "$id" --json)" '"text": "how do we handle QUARKFISH routing'
+
+# ---- query forms and filters ---------------------------------------------
+has "$(q -x 'QUARKFISH routing goes through')" QUARKFISH
+has "$(q QUARKFISH -r user -m)" "user ·"
+hasnt "$(q QUARKFISH -r assistant -m)" "user ·"
+has "$(q --since 3000d -r user)" "how do we handle"
+has "$(q --provider claude PELICANGATE)" "Claude demo"
+set +e
+q --since yesterday QUARKFISH >/dev/null 2>&1; rc=$?
+set -e
+[ "$rc" -eq 2 ] || fail "an unreadable --since returned $rc"
 
 # ---- incremental: only new bytes, no duplicates --------------------------
 before="$("$CONVO" status | awk '/^messages/{print $2}')"
-out="$("$CONVO" index)"
-has "$out" "from 0 changed files"
-python3 - "$adir/$SID.jsonl" "$SID" <<'PY'
+has "$("$CONVO" index)" "from 0 changed files"
+python3 - "$adir/$SID.jsonl" <<'PY'
 import json, sys
-p, sid = sys.argv[1:3]
-open(p, "a").write(json.dumps({"type": "response_item",
+open(sys.argv[1], "a").write(json.dumps({"type": "response_item",
     "timestamp": "2026-08-01T11:00:00Z",
     "payload": {"type": "message", "role": "assistant",
                 "content": [{"type": "output_text", "text": "later ZORBLAX note"}]}}) + "\n")
 PY
-out="$("$CONVO" index)"
-has "$out" "indexed 1 messages from 1 changed files"
-has "$("$CONVO" --color=never ZORBLAX)" ZORBLAX
+has "$("$CONVO" index)" "indexed 1 messages from 1 changed files"
+has "$(q ZORBLAX)" ZORBLAX
 after="$("$CONVO" status | awk '/^messages/{print $2}')"
 [ "$after" -eq "$((before + 1))" ] || fail "expected $((before+1)) msgs, got $after"
 
-# ---- oversized line is skipped, its neighbours are not -------------------
+# ---- a rewritten first copy hands its text to the next copy ---------------
+has "$(q -m 'QUARKFISH routing goes' -s 99999999)" "99999999"
+python3 - "$adir/$SID.jsonl" <<'PY'
+import json, sys
+open(sys.argv[1], "w").write(json.dumps({"type": "response_item",
+    "timestamp": "2026-08-04T11:00:00Z",
+    "payload": {"type": "message", "role": "assistant",
+                "content": [{"type": "output_text", "text": "REWRITTENTOKEN only"}]}}) + "\n")
+PY
+"$CONVO" index >/dev/null
+has "$(q REWRITTENTOKEN)" REWRITTENTOKEN
+nomatch ZORBLAX "stale rows survived a rewrite"
+has "$(q -m 'QUARKFISH routing goes')" "99999999"
+python3 - "$adir/$SID.jsonl" <<'PY'
+import json, sys
+open(sys.argv[1], "w").write(json.dumps({"type": "response_item",
+    "timestamp": "2026-08-04T12:00:00Z",
+    "payload": {"type": "message", "role": "assistant",
+                "content": [{"type": "output_text", "text": "PAD " * 1200 + "TAILTOKENA"}]}}) + "\n")
+PY
+"$CONVO" index >/dev/null
+has "$(q TAILTOKENA)" TAILTOKENA
+python3 - "$adir/$SID.jsonl" <<'PY'
+import sys
+data = open(sys.argv[1], "rb").read()
+with open(sys.argv[1], "r+b") as f:
+    f.write(data.replace(b"TAILTOKENA", b"TAILTOKENB"))
+PY
+"$CONVO" index >/dev/null
+has "$(q TAILTOKENB)" TAILTOKENB
+nomatch TAILTOKENA "a same-length tail rewrite stayed stale"
+
+# ---- oversized and torn lines --------------------------------------------
 python3 - "$adir/giant.jsonl" <<'PY'
 import json, sys
-sid = "aaaaaaaa-0000-0000-0000-000000000000"
 def rec(text, ts):
     return json.dumps({"type": "response_item", "timestamp": ts,
                        "payload": {"type": "message", "role": "assistant",
@@ -181,64 +313,17 @@ with open(sys.argv[1], "w") as f:
     f.write(rec("X" * (3 << 20), "2026-08-03T10:00:01Z") + "\n")
     f.write(rec("GIANTPOST marker", "2026-08-03T10:00:02Z") + "\n")
 PY
-"$CONVO" index >/dev/null
-has "$("$CONVO" --color=never GIANTPRE)" GIANTPRE
-has "$("$CONVO" --color=never GIANTPOST)" GIANTPOST
-
-# ---- a torn trailing line is not indexed until it is complete ------------
 torn="$adir/torn.jsonl"
 printf '%s' '{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"TORNTOKEN' >"$torn"
 "$CONVO" index >/dev/null
+has "$(q GIANTPRE)" GIANTPRE
+has "$(q GIANTPOST)" GIANTPOST
 nomatch TORNTOKEN "indexed a torn line"
-python3 - "$torn" <<'PY'
-import json, sys
-open(sys.argv[1], "w").write(json.dumps({"type": "response_item",
-    "timestamp": "2026-08-04T10:00:00Z",
-    "payload": {"type": "message", "role": "assistant",
-                "content": [{"type": "output_text", "text": "TORNTOKEN complete"}]}}) + "\n")
-PY
+printf '%s\n' '"}]}}' >>"$torn"
 "$CONVO" index >/dev/null
-has "$("$CONVO" --color=never TORNTOKEN)" TORNTOKEN
-
-# ---- rewritten/truncated file is reindexed from scratch, not appended ----
-python3 - "$adir/torn.jsonl" <<'PY'
-import json, sys
-open(sys.argv[1], "w").write(json.dumps({"type": "response_item",
-    "timestamp": "2026-08-04T11:00:00Z",
-    "payload": {"type": "message", "role": "assistant",
-                "content": [{"type": "output_text", "text": "REPLACEDTOKEN only"}]}}) + "\n")
-PY
-"$CONVO" index >/dev/null
-has "$("$CONVO" --color=never REPLACEDTOKEN)" REPLACEDTOKEN
-nomatch TORNTOKEN "stale rows survived a rewrite"
-
-# ---- session lookup resolves without any scan ----------------------------
-out="$("$CONVO" --color=never session "$SID")"
-has "$out" "$SID.jsonl"
-has "$out" "Demo session"
-
-# ---- exact-phrase mode ---------------------------------------------------
-has "$("$CONVO" --color=never -x 'QUARKFISH routing goes through')" QUARKFISH
-
-# ---- filters -------------------------------------------------------------
-has "$("$CONVO" --color=never QUARKFISH -r user)" "user ·"
-out="$("$CONVO" --color=never QUARKFISH -r assistant)"
-hasnt "$out" "user ·"
-
-# ---- a foreign-schema index is named, not a traceback ---------------------
-# -u opens the index read-only and cannot rebuild it, so this is the one path
-# where a version skew has to be reported rather than repaired.
-python3 -c "import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute(\"INSERT OR REPLACE INTO meta(k,v) VALUES('schema','0')\"); c.commit()" \
-  "$CONVO_STATE/index.db"
-out="$("$CONVO" -u --color=never QUARKFISH 2>&1 || true)"
-has "$out" "run \`convo index\`"
-hasnt "$out" Traceback
-"$CONVO" index >/dev/null   # rebuilds, because the read-write path may
-has "$("$CONVO" --color=never QUARKFISH -n 1)" QUARKFISH
+has "$(q TORNTOKEN)" TORNTOKEN
 
 # ---- the index is self-sufficient: a vanished source still renders --------
-# This is the property every storage decision below rests on. If a snippet
-# still needed the transcript, no transcript could ever be compressed.
 mkrec() { # <file> <token> <ts>
   python3 - "$1" "$2" "$3" <<'PY'
 import json, sys
@@ -247,24 +332,19 @@ with open(path, "w") as f:
     for i in range(3):
         f.write(json.dumps({"type": "response_item", "timestamp": ts,
                             "payload": {"type": "message", "role": "assistant",
-                                        "content": [
-                                {"type": "output_text",
-                                 "text": f"{token} record {i} " + "pad " * 30}]}})
+                                        "content": [{"type": "output_text",
+                                                     "text": f"{token} record {i} " + "pad " * 30}]}})
                 + "\n")
 PY
 }
-
 mkrec "$adir/orphan.jsonl" ORPHANTOKEN 2026-08-05T10:00:00Z
 "$CONVO" index >/dev/null
 rm -f "$adir/orphan.jsonl"
-out="$("$CONVO" --color=never ORPHANTOKEN -n 1)"
-has "$out" "ORPHANTOKEN record"
-has "$out" "orphan.jsonl:1"
+has "$(q ORPHANTOKEN -m -n 1 --json)" 'orphan.jsonl", "line": [123]'
 
 # ---- compression ---------------------------------------------------------
 printf '%s\n' '{"version":"north:agent-roster:v1","agents":[]}' >"$fixture/roster.json"
 export CONVO_ROSTER_CMD="cat $fixture/roster.json"
-
 RSID=dddddddd-1111-2222-3333-444444444444
 cold="$adir/cold.jsonl"; warm="$adir/warm.jsonl"
 held="$adir/held.jsonl"; rostered="$adir/$RSID.jsonl"
@@ -274,66 +354,46 @@ mkrec "$held" HELDTOKEN 2026-08-05T10:00:00Z
 mkrec "$rostered" ROSTEREDTOKEN 2026-08-05T10:00:00Z
 cp "$cold" "$fixture/cold.orig"
 touch -d '3 days ago' "$cold" "$held" "$rostered"
-
-# a file some process still holds open is not closed, whatever its mtime says
 sleep 120 9<"$held" &
 holder=$!
-# `|| true` is load-bearing: errexit is live inside an EXIT trap, so a kill of
-# an already-reaped holder would abandon the cleanup and exit 1 on a green run.
+# errexit is live inside an EXIT trap, so a kill of a reaped holder needs || true.
 trap 'kill "$holder" 2>/dev/null || true; rm -rf "${fixture:?}"' EXIT
 
-# ---- dry run reports and changes nothing ---------------------------------
 out="$("$CONVO" compress --dry-run --color=never)"
 has "$out" "projected"
 has "$out" "1 open by a process"
-[ -f "$cold" ] || fail "--dry-run compressed a file"
-[ ! -f "$cold.zst" ] || fail "--dry-run wrote an archive"
+[ -f "$cold" ] && [ ! -f "$cold.zst" ] || fail "--dry-run changed a file"
 
-# ---- the sweep compresses only what is provably closed -------------------
 printf '%s\n' "{\"version\":\"north:agent-roster:v1\",\"agents\":[{\"uuid\":\"$RSID\"}]}" \
   >"$fixture/roster.json"
 "$CONVO" compress -q --color=never >/dev/null
 [ -f "$cold.zst" ] && [ ! -f "$cold" ] || fail "a closed transcript was not compressed"
 [ -f "$warm" ] && [ ! -f "$warm.zst" ] || fail "a warm transcript was compressed"
 [ -f "$held" ] && [ ! -f "$held.zst" ] || fail "an OPEN transcript was compressed"
-[ -f "$rostered" ] && [ ! -f "$rostered.zst" ] ||
-  fail "a transcript the coordinator names was compressed"
+[ -f "$rostered" ] && [ ! -f "$rostered.zst" ] || fail "a transcript the coordinator names was compressed"
 kill "$holder" 2>/dev/null || true
-
-# the archive is the original, byte for byte
 zstd -dcq "$cold.zst" | cmp -s - "$fixture/cold.orig" || fail "archive lost bytes"
 
-# ---- a compressed source stays searchable, under its .jsonl provenance ---
-out="$("$CONVO" --color=never COLDTOKEN -n 1)"
-has "$out" "COLDTOKEN record"
-has "$out" "cold.jsonl:1"
-hasnt "$out" ".zst"
-
-# adopting a compressed source must not re-read it
+out="$(q COLDTOKEN -m -n 1 --json)"
+has "$out" "cold.jsonl\""
 has "$("$CONVO" index)" "from 0 changed files"
-# and the sweep is idempotent
-out="$("$CONVO" compress --dry-run --color=never)"
-hasnt "$out" "cold.jsonl"
+hasnt "$("$CONVO" compress --dry-run --color=never)" "cold.jsonl"
 
-# ---- an archive that was never seen uncompressed is indexed from scratch --
 mkrec "$adir/arch.jsonl" ARCHTOKEN 2026-08-06T10:00:00Z
 zstd -q --long=27 --rm "$adir/arch.jsonl"
-has "$("$CONVO" --color=never ARCHTOKEN)" "ARCHTOKEN record"
+has "$(q ARCHTOKEN)" "ARCHTOKEN record"
 
-# ---- when both forms exist the uncompressed one wins ---------------------
 mkrec "$adir/dual.jsonl" STALEZSTTOKEN 2026-08-06T10:00:00Z
 zstd -q --long=27 "$adir/dual.jsonl" && rm -f "$adir/dual.jsonl"
 mkrec "$adir/dual.jsonl" DUALTOKEN 2026-08-06T10:00:00Z
 "$CONVO" index >/dev/null
-has "$("$CONVO" --color=never DUALTOKEN)" "DUALTOKEN record"
+has "$(q DUALTOKEN)" "DUALTOKEN record"
 nomatch STALEZSTTOKEN "the archive shadowed the live transcript"
 
-# ---- restore puts the transcript back ------------------------------------
 "$CONVO" restore "$cold.zst" >/dev/null
 [ -f "$cold" ] && [ ! -f "$cold.zst" ] || fail "restore did not replace the archive"
 cmp -s "$cold" "$fixture/cold.orig" || fail "restore lost bytes"
 has "$("$CONVO" index)" "from 0 changed files"
-has "$("$CONVO" --color=never COLDTOKEN -n 1)" "COLDTOKEN record"
 
 # ---- configured pooled CODEX_HOME and projected mirror -------------------
 unset CONVO_ROOT
@@ -364,72 +424,54 @@ with open(sys.argv[1], "w") as f:
                                 {"type": "text", "text": f"LOCALCLAUDE {i}"}]}}) + "\n")
 PY
 "$CONVO" index >/dev/null
-has "$("$CONVO" --color=never LOCALCLAUDE)" "LOCALCLAUDE"
-has "$("$CONVO" --color=never ACCOUNTROOT)" ACCOUNTROOT
-out="$("$CONVO" --color=never POOLEDROOT -n 5)"
-has "$out" POOLEDROOT
-[ "$(grep -c POOLEDROOT <<<"$out")" -eq 3 ] || fail "pooled mirror duplicated messages"
-out="$($CONVO --color=never ACCOUNTROOT -n 5)"
-[ "$(grep -c ACCOUNTROOT <<<"$out")" -eq 3 ] || fail "overlapping transcript identity duplicated messages"
+has "$(q LOCALCLAUDE)" "LOCALCLAUDE"
+[ "$(q -m POOLEDROOT | grep -c POOLEDROOT)" -eq 3 ] || fail "pooled mirror duplicated messages"
+[ "$(q -m ACCOUNTROOT | grep -c ACCOUNTROOT)" -eq 3 ] || fail "a hardlink duplicated messages"
 has "$("$CONVO" status)" "4 reconciled"
+before="$("$CONVO" status | awk '/^messages/{print $2}')"
+ln "$data_home/accounts/openai/acct/sessions/2026/08/07/account.jsonl" \
+  "$data_home/accounts/openai/acct/sessions/2026/08/07/0-account.jsonl"
+"$CONVO" index >/dev/null
+[ "$("$CONVO" status | awk '/^messages/{print $2}')" -eq "$before" ] ||
+  fail "a hardlink added later duplicated messages"
 nomatch NOT_IN_ANY_CONFIGURED_ROOT "absent query unexpectedly matched"
 
 set +e
-no_update_out="$("$CONVO" -u --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
-no_update_rc=$?
+out="$(q -u DEFINITELY_ABSENT_TOKEN 2>&1)"; rc=$?
 set -e
-[ "$no_update_rc" -eq 2 ] || fail "no-update miss returned $no_update_rc"
-has "$no_update_out" "refresh inconclusive (update disabled)"
+[ "$rc" -eq 2 ] || fail "no-update miss returned $rc"
+has "$out" "refresh inconclusive (update disabled)"
 
-# ---- an unavailable explicit root cannot disappear into a conclusive miss -
 saved_codex_home="$CODEX_HOME"
 export CODEX_HOME="$fixture/missing-codex-home"
 set +e
-missing_out="$("$CONVO" --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
-missing_rc=$?
+out="$(q DEFINITELY_ABSENT_TOKEN 2>&1)"; rc=$?
 set -e
-[ "$missing_rc" -eq 2 ] || fail "missing CODEX_HOME returned $missing_rc"
-has "$missing_out" "refresh inconclusive"
-has "$missing_out" "CODEX_HOME is unavailable"
+[ "$rc" -eq 2 ] || fail "missing CODEX_HOME returned $rc"
+has "$out" "CODEX_HOME is unavailable"
 export CODEX_HOME="$saved_codex_home"
 
-# ---- a refresh lock miss cannot become a definitive absence --------------
-ready="$CONVO_STATE/lock-ready"
-python3 - "$CONVO_STATE/index.lock" "$ready" <<'PY' &
+# ---- a lock held past the wait cannot become a definitive absence -----------
+for sub in search session; do
+  ready="$CONVO_STATE/lock-ready"
+  rm -f "$ready"
+  python3 - "$CONVO_STATE/index-v4.db.lock" "$ready" <<'PY' &
 import fcntl, os, sys, time
 fd = os.open(sys.argv[1], os.O_CREAT | os.O_RDWR, 0o644)
 fcntl.flock(fd, fcntl.LOCK_EX)
 open(sys.argv[2], "w").close()
 time.sleep(3)
 PY
-locker=$!
-for _ in $(seq 1 50); do [ -f "$ready" ] && break; sleep 0.02; done
-[ -f "$ready" ] || fail "lock holder did not become ready"
-set +e
-lockout="$($CONVO --color=never DEFINITELY_ABSENT_TOKEN 2>&1)"
-lockrc=$?
-set -e
-wait "$locker"
-[ "$lockrc" -eq 2 ] || fail "lock contention returned $lockrc, expected explicit inconclusive"
-has "$lockout" "refresh inconclusive"
-
-rm -f "$ready"
-python3 - "$CONVO_STATE/index.lock" "$ready" <<'PY' &
-import fcntl, os, sys, time
-fd = os.open(sys.argv[1], os.O_CREAT | os.O_RDWR, 0o644)
-fcntl.flock(fd, fcntl.LOCK_EX)
-open(sys.argv[2], "w").close()
-time.sleep(3)
-PY
-locker=$!
-for _ in $(seq 1 50); do [ -f "$ready" ] && break; sleep 0.02; done
-set +e
-session_out="$($CONVO --color=never session 22222222-3333-4444-5555-666666666666 2>&1)"
-session_rc=$?
-set -e
-wait "$locker"
-[ "$session_rc" -eq 2 ] || fail "session lock contention returned $session_rc"
-has "$session_out" "refresh inconclusive"
+  locker=$!
+  for _ in $(seq 1 50); do [ -f "$ready" ] && break; sleep 0.02; done
+  [ -f "$ready" ] || fail "lock holder did not become ready"
+  set +e
+  out="$(q "$sub" 22222222-3333-4444-5555-666666666666 2>&1)"; rc=$?
+  set -e
+  wait "$locker"
+  [ "$rc" -eq 2 ] || fail "$sub under lock contention returned $rc"
+  has "$out" "refresh inconclusive"
+done
 
 # ---- a real sweep never compresses a Claude transcript --------------------
 cp "$claude_tx" "$fixture/claude.orig"

@@ -1,115 +1,69 @@
-# Conversation search: full notes
-
-## Why the index is the first route
-
-The transcript corpus contains large binary-like payloads and repeated context.
-A bounded text index answers the question without turning a name lookup into
-a machine-wide scan. Search results identify evidence of a conversation, not
-objective truth or a current repository state.
+# convo: maintenance and internals
 
 ## Corpus and index
 
-The local JSONL corpus contains thousands of transcripts and hundreds of
-thousands of messages. Most bytes are image payloads and replayed compaction
-records rather than searchable conversation text. `convo` maintains a much
-smaller SQLite FTS5 index of extracted message text, answers queries without
-opening transcripts, and retains exact `path:line` locations. This also permits
-closed transcript files to be compressed beneath the index.
-Discovery covers the canonical `~/code/north-data/accounts` tree plus
-configured `CODEX_HOME`, `NORTH_CODEX_POOLED_HOME`, the default pooled
-runtime home, and Claude Code's `~/.claude/projects` (or
-`$CLAUDE_CONFIG_DIR/projects`). In a Claude projects tree only
-`<project>/<session>.jsonl` and `<project>/<session>/subagents/*.jsonl` are
-transcripts; a subagent file carries its parent's session id. Symlinked North
-projections are canonicalized, so each transcript is indexed once.
+`convo` indexes the canonical `~/code/north-data/accounts` tree, a configured
+`CODEX_HOME` and `NORTH_CODEX_POOLED_HOME`, the default pooled runtime home,
+and Claude Code's `~/.claude/projects` (or `$CLAUDE_CONFIG_DIR/projects`). In a
+Claude projects tree only `<project>/<session>.jsonl` and
+`<project>/<session>/subagents/agent-<id>.jsonl` are transcripts; a subagent
+file carries its parent's session id and its own agent id. A Codex subagent
+rollout carries its lead's session id. A file reached twice through symlinks or
+hardlinks is indexed once.
 
-`~/.local/state/north` points to `~/code/north-data`; searching both scans the
-same corpus twice, while `--hidden` can add Git objects. A raw hit may also be
-one enormous JSON line rather than a useful answer.
+The index is `~/.local/state/convo/index-v4.db` (SQLite, FTS5 with porter
+stemming and bm25). Tables: `files` (one row per transcript, with its byte
+offset), `msg` (every message: file, line, time, role, tool, body), `body`
+(each distinct text once) and `ftx` (full text of each body, keyed by the
+first message that said it). A text repeated by a Codex fork or a re-sent
+prompt is ranked once, at its first occurrence; with filters, the first
+occurrence that passes them is shown. Tool calls
+are indexed as `<tool> <key>=<value>`; tool output, images, developer
+messages and compaction replays are not indexed.
 
-## Commands and filters
-
-```text
-convo <terms>                 FTS5 search: AND OR NOT "phrase"
-convo -x '<literal>'          exact phrase for ids, errors, and paths
-convo session <uuid>          transcripts belonging to one session
-convo status                  index size, corpus size, and freshness
-convo index --full            full rebuild; rarely needed
-convo compress --dry-run      estimate reclaim from closed transcripts
-convo restore <file>          restore one archived transcript as JSONL
-```
-
-Combine `-r user|assistant|thinking|tool`, `--since 3d|2w|6m`, `-p <project>`,
-`-n <limit>`, `--json`, and `-u` as needed. Every ordinary search performs an
-incremental refresh first across all configured roots; unchanged files are
-skipped and only new bytes are read. If the refresh lock or an explicitly
-configured root is unavailable, the result is explicitly inconclusive (exit
-2), so restore the root or retry after the writer finishes. Successful passes
-record the exact reconciled root set. A full rebuild is for index recovery, not
-routine freshness. A `-u`/`--no-update` miss is also inconclusive; use that flag
-only when a stale hit is useful and freshness is intentionally unnecessary.
-
-## Search recipes
-
-- To isolate what the operator asked: `convo -r user --since 2w "schema rulings"`.
-- To find where a defect was first named: `convo -x
-  'TODO-FLOOR-NON-VIEW-RESIDUE'`.
-- To locate all transcripts for a session: `convo session <uuid>`.
-- To find a conclusion, search verdict vocabulary such as `refuted`, `landed`,
-  or `ruling`, because topic words recur more broadly.
-- To feed another tool, use `--json` for the snippet plus source path and line.
+A new schema version gets a new file name. Build it once with `convo index`
+under a machine-capacity lease (moderate class); it reads every transcript,
+and searches refuse to run without it. `convo index --full` rebuilds from
+scratch. Every ordinary search then runs an incremental pass that stats each
+transcript and reads only appended bytes.
 
 ## Guard boundary
 
 `corpus-scan-guard` blocks recursive raw searches rooted at the corpus, its
-symlink, or large transcript containers such as `accounts/`, provider/account
-roots, `sessions/`, year/month session directories, and `archives/`. Bounded
-operations remain possible: one named transcript, a day directory or deeper, a
-non-transcript subtree, `find <root> -maxdepth 2`, `rg --max-depth 2`, and
-non-recursive `grep`. The normal sequence is indexed search, then a bounded raw
-inspection of the named source.
+symlink, or large transcript containers such as `accounts/`, provider and
+account roots, `sessions/`, year and month directories, and `archives/`.
+Bounded reads remain possible: one named transcript, a day directory or
+deeper, `find <root> -maxdepth 2` and `rg --max-depth 2`. `~/.local/state/north`
+points to `~/code/north-data`, so searching both reads the corpus twice.
 
 ## Compression and resume
 
-Compression rewrites Codex rollouts untouched for 48 hours as `.jsonl.zst`,
-while skipping open files and coordinator-named sessions. Claude Code
-transcripts are index-only and never compressed: every `projects` tree is
-excluded by its layout, and `compress` reports how many it left alone. Indexed search still works.
-Provider resume does not: `codex resume <uuid>` needs plain JSONL, so restore
-the selected rollout first.
-
-The corpus is local-only and indexes conversations, not repository code,
-configuration, commits, or objective truth.
+`convo compress` rewrites Codex rollouts untouched for 48 hours as
+`.jsonl.zst` (zstd -3, 128 MiB window), skipping files any process holds open
+and sessions the coordinator roster names. It verifies a byte-exact round trip
+before unlinking the source. Claude Code transcripts are never compressed;
+`compress` reports how many it left alone. Search keeps working on archives,
+but `codex resume <uuid>` needs plain JSONL, so run `convo restore <file>`
+first. Compression, restore and full rebuilds are maintenance, never
+prerequisites for answering a question.
 
 ## Skill usage
 
-Tool calls are indexed as `<tool> <key>=<value>`, so a Claude Skill load is the
-`tool` message `Skill skill=<name>`. Count loads and distinct sessions over a
-frozen window straight from the index (`sqlite3 -readonly
-~/.local/state/convo/index.db`, after one `convo index`):
+A Claude Skill load is a `tool` message with `tool = 'Skill'` and text
+`Skill skill=<name>`. Count loads and sessions over a frozen window straight
+from the index (`sqlite3 -readonly ~/.local/state/convo/index-v4.db` after one
+`convo index`):
 
 ```sql
-SELECT substr(m.content, 13) AS skill, COUNT(*) AS loads,
+SELECT substr(b.text, 13) AS skill, COUNT(*) AS loads,
        COUNT(DISTINCT f.session_id) AS sessions
-FROM msg m JOIN files f ON f.id = m.file_id
-WHERE f.provider = 'anthropic' AND m.role = 'tool'
-  AND m.content LIKE 'Skill skill=%'
+FROM msg m JOIN body b ON b.id = m.body JOIN files f ON f.id = m.file_id
+WHERE f.provider = 'anthropic' AND m.tool = 'Skill'
   AND m.ts >= '2026-09-26' AND m.ts < '2026-10-10T17:00'
 GROUP BY skill ORDER BY loads DESC;
 ```
 
 Codex has no Skill tool; it reads the file, so count `tool` messages whose
-content matches `skills/<name>/SKILL.md` with `f.provider = 'openai'`.
+body text matches `skills/<name>/SKILL.md` with `f.provider = 'openai'`.
 Loads include retries and re-reads: use the counts to find unused skills,
 never to rank value.
-
-## Interpreting a result
-
-Use the speaker, date, and surrounding source to distinguish a proposed rule
-from an accepted decision or a later reversal. A search miss proves absence
-only within a successfully refreshed, relevant scope. An unavailable root or
-stale index leaves a gap; it does not justify an unbounded raw scan.
-
-Search first, inspect the exact resulting source second. Compression and full
-index rebuilding are maintenance operations, not prerequisites for answering
-an ordinary historical question.
