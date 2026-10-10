@@ -34,6 +34,7 @@
     "cloudflare-deploy",
     "digitalocean-access",
     "passer-hetzner",
+    "vast-ai",
     "workers",
     "estimate",
     "testing",
@@ -569,6 +570,14 @@
       "owner": {
         "repo": "nixos-config",
         "path": "dotfiles/agents/skills/passer-hetzner/SKILL.md"
+      }
+    },
+    "vast-ai": {
+      "kind": "skill",
+      "category": "uncategorized",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/skills/vast-ai/SKILL.md"
       }
     }
   },
@@ -1405,6 +1414,16 @@
       ]
     },
     "passer-hetzner": {
+      "distributions": [
+        {
+          "type": "skill",
+          "targets": [
+            "shared"
+          ]
+        }
+      ]
+    },
+    "vast-ai": {
       "distributions": [
         {
           "type": "skill",
