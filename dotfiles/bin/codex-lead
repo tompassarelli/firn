@@ -72,6 +72,9 @@ case "$cmd" in
     [ $# -ge 1 ] || usage
     brief=$(realpath -e "$1") || die "brief not found: $1"; shift
     command -v spawn-quiet >/dev/null || die "spawn-quiet is missing"
+    if agents usage --fast codex ${AGENT_DOMAIN:+--domain "$AGENT_DOMAIN"} >/dev/null 2>&1; then
+      set -- -c 'service_tier="fast"' "$@"
+    fi
     since=$(( $(date +%s) - 1 ))
     spawn-quiet ghostty --title="${AGENT_ORG_NAME:-codex lead}" -e bash -c \
       'if [ -n "${AGENT_ORG_NAME:-}" ]; then agents org set "$AGENT_ORG_NAME" --pid $$ >/dev/null

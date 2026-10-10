@@ -128,10 +128,31 @@ def gate(db, provider):
     return 0
 
 
+def fast(db, provider, domain):
+    """Exit 0 printing "on" when routing turns plan-billed fast on for a new lead on this provider (burn, or an
+    urgent project that is not conserving); exit 1 printing "off" otherwise. Refreshes the provider's usage first."""
+    import tomllib
+    sys.path.insert(0, str(HERE))
+    import plan_usage
+    import routing
+    record(db, [r for r in read_all() if r.get("provider") == provider])
+    root = HERE.parent
+    cfg = tomllib.load(open(os.environ.get("AGENTS_ORCHESTRATION") or root / "orchestration.toml", "rb"))
+    catalog = tomllib.load(open(root / "model-catalog.toml", "rb"))
+    rows = [r for r in latest(db) if r["provider"] == provider]
+    ctx = plan_usage.live_ctx(cfg, catalog, rows, db, datetime.now(timezone.utc), cfg.get("tiers", {}))
+    plan_usage.apply_overrides(ctx, cfg.get("accounts"), {})
+    on = routing.fast(ctx, provider, ctx["projects"].get(domain or "", {}).get("u", 1.0))
+    print("on" if on else "off")
+    return 0 if on else 1
+
+
 def main(argv):
     db = sqlite3.connect(DB, timeout=10)
     if "--gate" in argv:
         return gate(db, argv[argv.index("--gate") + 1])
+    if "--fast" in argv:
+        return fast(db, argv[argv.index("--fast") + 1], argv[argv.index("--domain") + 1] if "--domain" in argv else None)
     if "--refresh" in argv:
         record(db, read_all())
         write_gate(db, sorted({r["provider"] for r in latest(db)}))
