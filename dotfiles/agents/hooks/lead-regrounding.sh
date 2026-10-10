@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Claude Code PostToolUse(Agent) hook for the main session only: on the
-# session's first worker spawn it tells the lead to create the regrounding
-# CronCreate from dotfiles/agents/routines/regrounding.md with its pointer
-# prompt. Subagent payloads (agent_id or agent_type present) get nothing. Fires once per session_id, recorded under
-# ~/.local/state/agents/regrounding/.
+# session's first worker spawn it tells the lead to create the tick
+# CronCreate from dotfiles/agents/routines/tick.md with its pointer
+# prompt, unless a session cron already carries it. Subagent payloads
+# (agent_id or agent_type present) get nothing. Fires once per session_id,
+# recorded under ~/.local/state/agents/regrounding/.
 #
 # Kill-switch: `north config agents off lead-regrounding` or env
 # AGENT_NO_AUTHORING_HOOKS (shared impl: lib/authoring-killswitch.sh).
@@ -41,7 +42,7 @@ session = data.get("session_id")
 if not (isinstance(session, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session)):
     sys.exit(0)
 
-path = os.environ.get("LEAD_REGROUNDING_ROUTINE", "")
+path = os.environ.get("LEAD_TICK_ROUTINE", "")
 try:
     text = open(path, encoding="utf-8").read()
 except OSError:
@@ -62,10 +63,10 @@ except FileExistsError:
 except OSError:
     sys.exit(0)
 
-pointer = "[routine:regrounding] Run `agents routines show regrounding` and follow it."
+pointer = "[routine:tick] Run `agents routines show tick` and follow it."
 text = (
     "You spawned your first worker this session. As a lead with a goal, create the "
-    "recurring regrounding job now if you have not: CronCreate with cron "
+    "recurring tick job now unless a session cron already carries [routine:tick]: CronList first, then CronCreate with cron "
     + json.dumps(meta.get("schedule", "")) + ", recurring true, and this exact prompt: "
     + json.dumps(pointer) + " Each tick reads the current text from " + path
     + ", which now says: " + match.group(2).strip()
@@ -78,10 +79,10 @@ print(json.dumps({
 }))
 PYEOF
 
-routine="$(dirname "$0")/../routines/regrounding.md"
+routine="$(dirname "$0")/../routines/tick.md"
 if [ ! -r "$routine" ] && agents_bin="$(command -v agents)"; then
-  routine="$(dirname "$(readlink -f "$agents_bin")")/../agents/routines/regrounding.md"
+  routine="$(dirname "$(readlink -f "$agents_bin")")/../agents/routines/tick.md"
 fi
-printf '%s' "$payload" | LEAD_REGROUNDING_ROUTINE="$(readlink -f "$routine")" \
+printf '%s' "$payload" | LEAD_TICK_ROUTINE="$(readlink -f "$routine")" \
   "${NORTH_AGENT_PYTHON:-python3}" -c "$PY"
 exit 0

@@ -39,8 +39,8 @@ check() {
 
 out="$(call s1)"
 case "$out" in
-  *CronCreate*'7,27,47 * * * *'*'[routine:regrounding] Run `agents routines show regrounding` and follow it.'*'Rebuild the DAG'*'spawn gate'*'45 minutes'*'one status line'*) check ok 'main session first spawn gets the routine pointer and its current text' ;;
-  *) check bad 'main session first spawn gets the routine pointer and its current text' "$out" ;;
+  *CronList*CronCreate*'3,13,23,33,43,53 * * * *'*'[routine:tick] Run `agents routines show tick` and follow it.'*'threads unowned'*'spawn gate'*'tick=<n>'*'CronDelete'*) check ok 'main session first spawn gets the tick pointer, CronList guard and its current text' ;;
+  *) check bad 'main session first spawn gets the tick pointer, CronList guard and its current text' "$out" ;;
 esac
 out="$(call s1)"
 [ -z "$out" ] && check ok 'main session second spawn is silent' || check bad 'main session second spawn is silent' "$out"
