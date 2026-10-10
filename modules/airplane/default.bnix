@@ -1,0 +1,15 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        description "airplane: radios change only through the `airplane` command; keys never toggle rfkill"]
+    {:options.myConfig.modules.airplane.enable (lib.mkEnableOption description)
+     :config (lib.mkIf config.myConfig.modules.airplane.enable
+       {:systemd.tmpfiles.rules [(s "d /var/lib/airplane 0755 " username " users -")]
+        :systemd.services.rfkill-guard
+         {:description description
+          :wantedBy ["multi-user.target"]
+          :after ["systemd-rfkill.service"]
+          :serviceConfig {:ExecStart (s pkgs.python3 "/bin/python3 -I " (p "./rfkill-guard.py") " /var/lib/airplane/state")
+                          :Restart "always"
+                          :RestartSec "1s"}}})}))

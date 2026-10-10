@@ -75,6 +75,7 @@ proton-log-watchdog   # strip PROTON_LOG from Wisp launch.sh, truncate clone log
 skill-review-queue    # weekly: open or update the north issue of skill reviews older than 30 days
 codex-shared-idle SOCKET # probe live loaded threads before runtime adoption
 codex-runtime-refresh # adopt the selected runtime only on idle shared servers
+airplane on|off|status # the only way to toggle radios; rfkill-guard disables key handling and reverts other blocks
 firn repo validate    # static check the .bnix tree, then evaluate every nixosConfigurations toplevel
 nexus-stage-hostkey DIR # decrypt nexus's pre-seeded SSH host key into DIR/etc/ssh for nixos-anywhere --extra-files
 firn host impact      # preview what would build

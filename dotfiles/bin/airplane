@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+state=/var/lib/airplane/state
+case "${1:-status}" in
+  on)
+    printf 'on\n' >"$state"
+    rfkill block wlan
+    rfkill block bluetooth
+    ;;
+  off)
+    printf 'off\n' >"$state"
+    rfkill unblock wlan
+    rfkill unblock bluetooth
+    ;;
+  status)
+    printf 'airplane %s\n' "$(cat "$state" 2>/dev/null || echo off)"
+    rfkill list
+    ;;
+  *)
+    echo "usage: airplane on|off|status" >&2
+    exit 2
+    ;;
+esac

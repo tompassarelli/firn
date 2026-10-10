@@ -63,6 +63,7 @@
   myConfig.modules.capacity-watchdog.enable = true;
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";
+  myConfig.modules.airplane.enable = true;
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;
   myConfig.modules.wg-nexus = {
