@@ -380,6 +380,7 @@ overflow_note = "at 100% of the plan Codex draws on the credit balance, so the l
 overflow_source = "https://learn.chatgpt.com/docs/pricing"
 overflow_checked = 2026-10-11
 auto_purchase = "off"
+credits_note = "The credits spent 4-7 Oct were a free grant from OpenAI, not a purchase (Tom, 11 Oct). The credits balance carries no grant flag or expiry, so any balance still counts as money and the 95% stop stays; a balance that can be told apart as granted (grant flag or expiry) becomes A4 expiring headroom and free burn."
 
 [accounts.gemini]
 plan = "Google AI Pro"
