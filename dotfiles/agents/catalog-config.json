@@ -143,16 +143,16 @@
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/cloudflare-deploy/SKILL.md"
+        "repo": "south",
+        "path": "agents/skills/cloudflare-deploy/SKILL.md"
       }
     },
     "digitalocean-access": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/digitalocean-access/SKILL.md"
+        "repo": "south",
+        "path": "agents/skills/digitalocean-access/SKILL.md"
       }
     },
     "clause-authoring": {
@@ -557,16 +557,16 @@
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/passer-hetzner/SKILL.md"
+        "repo": "south",
+        "path": "agents/skills/passer-hetzner/SKILL.md"
       }
     },
     "vast-ai": {
       "kind": "skill",
       "category": "uncategorized",
       "owner": {
-        "repo": "nixos-config",
-        "path": "dotfiles/agents/skills/vast-ai/SKILL.md"
+        "repo": "south",
+        "path": "agents/skills/vast-ai/SKILL.md"
       }
     },
     "org-role": {
