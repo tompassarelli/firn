@@ -26,5 +26,5 @@
    notes
    writing
    [vpn -protonvpn-cli]]
- :disabled [anytype bun cargo clang clippy clojure dbeaver drracket gcc glide mail nodejs obs-studio promptfoo racket rust-analyzer rustc rustfmt slack spotify wine wowup zoom]
+ :disabled [anytype blender bun cargo clang clippy clojure dbeaver drracket gcc glide mail nodejs obs-studio obsidian promptfoo racket rust-analyzer rustc rustfmt slack spotify wine wowup zoom]
 }

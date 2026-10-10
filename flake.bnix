@@ -50,7 +50,8 @@
        darwinModuleNames
         (builtins.fromJSON
           (builtins.readFile (p "./config/darwin-modules.json")))
-       environmentPkgs nixpkgs.legacyPackages.x86_64-linux
+       environmentPkgs
+        ((import nixpkgs) {:system "x86_64-linux" :config.allowUnfree true})
        validateDomainDependency
         (fn [dependency] Any
           (if (and (== dependency.dependentDomain "boot")
@@ -68,7 +69,8 @@
                   :home.homeDirectory "/home/tom"
                   :home.stateVersion  "25.05"
                   :home.packages
-                   (if includeExperimentPackage [pkgs.hello] [])})]}))
+                   (++ [pkgs.blender pkgs.obsidian]
+                       (if includeExperimentPackage [pkgs.hello] []))})]}))
        mkWhiterabbitWorld
         (fn [includeExperimentPackage] Any
           {:boot
@@ -78,6 +80,7 @@
                :hardwareConfig (p "./hardware-configuration.nix")})
            :environment
             (mkWhiterabbitEnvironment includeExperimentPackage)})
+       whiterabbitEnvironment (mkWhiterabbitEnvironment false)
        baselineWorld (mkWhiterabbitWorld false)
        toggledWorld (mkWhiterabbitWorld true)
        rejectedDependency
@@ -362,7 +365,11 @@
                 extraModules)}))
        :modules firnModules
        :homeConfigurations
-        {(s "tom@whiterabbit") (mkWhiterabbitEnvironment false)}
+        {(s "tom@whiterabbit") whiterabbitEnvironment}
+       :packages.x86_64-linux.whiterabbit-environment
+        (environmentPkgs.buildEnv
+          {:name "whiterabbit-environment"
+           :paths whiterabbitEnvironment.config.home.packages})
        :domainIndependence
         {:baseline
           {:bootDrvPath
