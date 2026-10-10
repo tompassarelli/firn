@@ -25,8 +25,9 @@ after every 10 new closures in a category and change a rule when the numbers mov
   the feature into smaller boxes; fix the native-check's client, capacity or host
   cause), and compare closures on those leftovers only.
 - Provider benchmarks only before 5 closed category issues at that tier.
-- Token cost: compare Haiku and Opus at 1:40, and price Haiku prompts above 100k
-  tokens at 5 times their normal rate.
+- Token cost: use `dotfiles/agents/model-catalog.toml` for sourced list API prices
+  and context thresholds. `agents plan` prints these comparisons separately from
+  Tom's subscription value and measured run outcomes.
 - Escalate to the next tier printed by `agents plan` only after `Stop: reasoning`
   (wrong cause or two failed fixes).
 

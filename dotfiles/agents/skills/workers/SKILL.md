@@ -4,7 +4,6 @@ description: Assign independent work, choose provider tiers and ETAs, and run wo
 grounded: 2026-10-10
 written: 2026-10-10
 ---
-
 # Workers
 
 **Throughput is lost in serialized long waits (farm runs, soaks, renders, landings), not in thinking.** Each tick, attack the critical path's longest wait: batch ready lanes into one landing, run independent unknown-cause hypotheses in parallel (`Done: ruled out` with evidence closes one), render 2–4 variants and judge once, and send code-only work to cloud workers first.

@@ -24,11 +24,14 @@ plan() {
     esac
   done
   local config="${AGENTS_ORCHESTRATION:-$(dirname "$(readlink -f "$0")")/../agents/orchestration.toml}"
+  local catalog="$(dirname "$(readlink -f "$0")")/../agents/model-catalog.toml"
   AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_POSTURE="$posture" AGENTS_PLAN_CONFIG="$config" \
+    AGENTS_PLAN_CATALOG="$catalog" \
     AGENTS_CLAUDE_BIN="${AGENTS_CLAUDE_BIN:-claude}" \
     AGENTS_CODEX_BIN="${AGENTS_CODEX_BIN:-codex}" \
     exec python3 -I -c '
-import json, os, subprocess, sys, tomllib
+import json, os, sqlite3, subprocess, sys, tomllib
+from pathlib import Path
 
 POSTURES = ("efficiency", "balanced", "performance")
 
@@ -140,6 +143,70 @@ for lo, hi, r in resolve():
     note = f" (takes {", ".join(took)}: provider dropped)" if took else ""
     print(f"  {lo}-{hi} {tiers[r].get("role", r)}: {label(r)}{note}")
 print("escalation: " + ", ".join(label(r) for r in avail) + ", then recommend to Tom")
+
+catalog_path = os.environ["AGENTS_PLAN_CATALOG"]
+try:
+    with open(catalog_path, "rb") as f:
+        models = tomllib.load(f)["models"]
+except (OSError, tomllib.TOMLDecodeError) as e:
+    die(f"cannot read {catalog_path}: {e}")
+
+run_tiers = {
+    "claude:haiku": "haiku",
+    "claude:opus-medium": "medium",
+    "claude:opus-high": "high",
+    "claude:opus-xhigh": "xhigh",
+    "codex:sol-medium": "gpt-6.1-sol medium",
+    "codex:sol-high": "gpt-6.1-sol high",
+    "codex:astra": "gpt-6-astra xhigh",
+}
+db_path = Path.home() / ".local/state/threads/threads.db"
+try:
+    db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
+    measured = {tier: (n, done) for tier, n, done in db.execute(
+        "SELECT tier, COUNT(*), SUM(outcome = ?) FROM runs GROUP BY tier", ("done",)
+    )}
+    db.close()
+except sqlite3.Error as e:
+    measured = None
+    print(f"measured runs unavailable: {e}")
+
+print("catalog (hand-edited; API prices are comparison only, separate from plan usage):")
+for ref, t in {**tiers, **cfg.get("on_request", {})}.items():
+    if ref.split(":")[0] not in usable:
+        continue
+    entry = models[ref]
+    value = entry["value"]
+    api = value["api"]
+    request = " (on request)" if ref in cfg.get("on_request", {}) else ""
+    print(f"  {ref}: {t["model"]} {t["effort"]}{request}")
+    print("    strengths: " + "; ".join(entry["strengths"]))
+    options = "/".join(str(price) for price in value["monthly_price_options"])
+    price = value["monthly_price"]
+    monthly = "monthly price unknown" if price == "unknown" else f"{value["currency"]} {price}/month"
+    print(f"    value: {value["plan"]}; {monthly} "
+          f"({value["monthly_price_note"]}; public options {options} {value["currency"]}/month); "
+          f"{value["source"]}, checked {value["checked"]}")
+    print(f"    API list comparison: {api["currency"]} {api["input_per_million"]} input / "
+          f"{api["output_per_million"]} output per million tokens ({api["context"]}); "
+          f"{api["long_input_per_million"]} input / {api["long_output_per_million"]} output "
+          f"({api["long_context"]}); {api["source"]}, checked {api["checked"]}")
+    print(f"    discounts: {value["discounts"]}; expiry {value["discount_expiry"]}; "
+          f"{value["discount_source"]}, checked {value["discount_checked"]}")
+    benchmarks = entry["benchmarks"]
+    if benchmarks:
+        best = benchmarks[0]
+        result = ", ".join(f"{field} {best[field]}" for field in ("rank", "score") if field in best)
+        print(f"    best benchmark: {best["name"]}, {result}; "
+              f"{best["source"]}, checked {best["checked"]}")
+    else:
+        print("    best benchmark: none verified for this model and effort")
+    if measured is None:
+        print("    measured: unavailable")
+    else:
+        n, done = measured.get(run_tiers[ref], (0, 0))
+        share = f"{done / n:.1%}" if n else "n/a (zero samples)"
+        print(f"    measured: {n} runs; {done} done; done share {share}")
 '
 }
 
