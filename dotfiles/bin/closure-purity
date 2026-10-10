@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Closure purity: personal project CODE never enters the system closure.
+# firn's own install glue for North (hook registration, projector, liveness marker) is allowed by name.
 set -euo pipefail
 target="${1:-/run/current-system}"
-hits=$(nix-store -qR "$target" | grep -Ei -- '(north|beagle)' \
-  | grep -Eiv 'codex' || true)
+hits=$(nix-store -qR "$target" | grep -Ei -- '(north|south|beagle)' \
+  | grep -Eiv 'codex' \
+  | grep -Ev -- '-(north-claude-hooks\.json|north-claude-hook-projector|etc-north-delivery-liveness-required)$' || true)
 if [ -n "$hits" ]; then
   printf 'closure-purity: FAIL — project builds inside %s:\n%s\n' "$target" "$hits" >&2
   exit 1
