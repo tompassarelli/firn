@@ -9,6 +9,8 @@ profile: tooling
 - Compose one package/service per module through `myConfig.modules.*` and declared tags; let dynamic imports discover modules.
 - Verify `whiterabbit` and `nexus`; use `firn rebuild` for exact committed snapshots on the laptop and `firn host deploy nexus` (from a lane at origin/main) for nexus.
 - Keep general commands under `dotfiles/bin/` and repository commands in entity-first `firn`.
+- Route agent tools, hooks and skills to north; route secrets, host identity, Tom's policy and account skills to south.
+- Public and reusable goes to north or firn; Tom-specific or secret goes to south.
 
 ## Routes
 
