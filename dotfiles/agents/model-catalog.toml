@@ -7,12 +7,14 @@
 model = "claude-haiku-5-5"
 effort = "high"
 strengths = ["exact edits","log lookup and triage","classification and extraction"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 20, score = 60.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
 
 [models."claude:haiku".value]
-plan = "Tom's Claude Max via Claude Code"
-monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+plan = "Tom's Claude Max 20x via Claude Code"
+monthly_price = 200
+monthly_price_note = "Max 20x per the account's rate-limit tier, extra usage off"
 monthly_price_options = [100, 200]
 currency = "USD"
 source = "https://support.claude.com/en/articles/11049741-what-is-the-max-plan"
@@ -37,12 +39,14 @@ checked = 2026-10-11
 model = "gpt-6.1-sol"
 effort = "medium"
 strengths = ["features with clear interfaces","known-cause fixes","tooling and documentation"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 8, score = 71, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
 
 [models."codex:sol-medium".value]
 plan = "Tom's ChatGPT Pro via Codex"
 monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"
@@ -67,12 +71,14 @@ checked = 2026-10-11
 model = "gpt-6.1-sol"
 effort = "high"
 strengths = ["multi-step implementation","ambiguous middle work","technical analysis"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 8, score = 71, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
 
 [models."codex:sol-high".value]
 plan = "Tom's ChatGPT Pro via Codex"
 monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"
@@ -97,12 +103,15 @@ checked = 2026-10-11
 model = "claude-opus-5-5"
 effort = "medium"
 strengths = ["unknown-cause debugging","cross-module changes","planning and architecture"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 2, score = 83.3, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+  { name = "SWE Multilingual (model-level, effort not stated)", rank = 1, score = 93.9, source = "https://benchlm.ai/benchmarks/swe-bench-multilingual", checked = 2026-10-11 },
+]
 
 [models."claude:opus-medium".value]
-plan = "Tom's Claude Max via Claude Code"
-monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+plan = "Tom's Claude Max 20x via Claude Code"
+monthly_price = 200
+monthly_price_note = "Max 20x per the account's rate-limit tier, extra usage off"
 monthly_price_options = [100, 200]
 currency = "USD"
 source = "https://support.claude.com/en/articles/11049741-what-is-the-max-plan"
@@ -127,12 +136,15 @@ checked = 2026-10-11
 model = "claude-opus-5-5"
 effort = "high"
 strengths = ["execution problems left by Opus medium","multi-step reasoning"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 2, score = 83.3, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+  { name = "SWE Multilingual (model-level, effort not stated)", rank = 1, score = 93.9, source = "https://benchlm.ai/benchmarks/swe-bench-multilingual", checked = 2026-10-11 },
+]
 
 [models."claude:opus-high".value]
-plan = "Tom's Claude Max via Claude Code"
-monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+plan = "Tom's Claude Max 20x via Claude Code"
+monthly_price = 200
+monthly_price_note = "Max 20x per the account's rate-limit tier, extra usage off"
 monthly_price_options = [100, 200]
 currency = "USD"
 source = "https://support.claude.com/en/articles/11049741-what-is-the-max-plan"
@@ -157,12 +169,15 @@ checked = 2026-10-11
 model = "claude-opus-5-5"
 effort = "xhigh"
 strengths = ["execution problems left by Opus high","demanding analysis"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 2, score = 83.3, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+  { name = "SWE Multilingual (model-level, effort not stated)", rank = 1, score = 93.9, source = "https://benchlm.ai/benchmarks/swe-bench-multilingual", checked = 2026-10-11 },
+]
 
 [models."claude:opus-xhigh".value]
-plan = "Tom's Claude Max via Claude Code"
-monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+plan = "Tom's Claude Max 20x via Claude Code"
+monthly_price = 200
+monthly_price_note = "Max 20x per the account's rate-limit tier, extra usage off"
 monthly_price_options = [100, 200]
 currency = "USD"
 source = "https://support.claude.com/en/articles/11049741-what-is-the-max-plan"
@@ -187,12 +202,14 @@ checked = 2026-10-11
 model = "gpt-6-astra"
 effort = "xhigh"
 strengths = ["demanding reasoning","complex coding","professional workflows"]
-benchmarks = []
+benchmarks = [
+  { name = "BenchLM coding (weighted SWE-bench Pro, DeepSWE, CursorBench basket; model-level, effort not stated)", rank = 4, score = 76.1, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
+]
 
 [models."codex:astra".value]
 plan = "Tom's ChatGPT Pro via Codex"
 monthly_price = "unknown"
-monthly_price_note = "Tom's account variant is unverified"
+monthly_price_note = "the account shows plan pro but not which of the 100/200/500 tiers; Tom fills it in"
 monthly_price_options = [100, 200, 500]
 currency = "USD"
 source = "https://learn.chatgpt.com/docs/pricing"

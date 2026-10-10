@@ -160,7 +160,7 @@ run_tiers = {
     "codex:sol-high": "gpt-6.1-sol high",
     "codex:astra": "gpt-6-astra xhigh",
 }
-db_path = Path.home() / ".local/state/threads/threads.db"
+db_path = Path(os.environ.get("THREADS_DB") or Path.home() / ".local/state/threads/threads.db")
 try:
     db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
     measured = {tier: (n, done) for tier, n, done in db.execute(
@@ -172,14 +172,14 @@ except sqlite3.Error as e:
     print(f"measured runs unavailable: {e}")
 
 print("catalog (hand-edited; API prices are comparison only, separate from plan usage):")
-for ref, t in {**tiers, **cfg.get("on_request", {})}.items():
+for ref, t in tiers.items():
     if ref.split(":")[0] not in usable:
         continue
     entry = models[ref]
     value = entry["value"]
     api = value["api"]
     request = " (on request)" if ref in cfg.get("on_request", {}) else ""
-    print(f"  {ref}: {t["model"]} {t["effort"]}{request}")
+    print(f"  {ref}: {t["model"]} {t["effort"]}")
     print("    strengths: " + "; ".join(entry["strengths"]))
     options = "/".join(str(price) for price in value["monthly_price_options"])
     price = value["monthly_price"]
