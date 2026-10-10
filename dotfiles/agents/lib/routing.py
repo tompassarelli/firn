@@ -20,6 +20,14 @@ def account_of(tier):
     return tier.get("account", provider(tier))
 
 
+def pick_accounts(ctx):
+    """Each tier runs on its provider's account with the lowest price, then the most slack (claude:a, claude:b)."""
+    def best(p):
+        names = [n for n in ctx["accounts"] if n.split(":", 1)[0] == p]
+        return min(names, key=lambda n: (price(ctx, n), -slack(ctx["accounts"][n]), n)) if names else p
+    return dict(ctx, tiers=[dict(t, account=t.get("account") or best(provider(t))) for t in ctx["tiers"]])
+
+
 def stale(acct, usage):
     age = acct.get("age_min")
     return age is None or age > usage["stale_min"]
@@ -31,7 +39,7 @@ def used(acct):
 
 def billing(ctx, name, mode):
     acct = ctx["accounts"].get(name)
-    value = ctx["billing"].get(name, {}).get(mode)
+    value = ctx["billing"].get(name, ctx["billing"].get(name.split(":", 1)[0], {})).get(mode)
     if acct is None or stale(acct, ctx["usage"]) or value not in ("plan", "money", "blocked"):
         return "money"
     return value
@@ -160,6 +168,7 @@ def fast(ctx, name, u):
 
 def plan(ctx):
     ctx = dict(ctx, now=datetime.fromisoformat(ctx["now"]) if isinstance(ctx["now"], str) else ctx["now"])
+    ctx = pick_accounts(ctx)
     accounts = {n: {"state": state(a, ctx["usage"], ctx["now"]), "slack": slack(a), "price": price(ctx, n)}
                 for n, a in ctx["accounts"].items()}
     boxes, needs, slot = {}, [], 0
@@ -171,7 +180,7 @@ def plan(ctx):
             slot += 1
         r = choose(ctx, box, explore_slot)
         t = r["tier"]
-        boxes[box["id"]] = {"tier": t and t["key"], "explore": r.get("explore", False), "wait": r.get("wait"),
+        boxes[box["id"]] = {"tier": t and t["key"], "account": t and account_of(t), "explore": r.get("explore", False), "wait": r.get("wait"),
                             "fast": bool(t) and fast(ctx, account_of(t), project["u"])}
         if r.get("needs"):
             needs.append(r["needs"])
@@ -187,7 +196,8 @@ def render(ctx, result):
         lines.append(f"account {n}: state {a['state']}, slack {a['slack']:+.1f}, price {p}")
     for box in ctx["boxes"]:
         b = result["boxes"][box["id"]]
-        what = b["tier"] or (f"wait for {b['wait']}" if b["wait"] else "none")
+        what = b["tier"] and b["tier"] + (f" on {b['account']}" if ":" in b["account"] else "")
+        what = what or (f"wait for {b['wait']}" if b["wait"] else "none")
         tag = " (explore)" if b["explore"] else ""
         lines.append(f"box {box['id']} ({box['project']} {box['category']} d{box['difficulty']}): {what}{tag}, fast {'on' if b['fast'] else 'off'}")
     if result["explore"]:
@@ -205,6 +215,9 @@ def divergence(result, expect):
     for b, t in expect.get("tiers", {}).items():
         if result["boxes"][b]["tier"] != t:
             return f"box {b}: tier {result['boxes'][b]['tier']}, expected {t}"
+    for b, a in expect.get("accounts", {}).items():
+        if result["boxes"][b]["account"] != a:
+            return f"box {b}: account {result['boxes'][b]['account']}, expected {a}"
     for b, f in expect.get("fast", {}).items():
         if result["boxes"][b]["fast"] != f:
             return f"box {b}: fast {result['boxes'][b]['fast']}, expected {f}"

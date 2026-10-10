@@ -197,7 +197,7 @@ else:
         die(str(e))
     if not ctx["accounts"]:
         print("accounts: no usage snapshot; run `agents usage --refresh`")
-    print("\n".join(notes + plan_usage.lines(ctx)))
+    print("\n".join(notes + plan_usage.lines(ctx) + plan_usage.promo_lines(catalog, db, ctx["now"])))
 
 run_tiers = {
     "claude:haiku": "haiku",

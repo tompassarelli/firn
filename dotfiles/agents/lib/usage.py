@@ -3,6 +3,7 @@ record their rows in threads.db's usage table, and print the latest row per acco
 
 import json
 import os
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -15,11 +16,41 @@ STALE_MIN = 30
 COLUMNS = ("ts", "provider", "account", "kind", "name", "used_pct", "window_min", "resets_at", "amount", "source")
 
 
-def read_all():
+def machines():
+    """provider -> {host: account label} from the catalog, e.g. claude a on whiterabbit and b on nexus."""
+    import tomllib
+    try:
+        catalog = tomllib.load(open(HERE.parent / "model-catalog.toml", "rb"))
+    except (OSError, ValueError):
+        return {}
+    return {p: a["machines"] for p, a in catalog.get("accounts", {}).items() if isinstance(a.get("machines"), dict)}
+
+
+def local_account(provider):
+    return machines().get(provider, {}).get(socket.gethostname())
+
+
+def read_all(remote=True):
+    """Local adapters, plus each labelled account signed in on another machine, read there over ssh."""
     procs = {p.stem.removeprefix("usage_"): subprocess.Popen([sys.executable, "-I", str(p)], stdout=subprocess.PIPE,
                                                             stderr=subprocess.DEVNULL, text=True)
              for p in sorted(HERE.glob("usage_*.py"))}
+    hosts = machines()
+    here = socket.gethostname()
+    remotes = {(p, h): subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", h, "agents", "usage",
+                                         "--refresh", "--local", "--json"], stdout=subprocess.PIPE,
+                                        stderr=subprocess.DEVNULL, text=True)
+               for p, m in hosts.items() for h in m if h != here and remote}
     rows = []
+    for (p, h), proc in remotes.items():
+        try:
+            out, _ = proc.communicate(timeout=45)
+            remote_rows = json.loads(out or "[]")
+        except (subprocess.TimeoutExpired, ValueError):
+            proc.kill()
+            continue
+        rows += [{c: r.get(c) for c in COLUMNS} | {"account": hosts[p][h]} for r in remote_rows
+                 if r.get("provider") == p and r.get("account") == hosts[p][h]]
     for name, proc in procs.items():
         try:
             out, _ = proc.communicate(timeout=30)
@@ -29,9 +60,11 @@ def read_all():
             continue
         for line in out.splitlines():
             try:
-                rows.append(json.loads(line))
+                row = json.loads(line)
             except ValueError:
                 continue
+            label = hosts.get(row.get("provider"), {}).get(here)
+            rows.append(row | {"account": label} if label else row)
     return rows
 
 
@@ -77,6 +110,8 @@ def refusal(db, provider, cfg, catalog, now):
     rows = [r for r in latest(db) if r["provider"] == provider]
     ctx = plan_usage.live_ctx(cfg, catalog, rows, db, now, cfg.get("tiers", {}))
     plan_usage.apply_overrides(ctx, cfg.get("accounts"), {})
+    if provider not in ctx["accounts"] and local_account(provider):
+        provider = f"{provider}:{local_account(provider)}"
     acct = ctx["accounts"].get(provider)
     if acct is not None and routing.price(ctx, provider) != math.inf:
         return None
@@ -118,10 +153,25 @@ def write_gate(db, providers):
     return verdicts
 
 
+def notify_promos(db):
+    """One desktop notification per promotion, from 7 days before it ends (plan_usage.promo_lines decides)."""
+    import tomllib
+    import plan_usage
+    catalog = tomllib.load(open(HERE.parent / "model-catalog.toml", "rb"))
+    sent = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local/state") / "agents/promo-notified"
+    for line in plan_usage.promo_lines(catalog, db, datetime.now(timezone.utc)):
+        stamp = sent / (line.split(" promotion", 1)[0].removeprefix("Needs Tom: ") + "-" + line.split(" ends ", 1)[1].split()[0])
+        if stamp.exists():
+            continue
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["notify-send", "Plan promotion ending", line], check=False)
+        stamp.write_text(line + "\n")
+
+
 def gate(db, provider):
     """Exit 3 with the refusal when a spawn on this provider's account could bill money, 0 otherwise; refreshes the
     provider's usage first so the verdict is current."""
-    record(db, [r for r in read_all() if r.get("provider") == provider])
+    record(db, [r for r in read_all(remote=False) if r.get("provider") == provider])
     reason = write_gate(db, [provider])[provider]["refusal"]
     if reason:
         print(reason)
@@ -136,14 +186,15 @@ def fast(db, provider, domain):
     sys.path.insert(0, str(HERE))
     import plan_usage
     import routing
-    record(db, [r for r in read_all() if r.get("provider") == provider])
+    record(db, [r for r in read_all(remote=False) if r.get("provider") == provider])
     root = HERE.parent
     cfg = tomllib.load(open(os.environ.get("AGENTS_ORCHESTRATION") or root / "orchestration.toml", "rb"))
     catalog = tomllib.load(open(root / "model-catalog.toml", "rb"))
     rows = [r for r in latest(db) if r["provider"] == provider]
     ctx = plan_usage.live_ctx(cfg, catalog, rows, db, datetime.now(timezone.utc), cfg.get("tiers", {}))
     plan_usage.apply_overrides(ctx, cfg.get("accounts"), {})
-    on = routing.fast(ctx, provider, ctx["projects"].get(domain or "", {}).get("u", 1.0))
+    name = provider if provider in ctx["accounts"] or not local_account(provider) else f"{provider}:{local_account(provider)}"
+    on = routing.fast(ctx, name, ctx["projects"].get(domain or "", {}).get("u", 1.0))
     print("on" if on else "off")
     return 0 if on else 1
 
@@ -155,8 +206,9 @@ def main(argv):
     if "--fast" in argv:
         return fast(db, argv[argv.index("--fast") + 1], argv[argv.index("--domain") + 1] if "--domain" in argv else None)
     if "--refresh" in argv:
-        record(db, read_all())
+        record(db, read_all(remote="--local" not in argv))
         write_gate(db, sorted({r["provider"] for r in latest(db)}))
+        notify_promos(db)
     now = datetime.now(timezone.utc)
     rows = latest(db)
     for r in rows:

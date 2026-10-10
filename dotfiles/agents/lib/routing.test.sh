@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Money property over the catalog's tiers, then the four §4 scenarios (firn#12).
+# Money property over the catalog's tiers, then the four §4 scenarios and two Claude accounts (firn#12).
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 fail=0
@@ -68,7 +68,7 @@ print(f"PASS money property: {states} account states x {len(tiers)} catalog tier
       f"{decisions} decisions, {picks} picks, {fasts} fast-on, 0 money")
 PY
 
-for s in burn conserve new-model deadline; do
+for s in burn conserve new-model deadline two-claude; do
   if out="$(python3 -I "$HERE/routing.py" scenario "$HERE/routing-scenarios/$s.json" 2>&1)"; then
     echo "PASS scenario $s"
   else

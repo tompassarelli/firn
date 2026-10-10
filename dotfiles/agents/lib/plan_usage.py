@@ -42,12 +42,15 @@ def beta(db, r, now):
 
 
 def accounts_from(rows, db, now):
+    """One account per provider is named by the provider; several (claude a and b) are named provider:account."""
+    ids = {}
+    for r in rows:
+        ids.setdefault(r["provider"], set()).add(r["account"])
     accounts = {}
     for r in sorted(rows, key=lambda r: r["ts"], reverse=True):
-        a = accounts.setdefault(r["provider"], {"id": r["account"], "windows": {}, "grants": [], "hasCredits": False,
-                                                "extra_usage": False, "spend": False, "age_min": None, "resets": {}})
-        if a["id"] != r["account"]:
-            continue
+        key = r["provider"] if len(ids[r["provider"]]) == 1 else f"{r['provider']}:{r['account']}"
+        a = accounts.setdefault(key, {"id": r["account"], "windows": {}, "grants": [], "hasCredits": False,
+                                      "extra_usage": False, "spend": False, "age_min": None, "resets": {}})
         age = (now - ts(r["ts"])).total_seconds() / 60
         a["age_min"] = age if a["age_min"] is None else max(a["age_min"], age)
         if r["kind"] == "window" and r["used_pct"] is not None and r["resets_at"]:
@@ -63,9 +66,10 @@ def accounts_from(rows, db, now):
 
 def apply_overrides(ctx, cfg_accounts, cli_states):
     notes = []
-    for name, o in (cfg_accounts or {}).items():
-        acct = ctx["accounts"].get(name)
-        if acct is None or "state" not in o:
+    for name, o in ((n, o) for p, o in (cfg_accounts or {}).items() for n in ctx["accounts"]
+                    if n == p or n.split(":", 1)[0] == p):
+        acct = ctx["accounts"][name]
+        if "state" not in o:
             continue
         until = str(o.get("until") or acct.get("resets", {}).get("week") or "") or None
         if until is None or ctx["now"] >= ts(until):
@@ -74,11 +78,13 @@ def apply_overrides(ctx, cfg_accounts, cli_states):
         else:
             acct["override"] = {"state": o["state"], "until": until}
             acct["override_from"] = f"orchestration.toml until {until}"
-    for name, s in cli_states.items():
-        if name not in ctx["accounts"]:
-            raise ValueError(f"--state {name}={s}: no usage snapshot for {name}")
-        ctx["accounts"][name]["override"] = {"state": s, "until": FAR}
-        ctx["accounts"][name]["override_from"] = "--state"
+    for arg, s in cli_states.items():
+        names = [n for n in ctx["accounts"] if n == arg or n.split(":", 1)[0] == arg]
+        if not names:
+            raise ValueError(f"--state {arg}={s}: no usage snapshot for {arg}")
+        for name in names:
+            ctx["accounts"][name]["override"] = {"state": s, "until": FAR}
+            ctx["accounts"][name]["override_from"] = "--state"
     return notes
 
 
@@ -91,6 +97,34 @@ def live_ctx(cfg, catalog, rows, db, now, tiers):
                 for i, (k, t) in enumerate(tiers.items())]
     return {"now": now, "usage": cfg["usage"], "tiers": ts_tiers, "billing": billing, "lease": False,
             "accounts": accounts_from(rows, db, now), "projects": projects, "boxes": []}
+
+
+def provider_of_tier(tier):
+    return "gemini" if tier.startswith("gemini") else "codex" if tier.startswith("gpt-") else "claude"
+
+
+def promo_lines(catalog, db, now, days=7):
+    """A Needs Tom line for each promotion ending within `days`: does the account earn its full price, i.e. is its
+    share of the last 30 days' runs at least its share of the plans' monthly spend at full price."""
+    accounts = catalog.get("accounts", {})
+    full = {p: a["monthly_price"] * max(len(a.get("machines", {})), 1) for p, a in accounts.items() if "monthly_price" in a}
+    out = []
+    for p, a in accounts.items():
+        end = a.get("promo_end")
+        left = end and (datetime.combine(end, datetime.min.time(), timezone.utc) - now).days
+        if left is None or not 0 <= left <= days:
+            continue
+        counts = {}
+        for (tier,) in (db.execute("SELECT tier FROM runs WHERE started >= ?",
+                                   ((now - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ"),)) if db else []):
+            counts[provider_of_tier(tier or "")] = counts.get(provider_of_tier(tier or ""), 0) + 1
+        runs, total = counts.get(p, 0), sum(counts.values())
+        run_share, cost_share = (100 * runs / total if total else 0.0), 100 * full.get(p, 0) / (sum(full.values()) or 1)
+        verdict = "earned its full price" if run_share >= cost_share else "did not earn its full price"
+        out.append(f"Needs Tom: {p} promotion (USD {a['promo_price']}/month) ends {end} ({left} days, "
+                   f"{'confirmed' if a.get('promo_end_confirmed') else 'unconfirmed'}); at USD {a['monthly_price']}/month it is "
+                   f"{cost_share:.1f}% of plan spend and ran {run_share:.1f}% of runs in 30 days ({runs} of {total}): {verdict}")
+    return out
 
 
 def until(hours):
@@ -133,7 +167,8 @@ def lines(ctx, result=None):
     if result:
         for box in ctx["boxes"]:
             b = result["boxes"][box["id"]]
-            what = b["tier"] or (f"wait for {b['wait']}" if b["wait"] else "none")
+            what = b["tier"] and b["tier"] + (f" on {b['account']}" if ":" in b["account"] else "")
+            what = what or (f"wait for {b['wait']}" if b["wait"] else "none")
             tag = " (explore)" if b["explore"] else ""
             out.append(f"box {box['id']} ({box['project']} {box['category']} d{box['difficulty']}): {what}{tag}, "
                        f"fast {'on' if b['fast'] else 'off'}")
