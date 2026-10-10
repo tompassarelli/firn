@@ -1,4 +1,0 @@
- <INFO> [00:31:20] lem-core lem.lisp (top level form launch) - Starting Lem
- <WARN> [00:31:20] lem-core interface.lisp (top level form get-default-implementation) -
-  User specified non-existant interface NIL; Using #<STANDARD-CLASS LEM-NCURSES::NCURSES> instead.
-Available interfaces: (#<STANDARD-CLASS LEM-NCURSES::NCURSES>)
