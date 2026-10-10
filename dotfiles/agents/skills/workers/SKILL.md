@@ -22,8 +22,8 @@ written: 2026-10-09
 - Trial the cheaper tier on every other mechanical/docs-policy/tooling/balance item until 5 closures or 2 failures.
 - Use provider benchmarks only before 5 closed category issues at that tier.
 - Set ETA to the chosen category/tier's actual median minutes; label missing evidence uncalibrated.
-- Expect a report at 30 minutes or twice ETA, whichever comes first.
-- Run a job longer than the 30-minute leash (renders, long captures) yourself under a capacity lease, then staff a short worker to use its output.
+- Expect a report at 45 minutes or twice ETA, whichever comes first.
+- Run a job longer than the 45-minute leash (renders, long captures) yourself under a capacity lease, then staff a short worker to use its output.
 - Escalate a failed or unfinished attempt to the next tier printed by `agents plan`.
 - Bring the supervisor one recommendation when the next tier cannot run here.
 
@@ -42,14 +42,13 @@ written: 2026-10-09
 - Use Astra xhigh or Fable only when Tom asks by name.
 - Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
 - Run local file/client work here through capacity admission, farm sweeps through `github-actions`, and public code-only Smashcraft/Wisp work through `cloud-workers` (4 cores/run).
-- Hand off Claude workers at 350k context, before auto-compaction fires at 400k for workers and the parent.
 - Keep `worker-sweep --wait` active for the 10-minute idle/handoff signal while workers run; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
 - As a lead with a goal, schedule a recurring CronCreate every 20 minutes that rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers at 200k context or 45 minutes and closes passed issues, so Tom never has to prompt a regrounding.
 - Stop the parent's monitors/background shells when their work ends.
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
 - Have a worker report a lane ready to land with its path; the parent runs its `safe-push` as a background job, because a foreground push waiting in the landing queue outlives the worker's 10-minute tool call and loses its place.
-- Recycle a worker at 200k context or 45 minutes, whichever comes first (time measured with `date` against its recorded start time): it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
+- Recycle a worker at 200k context or 45 minutes, whichever comes first (the worker-handoff hook tells it at both, well before 400k auto-compaction): it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
 - Have workers finish by running `safe-push` in the foreground with a 10-minute timeout, never in the background, because the stop hook kills background jobs; when a landing outlasts that, the worker reports its exact lane and the parent lands it.
