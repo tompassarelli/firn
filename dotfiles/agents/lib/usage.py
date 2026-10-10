@@ -48,8 +48,9 @@ def latest(db):
         return []
     db.row_factory = sqlite3.Row
     return [dict(r) for r in db.execute(
-        "SELECT * FROM usage u WHERE ts = (SELECT max(ts) FROM usage WHERE provider = u.provider AND account = u.account"
-        " AND kind = u.kind AND name = u.name) ORDER BY provider, account, kind DESC, window_min, name")]
+        "SELECT * FROM usage u WHERE rowid = (SELECT rowid FROM usage WHERE provider = u.provider AND account = u.account"
+        " AND kind = u.kind AND name = u.name ORDER BY ts DESC, rowid DESC LIMIT 1)"
+        " ORDER BY provider, account, kind DESC, window_min, name")]
 
 
 def age_min(ts, now):
