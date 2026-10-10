@@ -62,6 +62,8 @@ claude                # launch the atomically selected Claude runtime
 vast-job --offer-query Q --max-hours H --run CMD --fetch P --to DIR # rent, run, fetch, destroy one capped vast.ai job
 vast-reaper [--dry-run]  # every 5 min: destroy vast-job instances past deadline or without a live supervisor
 lane-gc [--dry-run] [--unlanded] # hourly: retire landed clean idle worktrees/branches; report unlanded work
+capacity-watchdog report         # 30 s sampler (user service): 5/30-min load, PSI, lease and unleased-process windows and incidents
+git-maintenance-nightly          # 03:17 timer: git maintenance per ~/code/*/main inside a moderate capacity lease
 update-status         # report successful automatic updates older than 36 hours
 update-notify SERVICE # desktop notification with the failed service's journal
 proton-log-watchdog   # strip PROTON_LOG from Wisp launch.sh, truncate clone logs over 1 GiB

@@ -50,6 +50,7 @@ written: 2026-10-09
 - Respect the spawn gate when committedBatchCpus (each live batch lease at max(reserved, measured cores) plus unleased heavy load) reaches aggregateCpuLimit or protectedCpuSomeAvg10 exceeds 20; queue, use the farm or use cloud workers.
 - Scale native pairs one at a time and stop adding above protectedCpuSomeAvg10 20 in either profile.
 - Use status for holders, remaining seconds, queue order, each run lease's `measured` cores/memory/GPU beside its reservation, and `unleasedHeavy` (cgroups outside leases, session and native slices averaging over one core for two minutes, sampled by the presence watcher).
+- Read `~/.local/state/agents/watchdog/incidents.md` and `capacity-watchdog report` for the 30 s watchdog sampler's unleased-tree and stray git maintenance incidents and 5/30-minute pressure windows; the `[routine:watchdog]` cron reads them every 5 minutes.
 - Read `~/.local/state/agents/machine-capacity-usage.jsonl` for each released run's measured CPU seconds, mean/peak cores, peak memory and GPU seconds by owner and command shape.
 - Treat memory PSI as diagnostic and system CPU PSI as admission pacing rather than desktop harm.
 - Leave signaling of peers to their owner/accountable parent.

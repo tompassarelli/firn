@@ -76,6 +76,7 @@ expect_allow "$(agent '{"subagent_type":"claude-code-guide","prompt":"p"}')" 'no
 expect_allow "$(agent '{"subagent_type":"worker","prompt":"CASE=URGENT FACT=\"prod login is down for every user\" fix it"}')" 'URGENT brief passes over the limit'
 grep -q '"gate": "spawn-capacity"' "$SCRATCH/state/verify-overrides.jsonl" 2>/dev/null \
   && check ok 'URGENT override is logged' || check bad 'URGENT override is logged' "no log line"
+expect_allow "$(agent '{"subagent_type":"worker-haiku","prompt":"[routine:watchdog] Run `agents routines show watchdog` and follow it."}')" 'the capacity watchdog brief is exempt over the limit'
 expect_deny "$(agent '{"subagent_type":"worker","prompt":"CASE=URGENT FACT=\"short\" go"}')" 'URGENT with a too-short fact is denied'
 rm -f "$STATUS"
 expect_allow "$(agent "$worker")" 'missing probe output allows'

@@ -12,7 +12,8 @@ protected desktop slice is under pressure (protectedCpuSomeAvg10 above 20; skipp
 the unattended profile, as the helper does). A
 missing, slow (2 s) or unreadable helper allows. An urgent fix passes with
 `CASE=URGENT FACT="..."` at the start of the brief, logged beside the Codex
-behavior overrides.
+behavior overrides. The capacity watchdog (a brief carrying
+`[routine:watchdog]`) is never refused, since it reports the overload.
 """
 
 import json
@@ -26,6 +27,7 @@ PROTECTED_PRESSURE_LIMIT = 20.0
 HELPER_TIMEOUT = 2.0
 LOCAL_CLAUDE_TYPES = {"worker", "worker-high", "worker-xhigh", "worker-haiku", "general-purpose", "Explore", "fork"}
 ACTIVE_SECONDS = 300
+EXEMPT_MARKER = "[routine:watchdog]"
 URGENT = re.compile(r"(?m)^\W*CASE=URGENT\s+FACT=(?:[\"“”]([^\"“”]*)[\"“”]|['‘’]([^'‘’]*)['‘’])", re.IGNORECASE)
 
 
@@ -186,6 +188,8 @@ def urgent_file_fact(texts):
 def check(event):
     """The refusal text for this spawn, or None to allow it."""
     if not is_local(event):
+        return None
+    if any(EXEMPT_MARKER in t for t in brief_texts(event.get("tool_input") or {})):
         return None
     reading = capacity()
     if reading is None:
