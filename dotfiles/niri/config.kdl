@@ -370,6 +370,21 @@ window-rule {
     open-focused false
 }
 
+// Agent-owned client windows open floating, unfocused, in the bottom-right
+// corner, so `agent-capture --window ID` can find their on-screen geometry
+// (niri reports positions only for floating windows). Give a test window the
+// app-id "agent-client.<name>", or run a Wine client in a virtual desktop
+// named "agent-client-<name>". Tom's own windows never use these names.
+window-rule {
+    match app-id=r#"^agent-client\."#
+    match title=r#"^agent-client-"#
+    open-floating true
+    open-focused false
+    default-column-width { fixed 1280; }
+    default-window-height { fixed 720; }
+    default-floating-position x=0 y=0 relative-to="bottom-right"
+}
+
 // Global Transparency (see-through / frosted glass)
 window-rule {
   opacity 0.99

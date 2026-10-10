@@ -2,7 +2,8 @@
 # agent-capture — screenshot for agents that never touches Tom's clipboard.
 #
 #   agent-capture --screen OUT.png          the focused output
-#   agent-capture --window ID OUT.png       one visible floating niri window (ID from `niri msg -j windows`)
+#   agent-capture --window ID OUT.png       one visible floating niri window (ID from `niri msg -j windows`);
+#                                           windows with app-id "agent-client.*" or title "agent-client-*" open floating
 #   agent-capture --region "X,Y WxH" OUT.png  a logical-pixel region
 #
 # Built on grim because niri's screenshot actions always replace the clipboard; niri reports positions only for visible floating windows.
@@ -46,7 +47,7 @@ case "$1" in
     geom=$(window_geometry "$id")
     case "$geom" in
       missing) die "no niri window with id $id" ;;
-      hidden) die "window $id has no on-screen position (niri reports one only for visible floating windows); capture its output with --screen or a --region" 3 ;;
+      hidden) die "window $id has no on-screen position (niri reports one only for visible floating windows; open it with app-id "agent-client.<name>" so it floats); capture its output with --screen or a --region" 3 ;;
     esac
     grim -g "$geom" "$out" || die "grim failed"
     ;;
