@@ -29,7 +29,6 @@ import os
 import re
 import sys
 import time
-import tomllib
 from pathlib import Path
 
 PROTECTED_PRESSURE_LIMIT = 20.0
@@ -231,6 +230,16 @@ def delegation_budget(event):
     return ROLE_BUDGETS.get(role, 0), f"the default for role {role}"
 
 
+def orchestration_path():
+    """orchestration.toml beside this file's agents directory, or beside the `agents` command for a projected copy."""
+    import shutil
+    if os.environ.get("AGENTS_ORCHESTRATION"):
+        return os.environ["AGENTS_ORCHESTRATION"]
+    here = Path(__file__).resolve().parents[2] / "orchestration.toml"
+    agents = shutil.which("agents")
+    return here if here.exists() or not agents else Path(agents).resolve().parents[1] / "agents/orchestration.toml"
+
+
 def org_domain_rank():
     """(domain, rank in the priority order, first domain) for this session's org node, or None."""
     name = os.environ.get("AGENT_ORG_NAME")
@@ -240,8 +249,8 @@ def org_domain_rank():
     try:
         org = json.loads(Path(os.environ.get("AGENTS_ORG_FILE", path)).read_text())
         domain = next(n["domain"] for n in org["nodes"] if n["id"] == name).lower()
-        config = os.environ.get("AGENTS_ORCHESTRATION") or Path(__file__).resolve().parents[2] / "orchestration.toml"
-        with open(config, "rb") as f:
+        import tomllib
+        with open(orchestration_path(), "rb") as f:
             projects = tomllib.load(f).get("projects", {})
         order = [d.lower() for d in sorted(projects, key=lambda d: projects[d].get("priority", float("inf")))]
     except (OSError, ValueError, KeyError, TypeError, StopIteration, AttributeError):
