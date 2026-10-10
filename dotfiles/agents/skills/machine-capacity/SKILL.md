@@ -15,7 +15,7 @@ written: 2026-10-09
 - Use `run --class CLASS --owner OWNER --timeout-seconds N -- COMMAND ARG...` for batch work, including legitimate setup/download time.
 - Omit `--class` on `run` to size from the usage log: p90 peak cores and memory of the shape's last 20 runs plus 25%, gpu when GPU-busy over a fifth of the run, moderate until three runs exist; the admission line shows `sizing`.
 - Use `session --class native --owner OWNER -- COMMAND ARG...` for Warcraft clients/private desktops, one scope per client and two per pair.
-- Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s with no gpu lease running, and attended DEFER_GPU_CLIENTS while two Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`/`gpuLeases`.
+- Expect native DEFER_GPU_BUSY while GPU busy averages at least 85% over 5 s with no gpu lease running, and attended DEFER_GPU_CLIENTS while four Warcraft clients run; `status`/`probe` show `gpuBusyPercent`/`gpuClients`/`gpuLeases`.
 - Expect gpu DEFER_GPU_SLOTS at two gpu leases and DEFER_NATIVE_WAITING for a minute after a native client was deferred; native clients outrank renders.
 - Never start wine, proton, steam-run or a game .exe outside a native session; `native-launch-guard` refuses it.
 - Run cargo build, full `bun test` suites, `bun wisp map build` and headless wisp renders (`view`, `headless --render`) through `run`; `heavy-command-guard` refuses them unwrapped.

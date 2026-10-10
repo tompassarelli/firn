@@ -74,7 +74,7 @@ export gpu-slots(): F64
   2
 
 export native-gpu-decision(?profile: Text, ?gpu-busy-percent: F64, ?gpu-clients: F64, ?gpu-runs: F64): Text
-  if(?profile = "attended" and ?gpu-clients >= 2, "DEFER_GPU_CLIENTS",
+  if(?profile = "attended" and ?gpu-clients >= 4, "DEFER_GPU_CLIENTS",
     if(?gpu-busy-percent >= gpu-busy-limit-percent() and ?gpu-runs = 0, "DEFER_GPU_BUSY", "RUN"))
 
 export admission-decision(?profile: Text, ?kind: Text, ?cores: F64, ?memory-total-mib: F64, ?memory-available-mib: F64, ?cpu-some-avg10-basis-points: F64, ?protected-cpu-some-avg10-basis-points: F64, ?leased-memory-mib: F64, ?leased-batch-cpus: F64, ?leased-native-cpus: F64, ?requested-cpus: F64, ?requested-memory-mib: F64, ?peer-batch-runs: F64, ?peer-exclusive-runs: F64, ?unbounded-runs: F64, ?queued-ahead: F64, ?exclusive-waiting: F64, ?gpu-busy-percent: F64, ?gpu-clients: F64, ?gpu-runs: F64, ?native-waiting: F64): Text

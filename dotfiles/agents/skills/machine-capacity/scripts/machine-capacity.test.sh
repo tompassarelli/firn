@@ -88,7 +88,8 @@ fi
 [[ $(decision unattended gpu 80000 0 0 0 0 --native-waiting 1) == DEFER_NATIVE_WAITING ]]
 [[ $(decision unattended native 80000 0 0 0 0 --gpu-busy-percent 95) == DEFER_GPU_BUSY ]]
 [[ $(decision unattended native 80000 0 0 2 4096 --gpu-busy-percent 95 --gpu-runs 2) == RUN ]]
-[[ $(decision attended native 80000 0 0 0 0 --gpu-clients 2 --gpu-runs 1) == DEFER_GPU_CLIENTS ]]
+[[ $(decision attended native 80000 0 0 0 0 --gpu-clients 3 --gpu-runs 1) == RUN ]]
+[[ $(decision attended native 80000 0 0 0 0 --gpu-clients 4 --gpu-runs 1) == DEFER_GPU_CLIENTS ]]
 
 # Peer ceilings hold batch work at the aggregate limit: 20 cores present, 24 away.
 [[ $(decision attended heavy 80000 0 0 18 21504 --peer-batch-runs 3) == DEFER_CPU_CAPACITY ]]
