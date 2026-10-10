@@ -1,8 +1,7 @@
 // Property: a declared class is charged its declared size until three runs exist,
 // then the nearest-rank p90 of measured cores within [1, 1.5 x declared] and p90 peak memory + 20%.
 const policy = await import(Bun.argv[2]);
-const chargedResources = policy['charged-resources'];
-const resourceClass = policy['resource-class'];
+const { chargedResources, resourceClass } = policy;
 
 const reference = (values: number[]) => [...values].sort((a, b) => a - b)[Math.ceil(values.length * 0.9) - 1];
 

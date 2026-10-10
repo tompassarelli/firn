@@ -3,22 +3,13 @@ set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 output=${1:-"$here/machine-capacity.mjs"}
-scratch=$(mktemp -d "${TMPDIR:-/tmp}/machine-capacity-build.XXXXXX")
-trap 'rm -rf "${scratch:?}"' EXIT
-
-workbench=${FIRN_CLAUSE_WORKBENCH:?set FIRN_CLAUSE_WORKBENCH to the compiler built from nixos-config:config/clause-revision}
 bun=${BUN_PATH:-$(command -v bun || true)}
-[[ -x "$workbench" && -n "$bun" && -x "$bun" ]] || {
-  printf 'machine-capacity build: Clause workbench or Bun is unavailable\n' >&2
+[[ -n "$bun" && -x "$bun" ]] || {
+  printf 'machine-capacity build: Bun is unavailable\n' >&2
   exit 1
 }
 
-mkdir -p "$scratch/modules"
-"$workbench" check-source "$here/machine-capacity.clause"
-"$workbench" compile-js "$here/machine-capacity.clause" "$scratch/modules/machine-capacity-logic.js"
-cp -- "$here/machine-capacity-host.mjs" "$scratch/modules/"
-
-"$bun" build "$scratch/modules/machine-capacity-host.mjs" \
+"$bun" build "$here/machine-capacity-host.mjs" \
   --target=bun \
   --minify \
   --outfile "$output" \

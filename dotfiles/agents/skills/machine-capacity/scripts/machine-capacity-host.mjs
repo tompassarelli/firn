@@ -12,20 +12,20 @@ import {
 import { cpus } from 'node:os';
 import { join } from 'node:path';
 
-import * as policy from './machine-capacity-logic.js';
-
-const admissionDecision = policy['admission-decision'];
-const resourceClass = policy['resource-class'];
-const nativeMemoryRequest = policy['native-memory-request'];
-const reserveClass = policy['reserve-class'];
-const aggregateCpus = policy['aggregate-cpus'];
-const batchClass = policy['batch-class'];
-const maximumSeconds = policy['maximum-seconds'];
-const sessionSeconds = policy['session-seconds'];
-const sizedClass = policy['sized-class'];
-const sizedResources = policy['sized-resources'];
-const sizingHeadroom = policy['sizing-headroom'];
-const chargedResources = policy['charged-resources'];
+import {
+  admissionDecision,
+  resourceClass,
+  nativeMemoryRequest,
+  reserveClass,
+  aggregateCpus,
+  batchClass,
+  maximumSeconds,
+  sessionSeconds,
+  sizedClass,
+  sizedResources,
+  sizingHeadroom,
+  chargedResources,
+} from './machine-capacity-logic.ts';
 const aggregateSlice = 'agent-capacity.slice';
 // Sibling of session.slice (300), app.slice (100) and agent.slice (20): game
 // clients outrank terminals and batch work but never the compositor.

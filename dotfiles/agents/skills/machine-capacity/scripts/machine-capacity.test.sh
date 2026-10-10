@@ -20,8 +20,7 @@ echo 0 >"$AGENT_CAPACITY_GPU_BUSY"
 
 "$here/build-machine-capacity" "$scratch/machine-capacity.mjs"
 cmp -- "$here/machine-capacity.mjs" "$scratch/machine-capacity.mjs"
-"$FIRN_CLAUSE_WORKBENCH" compile-js "$here/machine-capacity.clause" "$scratch/machine-capacity-logic.js" >/dev/null
-bun "$here/charged-resources.property.ts" "$scratch/machine-capacity-logic.js"
+bun "$here/charged-resources.property.ts" "$here/machine-capacity-logic.ts"
 
 # Arguments: profile class available-MiB protected-slice-PSI memory-full-PSI
 # leased-CPU-ceilings leased-MiB [options]. Protected PSI is the session and
