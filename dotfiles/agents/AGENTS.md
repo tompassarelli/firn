@@ -53,6 +53,7 @@
 ## Workers and tools
 
 - Load `workers` before staffing independent code areas or shared-resource checks.
+- Socrates is Tom's agent software organization: the proxy, leads, workers, their policy, and the staffing and telemetry tools.
 - A chain of command runs from Tom's proxy session through domain leads to workers; `agents org show` prints it.
 - Take your role and delegation budget from your brief's `Delegation:` line or AGENT_ROLE and AGENT_DELEGATION_BUDGET; with budget 0 do the work yourself.
 - Assign one task per worker and one worker per scarce client/device instance.
