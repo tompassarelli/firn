@@ -127,4 +127,60 @@ for args in "" "--posture performance" "--posture efficiency" "--mode codex-only
   ! "$agents" plan $args | grep -q astra || fail "plan $args names Astra"
 done
 
-printf 'ok: agents plan derives bands from tier starts, posture and sign-ins\n'
+# The four §4 scenarios replay through --at with routing.test.sh's expected states, tiers and fast flags.
+scenarios="$repo/dotfiles/agents/lib/routing-scenarios"
+for s in burn conserve new-model deadline; do
+  out="$("$agents" plan --at "$scenarios/$s.json" 2>&1)" || fail "replay $s: $out"
+done
+out="$("$agents" plan --at "$scenarios/burn.json")"
+grep -Fq 'account codex: state burn, slack +36.0, week resets in 4h00m, fast on' <<<"$out" || fail "burn replay account: $out"
+grep -Fxq 'box b1 (muove feature d70): codex:sol-high, fast on' <<<"$out" || fail "burn replay box: $out"
+grep -Fxq 'project muove: priority 1, bar solid, target 14 Oct, urgency 1.00' <<<"$out" || fail "burn replay project: $out"
+out="$("$agents" plan --at "$scenarios/burn.json" --state codex=conserve)"
+grep -Fq 'account codex: state conserve (--state)' <<<"$out" || fail "--state on replay: $out"
+
+# Live: an expired override prints as expired and is ignored; --state overrides one account for one run.
+export THREADS_DB="$scratch/threads.db"
+python3 -I - "$THREADS_DB" <<'PY'
+import sqlite3, sys
+from datetime import datetime, timedelta, timezone
+now = datetime.now(timezone.utc)
+iso = lambda d: d.strftime("%Y-%m-%dT%H:%M:%SZ")
+db = sqlite3.connect(sys.argv[1])
+db.execute("CREATE TABLE usage(ts TEXT, provider TEXT, account TEXT, kind TEXT, name TEXT, used_pct REAL, window_min INTEGER, resets_at TEXT, amount REAL, source TEXT)")
+rows = [("claude", "c1", "window", "session", 10.0, 300, iso(now + timedelta(hours=4)), None),
+        ("claude", "c1", "window", "weekly_all", 30.0, 10080, iso(now + timedelta(days=4)), None),
+        ("codex", "x1", "window", "week", 30.0, 10080, iso(now + timedelta(days=4)), None),
+        ("codex", "x1", "billing", "hasCredits", None, None, None, 0.0)]
+db.executemany("INSERT INTO usage VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'fixture')", [(iso(now), *r) for r in rows])
+db.commit()
+PY
+cat >"$AGENTS_ORCHESTRATION" <<'TOML'
+mode = "split"
+posture = "balanced"
+usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 95, fast_floor = 10, stale_min = 30, urgent = 1.2, shift = 15, late = 1.5 }
+[projects.muove]
+priority = 1
+bar = "critical"
+[accounts.codex]
+state = "burn"
+until = "2026-01-01T00:00Z"
+[tiers."claude:haiku"]
+model = "claude-haiku-5-5"
+effort = "high"
+start = [0, 0, 0]
+[tiers."codex:sol-medium"]
+model = "gpt-6.1-sol"
+effort = "medium"
+start = [30, 20, 20]
+TOML
+out="$("$agents" plan)"
+grep -Fxq 'override codex burn until 2026-01-01T00:00Z: expired, ignored' <<<"$out" || fail "expired override: $out"
+grep -Eq '^account codex: state (even|conserve), ' <<<"$out" || fail "expired override applied: $out"
+grep -Fxq 'project muove: priority 1, bar critical, no target' <<<"$out" || fail "project line: $out"
+base_claude="$(grep '^account claude:' <<<"$out")"
+out="$("$agents" plan --state codex=burn)"
+grep -Fq 'account codex: state burn (--state), ' <<<"$out" || fail "--state codex=burn: $out"
+[[ "$(grep '^account claude:' <<<"$out")" == "$base_claude" ]] || fail "--state codex changed claude: $out"
+
+printf 'ok: agents plan derives bands from tier starts, posture and sign-ins; account states from usage and overrides; scenarios replay\n'

@@ -14,12 +14,40 @@ mode = "split"
 # `agents plan --posture X` tries one for a single run without editing this.
 posture = "balanced"
 
+# Thresholds `agents plan` derives each account's burn/even/conserve state
+# from, against the live `agents usage` snapshot (routing.py applies them).
+usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 95, fast_floor = 10, stale_min = 30, urgent = 1.2, shift = 15, late = 1.5 }
+
 # Per-provider override: that provider's tiers use its own posture column.
 # Example: Claude's weekly usage is low, so Claude gives work up to SOL.
 [claude]
 posture = "efficiency"   # Tom, 9 Oct night: preserve Claude usage, lean on Codex
 
 [codex]
+
+# Per-project intent, Tom's to set: priority (1 first), bar (prototype, solid
+# or critical), and optionally share (% of each plan window) and target (a
+# date or boxes/day).
+[projects.muove]
+priority = 1
+bar = "solid"
+
+[projects.smashcraft]
+priority = 2
+bar = "solid"
+
+[projects.tooling]
+priority = 3
+bar = "solid"
+
+[projects.wisp]
+priority = 4
+bar = "solid"
+
+# An account state override carries an expiry and is ignored once it passes:
+# [accounts.codex]
+# state = "conserve"
+# until = "2026-10-17T09:20Z"
 
 # Telemetry detail, per tier or on_request table: `detail = "routine"` (the
 # default) records one run row per worker; `detail = "profile"` also records
@@ -28,7 +56,7 @@ posture = "efficiency"   # Tom, 9 Oct night: preserve Claude usage, lean on Code
 
 # Worker tiers, weakest first, as `provider:name`. Difficulty is a percentile
 # of Tom's work. `start` is where the tier begins taking work under each
-# posture: [efficiency, balanced, performance]. A tier takes work from its
+# project bar: [prototype, solid, critical]. A tier takes work from its
 # start up to the next tier's start. When columns disagree so a stronger tier
 # would start below a weaker one, the larger start wins, so a provider in
 # efficiency gives work up rather than taking more. A provider that is

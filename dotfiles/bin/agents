@@ -10,23 +10,48 @@ set -uo pipefail
 north_bin="${AGENTS_NORTH_BIN:-north}"
 
 usage() {
-  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json]|org [show|add|remove]|lead start}\n' >&2
+  printf 'usage: agents {status [--json]|stale [--json]|inspect <id> [--json]|path <id>|on <id>|off <id>|sync|plan [--mode split|claude-only|codex-only] [--posture efficiency|balanced|performance] [--state ACCOUNT=burn|even|conserve]... [--at SCENARIO.json]|routines [list|show NAME|pointer NAME] [--crons FILE|-]|usage [--refresh] [--json]|org [show|add|remove]|lead start}\n' >&2
 }
 
 plan() {
   "$(dirname "$(readlink -f "$0")")/update-status"
-  local mode="" posture=""
+  local mode="" posture="" states="" at=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --mode) [ $# -ge 2 ] || { usage; exit 2; }; mode=$2; shift 2 ;;
       --posture) [ $# -ge 2 ] || { usage; exit 2; }; posture=$2; shift 2 ;;
+      --state) [ $# -ge 2 ] || { usage; exit 2; }; states="$states $2"; shift 2 ;;
+      --at) [ $# -ge 2 ] || { usage; exit 2; }; at=$2; shift 2 ;;
       *) usage; exit 2 ;;
     esac
   done
   local config="${AGENTS_ORCHESTRATION:-$(dirname "$(readlink -f "$0")")/../agents/orchestration.toml}"
   local catalog="$(dirname "$(readlink -f "$0")")/../agents/model-catalog.toml"
+  local lib="$(dirname "$(readlink -f "$0")")/../agents/lib"
+  if [ -n "$at" ]; then
+    AGENTS_PLAN_STATES="$states" exec python3 -I -c '
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+import plan_usage
+from routing import STATE_PRICE
+states = dict(s.split("=", 1) for s in os.environ["AGENTS_PLAN_STATES"].split())
+if any(v not in STATE_PRICE for v in states.values()):
+    sys.exit("agents plan: --state takes ACCOUNT=burn|even|conserve")
+try:
+    with open(sys.argv[2]) as f:
+        ctx = json.load(f)
+    out, bad = plan_usage.replay(ctx, states)
+except (OSError, ValueError, KeyError) as e:
+    sys.exit(f"agents plan --at: {e}")
+print("\n".join(out))
+if bad:
+    print(f"MISMATCH {bad}", file=sys.stderr)
+    sys.exit(1)
+' "$lib" "$at"
+  fi
   AGENTS_PLAN_MODE="$mode" AGENTS_PLAN_POSTURE="$posture" AGENTS_PLAN_CONFIG="$config" \
-    AGENTS_PLAN_CATALOG="$catalog" \
+    AGENTS_PLAN_CATALOG="$catalog" AGENTS_PLAN_STATES="$states" AGENTS_PLAN_LIB="$lib" \
+    AGENTS_PLAN_SELF="$(readlink -f "$0")" \
     AGENTS_CLAUDE_BIN="${AGENTS_CLAUDE_BIN:-claude}" \
     AGENTS_CODEX_BIN="${AGENTS_CODEX_BIN:-codex}" \
     exec python3 -I -c '
@@ -50,7 +75,7 @@ tiers = cfg.get("tiers", {})
 for ref, t in tiers.items():
     st = t.get("start")
     if ":" not in ref or "model" not in t or "effort" not in t or not (isinstance(st, list) and len(st) == 3):
-        die(f"tier {ref!r} needs provider:name, model, effort and start = [efficiency, balanced, performance]")
+        die(f"tier {ref!r} needs provider:name, model, effort and start = [prototype, solid, critical]")
 providers = list(dict.fromkeys(ref.split(":")[0] for ref in tiers))
 
 mode = os.environ["AGENTS_PLAN_MODE"] or cfg.get("mode", "split")
@@ -147,9 +172,35 @@ print("escalation: " + ", ".join(label(r) for r in avail) + ", then recommend to
 catalog_path = os.environ["AGENTS_PLAN_CATALOG"]
 try:
     with open(catalog_path, "rb") as f:
-        models = tomllib.load(f)["models"]
+        catalog = tomllib.load(f)
 except (OSError, tomllib.TOMLDecodeError) as e:
     die(f"cannot read {catalog_path}: {e}")
+models = catalog["models"]
+db_path = Path(os.environ.get("THREADS_DB") or Path.home() / ".local/state/threads/threads.db")
+
+sys.path.insert(0, os.environ["AGENTS_PLAN_LIB"])
+import plan_usage
+from datetime import datetime, timezone
+states = dict(s.split("=", 1) for s in os.environ["AGENTS_PLAN_STATES"].split())
+if any(v not in plan_usage.routing.STATE_PRICE for v in states.values()):
+    die("--state takes ACCOUNT=burn|even|conserve")
+if "usage" not in cfg:
+    print("usage: no usage thresholds in orchestration.toml; account states not derived")
+else:
+    code, out = run([os.environ["AGENTS_PLAN_SELF"], "usage", "--json"])
+    try:
+        rows = json.loads(out) if code == 0 else []
+    except ValueError:
+        rows = []
+    db = plan_usage.open_db(db_path)
+    ctx = plan_usage.live_ctx(cfg, catalog, rows, db, datetime.now(timezone.utc), tiers)
+    try:
+        notes = plan_usage.apply_overrides(ctx, cfg.get("accounts"), states)
+    except ValueError as e:
+        die(str(e))
+    if not ctx["accounts"]:
+        print("accounts: no usage snapshot; run `agents usage --refresh`")
+    print("\n".join(notes + plan_usage.lines(ctx)))
 
 run_tiers = {
     "claude:haiku": "haiku",
@@ -160,7 +211,6 @@ run_tiers = {
     "codex:sol-high": "gpt-6.1-sol high",
     "codex:astra": "gpt-6-astra xhigh",
 }
-db_path = Path(os.environ.get("THREADS_DB") or Path.home() / ".local/state/threads/threads.db")
 try:
     db = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
     measured = {tier: (n, done) for tier, n, done in db.execute(
