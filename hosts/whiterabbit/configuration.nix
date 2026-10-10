@@ -37,7 +37,6 @@
   myConfig.modules.bitwarden-desktop.enable = true;
   myConfig.modules.libsecret.enable = true;
   myConfig.modules.parted.enable = true;
-  myConfig.modules.unixodbc.enable = true;
   myConfig.modules.nix-ld.enable = true;
   myConfig.modules.musl.enable = true;
   myConfig.modules.appimage.enable = true;

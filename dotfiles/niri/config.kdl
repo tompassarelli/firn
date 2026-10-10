@@ -324,10 +324,7 @@ window-rule {
     match title="Heist CRM"
     open-on-workspace "heist"
 }
-window-rule {
-    match title="Kea"
-    open-on-workspace "heist"
-}
+include optional=true "~/.config/niri/private.kdl"
 
 // gjoa dark-mode render harness: real-window (stealth) test browsers land on a
 // dedicated "render" workspace without stealing focus — necessary because
