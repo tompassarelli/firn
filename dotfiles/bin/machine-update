@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source_dir="$(dirname "$(readlink -f "$0")")"
-if [[ "${MACHINE_UPDATE_ADMITTED:-0}" != 1 ]]; then
+plan=0
+[[ "${1:-}" == --plan ]] && plan=1
+if [[ "$plan" == 0 && "${MACHINE_UPDATE_ADMITTED:-0}" != 1 ]]; then
   exec bun "$source_dir/../agents/skills/machine-capacity/scripts/machine-capacity.mjs" run \
     --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
     env MACHINE_UPDATE_ADMITTED=1 "$0" "$@"
@@ -12,6 +14,43 @@ mkdir -p "$state"
 exec 9>"$state/machine-update.lock"
 flock 9
 git -C "$repo" fetch origin main
+candidates="$state/flake-candidates"
+mkdir -p "$candidates"
+lock_inputs() {
+  jq -c '. as $l | $l.nodes[$l.root].inputs | to_entries | map({name: .key, modified: (if (.value | type) == "string" then ($l.nodes[.value].locked.lastModified // 0) else 0 end)}) | sort_by(.name)' "$1"
+}
+select_lock() {
+  local fresh="$1" running="$2" out="$3" today cutoff fresh_names running_inputs name stamp chosen=""
+  today="$(date +%F)"
+  cutoff="$(date -d '7 days ago' +%F)"
+  cp -- "$fresh" "$candidates/$today.lock"
+  find "$candidates" -maxdepth 1 -name '*.lock' -mtime +30 -delete
+  fresh_names="$(lock_inputs "$fresh" | jq -c 'map(.name)')"
+  running_inputs="$(lock_inputs "$running")"
+  while IFS= read -r name; do
+    stamp="$(basename "$name" .lock)"
+    [[ "$stamp" > "$cutoff" ]] && continue
+    lock_inputs "$name" | jq -e --argjson names "$fresh_names" --argjson running "$running_inputs" \
+      'map(.name) == $names and all(.[]; . as $c | ($running | map(select(.name == $c.name)) | all(.modified <= $c.modified)))' >/dev/null || continue
+    chosen="$name"
+    break
+  done < <(find "$candidates" -maxdepth 1 -name '????-??-??.lock' | sort -r)
+  if [[ -n "$chosen" ]]; then
+    printf 'adopt candidate %s\n' "$(basename "$chosen" .lock)"
+    cp -- "$chosen" "$out"
+  else
+    printf 'keep running lock: no candidate ≥7 days\n'
+    cp -- "$running" "$out"
+  fi
+}
+if [[ "$plan" == 1 ]]; then
+  work="$(mktemp -d)"
+  trap 'rm -f -- "$work/fresh.lock" "$work/running.lock" "$work/plan.lock"; rmdir -- "$work"' EXIT
+  git -C "$repo" show origin/main:flake.lock > "$work/running.lock"
+  nix flake update --flake "$repo" --output-lock-file "$work/fresh.lock"
+  select_lock "$work/fresh.lock" "$work/running.lock" "$work/plan.lock"
+  exit 0
+fi
 container="$(dirname "$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)")"
 container="$(dirname "$container")"
 sudo -n -v
@@ -19,7 +58,10 @@ lane="$container/worktrees/nightly-$(date +%Y%m%d-%H%M%S)-$$"
 branch="nightly-$(date +%Y%m%d-%H%M%S)-$$"
 git -C "$repo" worktree add -b "$branch" "$lane" origin/main
 cd "$lane"
+git show origin/main:flake.lock > "$state/running.lock"
 nix flake update
+cp -- flake.lock "$state/fresh.lock"
+select_lock "$state/fresh.lock" "$state/running.lock" flake.lock
 firn repo build
 firn repo validate
 firn_changed=0
