@@ -2,7 +2,13 @@
 
 Read when revising the `testing` skill or when one of its decisions needs its
 evidence. Researched 2026-10-08. Each entry: link, author, date, what we took.
-Tags in `SKILL.md` (for example [G1]) point here.
+Tags such as [G1] name an entry.
+
+Contents:
+- Google
+- Practitioners
+- Agents and test bloat (2025–2026)
+- Lessons from exemplary suites
 
 ## Google
 
