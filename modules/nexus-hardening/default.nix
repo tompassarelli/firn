@@ -81,7 +81,7 @@
       "-w ${homeDir}/.codex/auth.json${creds}"
       "-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k nexus-privesc"
     ];
-    services.resolved.llmnr = "false";
+    services.resolved.settings.Resolve.LLMNR = "false";
     systemd.tmpfiles.rules = [
       "d ${homeDir}/.ssh 0700 ${username} users -"
       "d ${homeDir}/.claude 0700 ${username} users -"
