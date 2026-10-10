@@ -334,8 +334,7 @@ def digest(db: sqlite3.Connection, events: list[dict], directory: Path) -> dict:
         import usage
         config = tomllib.loads((SOURCES.parent / "orchestration.toml").read_text())
         catalog = tomllib.loads((SOURCES.parent / "model-catalog.toml").read_text())
-        usage_path = Path.home() / ".local/state/threads/threads.db"
-        with sqlite3.connect(usage_path) as usage_db:
+        with sqlite3.connect(usage.DB) as usage_db:
             refresh_claude_usage(usage_db, usage, config)
             reason = usage.refusal(usage_db, "claude", config, catalog, datetime.now(timezone.utc))
             account = usage.local_account("claude")
