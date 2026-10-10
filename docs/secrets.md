@@ -27,3 +27,8 @@ Cloudflare deployment credentials live in the encrypted
 owner-only files under `/run/secrets`; commands consume them through
 `with-cloudflare <profile> -- <command>`. Do not put Cloudflare credentials in
 shell startup files, Wrangler configuration, or project repositories.
+
+The DigitalOcean API token lives in the encrypted
+`nixos-config:secrets/digitalocean.yaml` (key `token`). Decrypt it with the
+machine age key only into a command's environment, for example
+`DIGITALOCEAN_ACCESS_TOKEN=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["token"]' secrets/digitalocean.yaml) doctl ...`.
