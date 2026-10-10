@@ -24,6 +24,7 @@
             ]}"
           ];
           ExecStart = "${homeDir}/.local/bin/worker-ledger";
+          ExecStartPost = "${homeDir}/.local/bin/agents usage --refresh";
         };
       };
       systemd.user.timers.worker-ledger = {
@@ -40,4 +41,4 @@
       };
     });
   };
-}) "worker-ledger: every 15 minutes record finished Claude and Codex workers as runs in threads, and fill landings of runs still waiting to land")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}) "worker-ledger: every 15 minutes record finished Claude, Codex and Gemini workers as runs in threads, fill landings of runs still waiting to land, and snapshot account usage (agents usage)")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)

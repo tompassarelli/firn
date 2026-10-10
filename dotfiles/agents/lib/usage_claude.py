@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 
 KNOWN = {"five_hour", "seven_day", "limits", "extra_usage", "spend"}
 WINDOW_MIN = {"session": 300, "weekly": 10080}
+# Claude Code sessions refresh this cache themselves; a /usage call is only needed when it is older.
+FRESH_S = 300
 
 
 def utc(ts):
@@ -44,12 +46,16 @@ def rows(cache, now):
 
 def main(argv):
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    if "--no-refresh" not in argv:
+    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~"), ".claude.json")
+    try:
+        fetched = (json.load(open(path)).get("cachedUsageUtilization") or {}).get("fetchedAtMs", 0) / 1000
+    except (OSError, ValueError):
+        fetched = 0
+    if "--no-refresh" not in argv and datetime.now(timezone.utc).timestamp() - fetched > FRESH_S:
         try:
             subprocess.run(["claude", "-p", "/usage", "--output-format", "json"], capture_output=True, timeout=30, check=False)
         except (OSError, subprocess.TimeoutExpired):
             pass
-    path = os.path.join(os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~"), ".claude.json")
     try:
         cache = json.load(open(path)).get("cachedUsageUtilization")
     except (OSError, ValueError):
