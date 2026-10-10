@@ -45,7 +45,9 @@ authoring_killswitch="$(dirname "$0")/lib/authoring-killswitch.sh"
 type authoring_guards_off >/dev/null 2>&1 && authoring_guards_off && exit 0
 
 read -r -d '' PY <<'PYEOF' || true
-import json, os, re, shlex, sys
+import json, os, re, sys
+sys.path.insert(0, sys.argv[1])
+import shellcmd
 
 def allow():
     sys.exit(0)
@@ -60,34 +62,14 @@ cmd = (data.get("tool_input", {}) or {}).get("command", "") or ""
 if not cmd:
     allow()
 
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1[^\n]*\n(.*?)^[ \t]*\2[ \t]*$", re.S | re.M)
-text = HEREDOC.sub(lambda m: m.group(0)[: m.start(3) - m.start(0)] + m.group(2), cmd)
-
-try:
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=";&|()\n")
-    lexer.whitespace = " \t\r"
-    lexer.whitespace_split = True
-    lexer.commenters = "#"
-    tokens = list(lexer)
-except ValueError:
+tokens = shellcmd.words(cmd)
+if tokens is None:
     allow()
 
 PREFIXES = {"env", "exec", "command", "nohup", "setsid", "nice", "ionice", "stdbuf", "timeout", "time"}
 
 def heavy(words):
-    index = 0
-    while index < len(words):
-        word = words[index]
-        name = os.path.basename(word)
-        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", word) or word == "--" or (word.startswith("-") and index > 0):
-            index += 1
-            continue
-        if name in PREFIXES:
-            index += 1
-            if name == "timeout" and index < len(words) and re.match(r"^[0-9.]+[smhd]?$", words[index]):
-                index += 1
-            continue
-        break
+    index = shellcmd.command(words, PREFIXES)
     rest = words[index:]
     if not rest:
         return None
@@ -109,28 +91,23 @@ def heavy(words):
                 return "wisp render"
     return None
 
-segment = []
-for token in tokens + [";"]:
-    if token and set(token) <= set(";&|()\n"):
-        found = heavy(segment)
-        if found:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": (
-                    f"No. `{found}` is heavy and would run in your terminal scope, outside capacity admission. "
-                    "Run it as: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" "
-                    "run --owner OWNER --timeout-seconds N -- COMMAND ARG... (omit --class to size from measured "
-                    "use; --class gpu for headless renders). Single test files and cargo check pass unwrapped."
-                ),
-            }}))
-            sys.exit(0)
-        segment = []
-    else:
-        segment.append(token)
+for segment in shellcmd.segments(tokens):
+    found = heavy(segment)
+    if found:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": (
+                f"No. `{found}` is heavy and would run in your terminal scope, outside capacity admission. "
+                "Run it as: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" "
+                "run --owner OWNER --timeout-seconds N -- COMMAND ARG... (omit --class to size from measured "
+                "use; --class gpu for headless renders). Single test files and cargo check pass unwrapped."
+            ),
+        }}))
+        sys.exit(0)
 allow()
 PYEOF
 
 python_bin="${NORTH_AGENT_PYTHON:-python3}"
-hook_decide "$python_bin" -c "$PY"
+hook_decide "$python_bin" -c "$PY" "$(dirname "$0")/lib"
 exit 0
