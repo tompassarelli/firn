@@ -7,26 +7,17 @@ written: 2026-10-10
 
 # Workers
 
-**The rule that matters most: throughput is lost in serialized long waits (farm runs, soaks, renders, landings), not in thinking.** Each tick, name the critical path's longest wait and attack it: batch ready lanes into one landing, run unknown-cause bugs as 2–3 parallel workers with one hypothesis and one discriminating experiment each (`Done: ruled out` with evidence closes a run), have art or judged work render 2–4 variants per pass and judge once, and send code-only work to cloud workers before local capacity. Never confirm one guess before starting the next when the guesses are independent.
+**Throughput is lost in serialized long waits (farm runs, soaks, renders, landings), not in thinking.** Each tick, attack the critical path's longest wait: batch ready lanes into one landing, run independent unknown-cause hypotheses in parallel (`Done: ruled out` with evidence closes one), render 2–4 variants and judge once, and send code-only work to cloud workers first.
 
-- Run `agents plan` before staffing and choose a difficulty band from its signed-in providers and escalation order.
-- Read `worker-ledger --summary` for category success, closed issues, actual median time and cost.
-- Pick ready work with `threads ready` and read its GitHub Done when through `threads show repo#N`.
-- Put Item, Category, goal, files, Done when and ETA in each brief, plus the four facet lines `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`, `Surface: ts|lua|nix|shell|workflow|docs|assets` and `Verify: none|local-test|farm|native|visual`; give adversarial reviewers a `Lens:` line and have them report `Accepted flaws: N`.
-- Put `Follows: <earlier agent id and tier>` plus the failed evidence in a fresh worker for retries, escalations and continuations; never revive a finished or idle worker by message, because its expired cache makes the message re-read its whole context.
-- Require reports beginning `Done:`, `Not done:` or `Blocked:`; every Not done or handoff names `Stop: landing|capacity|client|leash|reasoning|decision`.
-- Choose Category from mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.
-- Claim/release shared-resource work through `threads`; treat a running brief as its worker's claim.
-- Choose the tier with `worker-ledger --recommend '<Category and facet lines>'`: it names the cheapest tier at 80% Done without a later `Follows:` run (and landed when it committed) in the finest cell with 5 runs, backs off Surface, Verify, Scope, then Spec, and changes a cell's pick only on a 15-point lead.
-- Alternate each feature or native-check that Opus medium left unfinished between escalation to Opus high and the cheaper fix (split the feature into smaller boxes; fix the native-check's client, capacity or host cause), and compare closures on those leftovers only; Opus high's overall rates (feature 6/25, native-check 0/8) come from escalated hard cases and do not rank tiers.
-- Treat these ledger-derived rules as experiments: recheck `worker-ledger --summary` after every 10 new closures in a category and change the rule when the numbers move.
-- Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to Haiku first; never judged art, bisects, native checks or a job that must wait on a run longer than 2 minutes (Haiku ended its turn mid-run twice on 2026-10-10, killing the run); the lead or Opus medium runs those and Haiku reads the result.
-- Send every other tooling, balance-tuning and bug-known-cause item with a named file and a measured Done when to worker-haiku with `Arm: haiku-trial`, until the finest facet cell with 5 runs has 5 Haiku closures or 2 Haiku failures; a failure goes to Opus medium with `Follows:`, and the ledger's haiku rows decide the category's default (Haiku 29/32 mechanical at a 1-minute median, 2026-10-10).
-- Use provider benchmarks only before 5 closed category issues at that tier.
-- Size each brief to one box with an ETA of 20 minutes or less, splitting larger work before staffing; set ETA to the category/tier's actual median and label missing evidence uncalibrated.
-- Expect a report at 45 minutes or twice ETA, whichever comes first.
-- Run a job longer than the 45-minute leash (renders, long captures) yourself under a capacity lease, then staff a short worker to use its output.
-- Bring the supervisor one recommendation when the next tier cannot run here.
+## Staff
+
+- Run `agents plan` for signed-in providers. `worker-ledger --recommend '<Category and facet lines>'` picks the tier; `worker-ledger --summary` shows category success.
+- Pick ready work with `threads ready`; read its Done when with `threads show repo#N`. Check `threads list` and open issues first, and never duplicate a held item.
+- Brief: Item, Category, goal, files, Done when, ETA (one box, 20 minutes or less), facet lines `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`, `Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and the state checked at spawn (main SHA and CI, lane SHAs, what landed).
+- Category: mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.
+- Retries, escalations and continuations are fresh workers with `Follows: <earlier agent id and tier>` and the failed evidence. Never revive a finished worker by message.
+- Claim shared-resource work through `threads`; a running brief is its worker's claim.
+- Tiers (Codex spawns set model and effort explicitly; use no Codex low or max, Sonnet or Opus low):
 
 | Provider | Tier | Model / invocation |
 | --- | --- | --- |
@@ -37,37 +28,35 @@ written: 2026-10-10
 | Claude | high | `worker-high`, Opus 5.5 high, escalation only |
 | Claude | xhigh | `worker-xhigh`, Opus 5.5 xhigh, escalation only |
 
-- Set model and effort explicitly on every Codex spawn.
-- Start every Opus-range item at Opus medium; escalate to the next tier printed by `agents plan` only after `Stop: reasoning` (wrong cause or two failed fixes), and restaff every other stop at the same tier.
-- Use no Codex low/max, Sonnet or Opus low.
-- Use Fable only when Tom asks by name; use Astra xhigh as the second-opinion reviewer below (Tom, 2026-10-10).
-- Staff `planner` (Opus xhigh) for a plan, not code, when an issue gets its second Not done, a category's last 10 runs fall below 40% closed, or the change is architectural (netcode, engine boundary, release shape); cheaper tiers execute its boxes.
-- Pass `effort: max` to `planner` for a decision that is expensive to reverse (Tom's standing approval, 2026-10-10).
-- Before staffing a max planner's design, have one reviewer from another model family try to break it (Codex `gpt-6-astra` xhigh while Codex usage remains, else `gpt-6.1-sol` high, else Opus at a different tier, plus Gemini as a cheap extra reviewer, see `gemini-review`) (a failing scenario, a cheaper alternative, a wrong assumption) and revise once; Tom asked for adversarial review at the points where a wrong call is expensive (2026-10-10).
-- Give each adversarial reviewer one lens and a different lens per reviewer when running two or more: desync or determinism hunter, frame-time profiler, new player at their first match, Warcraft engine limits, maintainer six months later, cheapest alternative, or attacker of the measurement itself; record the lens that found each accepted flaw so the ledger keeps the useful ones.
-- Weigh each review finding by evidence first and reviewer tier second: a finding with a failing scenario, test or measurement counts whatever model raised it; an unevidenced finding from Opus max/xhigh or Astra xhigh gets investigated, and one from a smaller model (Gemini, Haiku, Codex medium) gets one check by a stronger model before anyone acts on it or dismisses it.
-- Before closing an issue, have worker-haiku rerun each Done when check against origin/main and quote the numbers; close only when every box reproduces.
-- Before landing a `Spec: judged` cross-module or cross-repo lane, have a reviewer from another model family or tier (same order as above) review the diff for wrong behaviour and weakened tests (plus Gemini on public repos), and fix what it shows before `safe-push`.
-- Compare Haiku/Opus token cost at 1:40; price Haiku prompts above 100k tokens at 5 times its normal rate.
-- Send every code-only Smashcraft/Wisp item to `cloud-workers` first (4 cores/run, no run cap); staff a local worker only for real-game clients, private game assets, the LAN pool or unpushed local state, and move a code-only local worker to the cloud when found.
-- Route compute (agreed with Tom 2026-10-10): cloud runs cost only the same plan usage a local worker would, with the machine included; parallel batch work (balance/CPU fields, suites, soaks) goes to GitHub runners through `github-actions` first and to vast.ai through `vast-job` when the farm queue delays a result; always-on Warcraft clients, the offline LAN pool and GPU work go to the Hetzner box once it exists and to the vast.ai VM until then, with signed-in Definitive clients staying local unless moved deliberately; rent no other CPU provider (DigitalOcean and similar cost several times vast.ai for the same cores).
-- Start every leash or heartbeat tick with `threads unowned`: before any other work, give each priority:now UNOWNED row a worker (cloud first when code-only) or `threads block <repo#N> <reason>`; only the spawn gate caps this staffing, and every status-file line carries its `priority:now unowned=N blocked=M owned=K` summary.
-- Keep `worker-sweep --wait` active while workers run, and run `worker-sweep` once at every leash or heartbeat check; act on every STALLED, OVERTIME, HANDOFF or PARKED row (nudge once, then replace with a Follows: brief) and never judge a worker by recent activity alone; act on each `WAIT` line (landing queue, Actions queue, serial debugging, GPU) with its named move.
-- Create recurring jobs (session crons, timers, cloud routines) only from a `dotfiles/agents/routines/` entry, scheduling a session cron with its pointer prompt from `agents routines pointer <name>`; `agents routines` lists every job and flags unregistered ones.
-- As a lead with a goal, schedule the `regrounding` routine every 20 minutes; it rebuilds the DAG from the goal's GitHub issues and main CI, staffs every unblocked node up to the spawn gate, recycles workers per the recycle rule and closes passed issues, so Tom never has to prompt a regrounding.
-- Stop the parent's monitors/background shells when their work ends.
-- Close finished Codex workers as soon as their report arrives.
-- Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
-- In an Autoland repository a worker ends once `safe-push --to main` has pushed its `claude/land-*` branch, reporting `Done: queued <branch>`; Autoland lands it and a Haiku worker ticks its boxes after landing. Elsewhere the worker runs `safe-push` in the foreground with a 10-minute timeout and, when the landing outlasts that, reports its exact lane for the parent to land in the background.
-- Recycle a worker at 45 minutes or 350k context, before 500k auto-compaction (the worker-handoff hook nudges between tool calls; the worker-wait-guard hook keeps workers out of foreground waits so messages arrive at once): it queues what passes, then it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
-- Keep workers out of wait loops; messages reach a worker only between its commands.
-- Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
-- Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.
-- Before starting an issue, check `lane-gc --unlanded` for an existing branch referencing it and continue that instead of starting over; an owner who abandons a lane deletes it in the same turn.
-- While main is red, staff its fix first and keep queuing lanes behind it; never cancel an Autoland run, because a cancelled bisect half strands its lanes.
-- Before a playtest's last blocker lands, prebuild its map with the fix applied and run the frame-cost compare, so the build cannot fail at playtest time.
-- Promote a process idea to policy only after it produced a measured result; file unproven ideas as issues.
-- After an hour with no closure, start nothing new until an open box closes.
-- Write the status file in plain sentences, one line per item, with spaces between words, each line ending with the `threads unowned` summary counts.
-- Use `orchestrating-codex` for a Claude session's Codex work.
+- Start every Opus-range item at `worker`; escalate one tier only after `Stop: reasoning`. Restaff every other stop at the same tier.
+- Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to `worker-haiku`. Judged art, bisects, native checks and jobs waiting on a run longer than 2 minutes go to `worker` or the lead. Other tooling and bug-known-cause items go to Haiku with `Arm: haiku-trial`.
+- Use Fable only when Tom names it. Bring the supervisor one recommendation when the next tier cannot run here.
+
+## Review
+
+- Staff `planner` (Opus xhigh; `effort: max` for an expensive-to-reverse decision) for a plan, not code, when an issue gets its second Not done, a category's last 10 runs fall below 40% closed, or the change is architectural.
+- Before staffing a max planner's design, have one reviewer from another model family try to break it, plus Gemini as a cheap extra reviewer (`gemini-review`, public diffs only). Revise once.
+- Give each adversarial reviewer one lens, a different one per reviewer; it reports `Accepted flaws: N`.
+- Weigh each finding by evidence first, reviewer tier second. A failing scenario, test or measurement counts whatever raised it; an unevidenced finding from a larger model gets investigated, a smaller model's gets one check by a stronger model first.
+- Weigh rewrite and maintenance effort at AI cost (agents do it 10–100x more cheaply than a human); rank review findings and alternatives by leverage, not by human effort.
+- Before landing a `Spec: judged` cross-module or cross-repo lane, have a reviewer from another family or tier review the diff for wrong behaviour and weakened tests; fix what it shows before `safe-push`.
+
+## Run and land
+
+- Keep `worker-sweep --wait` active while workers run. Act on each STALLED, OVERTIME, HANDOFF or PARKED row (nudge once, then replace with a Follows: brief) and on each `WAIT` line with its named move. Never judge a worker by recent activity alone.
+- Expect a report at 45 minutes or twice ETA. Recycle at 45 minutes or 350k context: queue what passes, write a complete handoff at a checkpoint, and let a fresh worker continue from it.
+- Ask a worker idle 10 minutes without a report for one, then archive it. Never park a worker to wait on a farm run, a client or another worker.
+- Send every code-only Smashcraft or Wisp item to `cloud-workers` first; staff local workers only for real-game clients, private game assets, the LAN pool or unpushed local state.
+- Land in an Autoland repository by ending once `safe-push --to main` pushes the `claude/land-*` branch, reporting `Done: queued <branch>`. Elsewhere, run `safe-push` in the foreground with a 10-minute timeout.
+- Before starting an issue, check `lane-gc --unlanded` for an existing branch and continue it.
+- Stop the parent's monitors and background shells when their work ends. Close finished Codex workers when their report arrives.
+- Promote a process idea to policy only after a measured result. After an hour with no closure, start nothing new until an open box closes.
+- Detail for ledger rules, compute routing, Autoland, recycling and ticks: [notes](references/notes.md).
+
+## Reports and ticks
+
+- Require reports beginning `Done:`, `Not done:` or `Blocked:`; every Not done or handoff names `Stop: landing|capacity|client|leash|reasoning|decision`.
+- Every `tick` starts with `threads unowned`: give each priority:now UNOWNED row a worker (cloud first when code-only) or `threads block <repo#N> <reason>`. End each status line with `priority:now unowned=N blocked=M owned=K`.
+- Schedule `tick` only from `dotfiles/agents/routines/`: run CronList, then CronCreate with `agents routines pointer tick` only if no session cron carries it.
+- Write the status file in plain sentences, one line per item.
 - Use `agents --help`, `threads --help` and `worker-ledger --help` for command detail.
