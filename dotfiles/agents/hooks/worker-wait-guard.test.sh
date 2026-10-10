@@ -61,6 +61,14 @@ run allow 'short sleep'             worker      0 ''     'sleep 5'
 run allow 'lead session'            ''          0 ''     'until x; do sleep 30; done'
 run allow 'other agent type'        Explore     0 ''     'safe-push --to main'
 run allow 'killswitch'              worker      0 ''     'safe-push --to main' AGENT_NO_AUTHORING_HOOKS=1
+run deny  'safe-push bare'          worker      0 ''     'safe-push --to main'
+run deny  'safe-push after cd'      worker      0 ''     'cd x && safe-push --to main'
+run deny  'safe-push env prefix'    worker      0 ''     'FOO=1 safe-push'
+run allow 'which safe-push'         worker      0 ''     'which safe-push'
+run allow 'command -v in subst'     worker      0 ''     'wc -l $(command -v safe-push)'
+run allow 'quoted safe-push'        worker      0 ''     'git commit -m "land through safe-push"'
+HEREDOC=$'git commit -F - <<\'EOF\'\nsafe-push lands it\nEOF'
+run allow 'heredoc body safe-push'  worker      0 ''     "$HEREDOC"
 printf '{"tool_name":"Bash"' | env -u AGENT_NO_AUTHORING_HOOKS HOME="$SCRATCH/home" "$HOOK" && pass=$((pass + 1))
 
 printf 'worker-wait-guard: %s passed, %s failed\n' "$pass" "$fail"

@@ -62,22 +62,67 @@ command = tool_input.get("command")
 if not isinstance(command, str):
     sys.exit(0)
 
+INERT_HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][\w.-]*)\2")
+CMD_START = r"(?:^|[;&|(\n`])\s*(?:(?:[A-Za-z_]\w*=\S*|timeout\s+[\d.]+[smhd]?|env|nice|nohup|exec)\s+)*"
+
+
+def strip_inert(text):
+    out, pending, i, n = [], [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "\\":
+            out.append(text[i:i + 2])
+            i += 2
+        elif c == "'":
+            j = text.find("'", i + 1)
+            out.append("''")
+            i = n if j < 0 else j + 1
+        elif c == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            out.append('""')
+            i = j + 1
+        elif c == "<" and INERT_HEREDOC.match(text, i) and not text.startswith("<<<", i):
+            m = INERT_HEREDOC.match(text, i)
+            pending.append((m.group(3), m.group(1) == "-"))
+            out.append(m.group(0))
+            i = m.end()
+        elif c == "\n" and pending:
+            out.append("\n")
+            i += 1
+            for delim, tabs in pending:
+                while i < n:
+                    eol = text.find("\n", i)
+                    eol = n if eol < 0 else eol
+                    line = text[i:eol]
+                    i = eol + 1
+                    if (line.lstrip("\t") if tabs else line) == delim:
+                        break
+            pending = []
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
 reason = None
 timeout = tool_input.get("timeout")
 if isinstance(timeout, (int, float)) and timeout > LIMIT_S * 1000:
     reason = f"a timeout of {int(timeout // 1000)} s"
 else:
+    inert = strip_inert(command)
     patterns = [
-        (r"\buntil\b[\s\S]*\bsleep\b", "an until/sleep wait loop"),
-        (r"\bwhile\b[\s\S]*\bsleep\b", "a while/sleep wait loop"),
-        (r"\bsafe-push\b", "safe-push"),
-        (r"\bgh\s+run\s+watch\b|\bgh\s+pr\s+checks\b[^\n]*--watch", "a CI watch"),
-        (r"machine-capacity\.mjs\s+(run|session)\b", "a leased run"),
-        (r"\bbun\s+(run\s+)?test\b(?!\s+\S+\.test\.ts)", "a test suite"),
-        (r"\bbun\s+wisp\s+farm\b", "a farm run"),
+        (r"\buntil\b[\s\S]*\bsleep\b", "an until/sleep wait loop", command),
+        (r"\bwhile\b[\s\S]*\bsleep\b", "a while/sleep wait loop", command),
+        (CMD_START + r"(?:\S*/)?safe-push\b", "safe-push", inert),
+        (CMD_START + r"(?:gh\s+run\s+watch\b|gh\s+pr\s+checks\b[^\n]*--watch)", "a CI watch", inert),
+        (CMD_START + r"(?:bun\s+(?:\S*/)?|\S*/)?machine-capacity\.mjs\s+(?:run|session)\b", "a leased run", inert),
+        (r"\bbun\s+(run\s+)?test\b(?!\s+\S+\.test\.ts)", "a test suite", command),
+        (CMD_START + r"bun\s+wisp\s+farm\b", "a farm run", inert),
     ]
-    for pattern, label in patterns:
-        if re.search(pattern, command):
+    for pattern, label, text in patterns:
+        if re.search(pattern, text):
             reason = label
             break
     if reason is None:
