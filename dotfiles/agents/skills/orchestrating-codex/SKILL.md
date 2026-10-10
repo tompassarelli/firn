@@ -20,8 +20,9 @@ metadata:
 - Start the lead with `agents lead start --provider codex --domain D --brief BRIEF`, which registers it in `agents org`.
 - Use `CODEX_LEAD_THREAD=<id>` for an existing live lead.
 - Give it a goal closing every ordered item on GitHub or naming a blocker with evidence and an owner.
+- Mark a box `code-only` when it needs no local build or client, so its worker runs no builds and takes no leases; a named validator runs its checks.
 - Start all independent items together; open/claim Claude-held items and tell the lead before staffing them.
-- Share 20 Actions jobs and 5,000 API calls/hour through `github-actions`; confirm the exact revision before farm dispatch.
+- Share GitHub Pro's 40 concurrent Actions jobs and 5,000 API calls/hour through `github-actions`; confirm the exact revision before farm dispatch.
 - Wait on farm/CI with one blocking repository command or `gh run watch RUN --exit-status`.
 - Never poll in a loop.
 - Monitor `~/.local/state/agents/handoffs/codex-lead-peer.md` for `PEER`/`HANDOFF`, with a 30-minute timeout rearmed on expiry.
