@@ -6,135 +6,136 @@
   </picture>
 </p>
 
-**firn is a typed front-end for NixOS and nix-darwin — it catches option
-typos and type errors at the source line, before `nixos-rebuild` ever runs.**
+**firn is a NixOS framework. Modules are written in Beagle (`.bnix`) or Clause, and the `firn` CLI catches option typos and type errors at the source line, before `nixos-rebuild` runs.**
 
-Keeps the standard NixOS module model, swaps in a small Racket DSL
-([beagle/nix](https://github.com/tompassarelli/beagle)) for authoring,
-adds pre-eval diagnostics that catch option typos and type errors at
-the source line — typically cutting edit/validate loops from
-~30 seconds to ~5 seconds.
+It keeps the standard NixOS module model and adds a small Racket DSL
+([beagle/nix](https://github.com/tompassarelli/beagle)) for authoring.
 
 ```
 $ firn rebuild
 modules/printing/default.bnix:6:7: unknown option services.pipwire.alsa.enable
   did you mean: services.pipewire.alsa.enable or services.pipewire.pulse.enable?
-modules/foo/default.bnix:9:34: type mismatch at services.openssh.enable:
-  expected bool, got string
-hosts/laptop/configuration.bnix:11:47: type mismatch at boot.loader.systemd-boot.consoleMode:
+hosts/whiterabbit/configuration.bnix:11:47: type mismatch at boot.loader.systemd-boot.consoleMode:
   "atuo" not in enum {…} — did you mean "auto"?
 ```
 
-`file:line:col` precision on the value, with did-you-mean suggestions,
-before `nixos-rebuild` runs. That's the whole pitch — the validator
-lives in [beagle](https://github.com/tompassarelli/beagle).
+The output above is illustrative: each error points at `file:line:col` and suggests a fix.
 
-## Who is this for?
+## What is in this repository
 
-This repository is two things at once: the firn framework, and the
-author's real NixOS + nix-darwin config built on it. To use firn for
-your own machines, **start from [`template/`](template/)**. The full
-repo (`hosts/whiterabbit/`, ~188 modules) is here as a study
-reference, not as something to fork wholesale.
+- **The framework.** The `firn` CLI (`dotfiles/bin/firn`, `native/`), `lib.mkSystem`, the tag resolver, the validator, tests and the starter [`template/`](template/).
+- **A module library.** 231 module directories under `modules/` (`ls modules | wc -l`). Each module is one package or service, selected by tags.
+- **One reference host.** `hosts/whiterabbit/` enables 158 of those modules, directly or through tags. Its private values (email, timezone, input devices and secrets) are not in this repository. They come from a private overlay.
+
+A second host, `hosts/nexus/`, is also built from this repository.
+
+## Private overlays
+
+firn holds no personal values. To run a machine, write a small private flake
+that takes firn as an input and calls `lib.mkSystem`:
+
+```nix
+{
+  inputs.firn.url = "github:tompassarelli/firn";
+
+  outputs = { self, firn, ... }: {
+    nixosConfigurations.<host> = firn.lib.mkSystem {
+      hostname = "<host>";
+      hostConfig = "${firn}/hosts/<host>/configuration.nix";
+      hardwareConfig = ./hosts/<host>/hardware-configuration.nix;
+      extraModules = [ ./hosts/<host>.nix ];
+    };
+  };
+}
+```
+
+Here `<host>` names a reference host that firn ships, such as `whiterabbit`.
+To start from nothing, point `hostConfig` at your own `configuration.nix`, as
+the template does.
+
+The overlay's own files hold what makes the machine yours:
+
+- **Identity:** `myConfig.modules.users.email` and
+  `myConfig.modules.timezone.zone` (an IANA name); the reference host keeps
+  its public username and full name in firn, and an overlay may override them.
+- **Devices:** per-device settings, such as input device IDs, go in the
+  overlay's host file.
+- **Secrets:** an encrypted `secrets/*.yaml` and `.sops.yaml` in the overlay,
+  and the option that names each file, for example
+  `myConfig.modules.awscli.sopsFile` or `myConfig.modules.cloudflare-auth.sopsFile`.
+- **Private modules:** anything else goes in `extraModules`.
+
+Built on its own, firn uses neutral defaults: an empty email and full name,
+and the default timezone. Secret-backed modules have no default file, so one
+enabled without an overlay value fails evaluation. See [docs/secrets.md](docs/secrets.md).
 
 ## Quick start
 
 ```bash
 nix flake init -t github:tompassarelli/firn     # drops template/ in cwd
 git clone https://github.com/tompassarelli/beagle ../beagle    # compiler + validator
-cp /etc/nixos/hardware-configuration.nix .
-# edit hosts/my-machine/configuration.bnix and hosts/my-machine/enabled-tags.bnix
-firn repo build && nixos-rebuild switch --flake .#my-machine
+# rename the template's placeholder host to <host>: its directory under hosts/
+# and its nixosConfigurations entry in flake.nix
+cp /etc/nixos/hardware-configuration.nix hosts/<host>/hardware-configuration.nix
+# edit hosts/<host>/configuration.bnix and hosts/<host>/enabled-tags.bnix
+firn repo build && nixos-rebuild switch --flake .#<host>
 ```
 
-`BEAGLE_PATH` overrides the sibling-clone location. macOS works the
-same way via `lib.mkDarwinSystem` and a `darwinConfigurations` entry —
-`firn rebuild` detects Darwin and dispatches to `darwin-rebuild`.
+`BEAGLE_PATH` overrides the sibling-clone location (default `~/code/beagle/main`).
+On macOS, `lib.mkDarwinSystem` builds a `darwinConfigurations` entry instead.
+
+## Agent tooling
+
+Agent tools, hooks and skills are not in this repository. They live in
+[tompassarelli/north](https://github.com/tompassarelli/north). firn's
+`north-profile` module (`myConfig.modules.north-profile.enable`) installs them
+on a host: it publishes North's shared agent surfaces at `~/.agents` and
+projects North's hook registration into `~/.claude/settings.json`.
 
 ## Commands
 
+Commands take the shape `<node> <edge> [<leaf>]`. Run `firn` with no arguments
+for the full grid, or `firn <node>` for one entity.
+
 ```bash
-firn rebuild          # build + validate + switch (current host), then its environment apps when the host has one
-firn-environment-switch [host] [flake] # install the host environment apps (Blender, Obsidian) in ~/.nix-profile, outside the system closure
-machine-update        # nightly inputs, validation, exact build, landing and switch
-agent-runtime-update [version|latest] # Codex, Claude and agy at 02:00 and 13:00
-model-watch [--sources FILE] [--proposals DIR] # public snapshots/events; one plan-billed digest on change at 02:10 and 13:10
-model-watch --alerts-only [--location FILE] # deterministic location warnings to ntfy every 5 minutes; private runtime config
-agents news [--days 7] # shipped and expected models, market probabilities and sources; none when empty
-claude-runtime-update [version|latest] # install verified official Claude binary
-claude                # launch the atomically selected Claude runtime
-agy-runtime-update [version|latest] # install verified official Antigravity binary
-agy                   # launch the atomically selected Antigravity runtime
-vast-job --offer-query Q --max-hours H --run CMD --fetch P --to DIR # rent, run, fetch, destroy one capped vast.ai job
-vast-reaper [--dry-run]  # every 5 min: destroy vast-job instances past deadline or without a live supervisor; runner VM credit floor (warn $5, teardown $2.50)
-lane-gc [--dry-run] [--unlanded] # hourly: retire landed clean idle worktrees/branches; report unlanded work
-capacity-watchdog report         # 30 s sampler (user service): 5/30-min load, PSI, lease and unleased-process windows and incidents
-git-maintenance-nightly          # 03:17 timer: git maintenance per ~/code/*/main inside a moderate capacity lease
-update-status         # report successful automatic updates older than 36 hours
-update-notify SERVICE # desktop notification with the failed service's journal
-proton-log-watchdog   # strip PROTON_LOG from Wisp launch.sh, truncate clone logs over 1 GiB
-skill-review-queue    # weekly: open or update the north issue of skill reviews older than 30 days
-codex-shared-idle SOCKET # probe live loaded threads before runtime adoption
-codex-runtime-refresh # adopt the selected runtime only on idle shared servers
-airplane on|off|status # the only way to toggle radios; rfkill-guard disables key handling and reverts other blocks
-firn repo validate    # static check the .bnix tree, then evaluate every nixosConfigurations toplevel
-nexus-stage-hostkey DIR # decrypt nexus's pre-seeded SSH host key into DIR/etc/ssh for nixos-anywhere --extra-files
-firn host impact      # preview what would build
-firn repo diff        # diff regenerated .nix vs committed
-firn tag enable <t>   # enable a tag
-firn tag disable <t>  # disable a tag
-agent-instruction-check --repo DIR --ref HEAD # published AGENTS.md and global-policy limits
-agent-instruction-check --global FILE        # generated global policy (repeat --global)
+firn rebuild [host]           # build, validate and switch the current host
+firn rollback <generation>    # activate one exact prior generation
+firn repo build               # regenerate .nix from .bnix
+firn repo validate            # lint, option paths, types and packages
+firn repo diff all            # re-emit .nix and diff it against the committed copy
+firn host impact [<host>]     # what a rebuild would change
+firn host status <host>       # modules a host enables directly
+firn tag enable <tag>         # add a tag to the current host
+firn tag disable <tag>        # remove a tag from the current host
+firn tag status               # enabled tags and the resolved active modules
+firn module list all          # every module (also: used, unused)
+firn schema explain <path>    # schema entry and repo references for an option
+firn secret list all          # encrypted secret names under secrets/
 ```
-
-Commands use a `<node> <edge> [<leaf>]` triple. Leaves default to the current
-host or `all` where the edge defines that default. `firn rebuild [host]` is the
-canonical build-and-switch shortcut; run `firn` with no args for the full grid
-or `firn <node>` for one entity's edges.
-
-`lane-gc` (hourly timer, module `lane-gc`) retires worktrees and branches already
-on origin/main that are clean, idle and not in use, and lists everything else in
-`~/.local/state/agents/lane-gc/unlanded.txt`; the `unlanded-work` SessionStart hook
-announces entries older than 24 h.
-
-## Secrets
-
-[sops-nix](https://github.com/Mic92/sops-nix): encrypted secrets live in a
-private overlay flake that builds the host from firn; the private age key
-stays machine-local. Secret-backed modules are opt-in and have no default
-file, so the config builds clean without them.
-
-→ **[docs/secrets.md](docs/secrets.md)** — key layout + bring-your-own-key fork recipe.
 
 ## Architecture
 
-**Module** = atom (one package/service, `modules/<name>/default.bnix`).
+**Module** = atom (one package or service, in `modules/<name>/`).
 **Tags** = composition (a module declares `:tags`; hosts select tags; the
 resolver unions memberships minus a per-host disabled list).
 **Host** = leaf (`configuration.bnix` + `enabled-tags.bnix`). `.bnix` is the
-source, `.nix` is generated — both committed, edit the `.bnix`.
+source and `.nix` is generated; both are committed. Edit the `.bnix`.
 
-→ **[docs/architecture.md](docs/architecture.md)** — resolver chain, repo layout, module auto-discovery.
+→ [docs/architecture.md](docs/architecture.md) for the resolver chain and repo layout,
+and [docs/TAGS.md](docs/TAGS.md) for tag composition.
 
 ## Documentation
 
-- [docs/TAGS.md](docs/TAGS.md) — tag-driven composition model,
-  resolution algorithm, worked examples
-- [tompassarelli/beagle](https://github.com/tompassarelli/beagle) —
-  the DSL itself: compiler, validator, schema extractor, migration tool
-- The `firn` CLI is self-documenting: `firn` (full grid),
-  `firn <node>` (one entity), `firn schema explain <path>` (schema
-  introspection)
+- [docs/secrets.md](docs/secrets.md): key layout and the bring-your-own-key recipe
+- [docs/TAGS.md](docs/TAGS.md): tag-driven composition and resolution
+- [tompassarelli/beagle](https://github.com/tompassarelli/beagle): the DSL, compiler, validator and schema extractor
+- `firn --help` and `firn schema explain <path>`: the CLI is self-documenting
 
 ## Tradeoffs
 
 - One sibling-repo dependency (`../beagle`).
-- Two-language requirement (Racket s-expressions + Nix concepts).
-- Two artifacts per file (`.bnix` + `.nix`, both committed).
-- Schema cache is host-specific and dated; regenerate after flake
-  input changes.
-- DSL ceiling — escape hatch (`raw-file`, hand-written `.nix`,
-  `nix-ident`) covers the gaps.
+- Two languages: Racket s-expressions and Nix concepts.
+- Two artifacts per file (`.bnix` and `.nix`, both committed).
 
 ## Inspired by
 
