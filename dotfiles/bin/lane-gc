@@ -19,13 +19,18 @@ state is kept and written to the unlanded report (default
 dirty, first commit subject, Refs. --unlanded prints that report.`;
 
 const HOME = process.env.HOME!;
+process.chdir(HOME);
 const SKIP = new Set(["clients", "resources", "archive"]);
 const env = { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0", LC_ALL: "C" };
 
 type R = { ok: boolean; out: string; err: string };
 function git(cwd: string, args: string[], timeout = 120_000): R {
-  const r = Bun.spawnSync(["git", "-C", cwd, ...args], { env, stdout: "pipe", stderr: "pipe", timeout });
-  return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
+  try {
+    const r = Bun.spawnSync(["git", "-c", "maintenance.auto=false", "-c", "gc.auto=0", "-C", cwd, ...args], { env, stdout: "pipe", stderr: "pipe", timeout });
+    return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
+  } catch (e) {
+    return { ok: false, out: "", err: String(e) };
+  }
 }
 const tilde = (p: string) => (p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p);
 function real(p: string): string {
@@ -190,7 +195,9 @@ function main(argv: string[]): number {
   }
   const live = liveRoots();
   const c: Counts = { retiredWorktrees: 0, deletedBranches: 0, deletedRemote: 0, kept: 0, unlanded: 0 };
-  for (const container of containers(o.root, o.repos)) sweep(container, o, live, c);
+  for (const container of containers(o.root, o.repos)) {
+    try { sweep(container, o, live, c); } catch (e) { console.log(`${basename(container)}: stopped: ${e}`); }
+  }
   const header = `# lane-gc ${new Date().toISOString()}: unlanded worktrees and branches (age of last commit, container, path, branch, ahead, dirty, first subject, refs)\n`;
   const body = reportRows.sort((a, b) => parseInt(b) - parseInt(a)).join("\n");
   if (!o.dryRun && !o.repos.length) {
