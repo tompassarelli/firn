@@ -59,7 +59,18 @@ CREATE TABLE IF NOT EXISTS runs(
   note TEXT,
   repeats INTEGER,
   landed INTEGER,
-  arm TEXT
+  arm TEXT,
+  spec TEXT,
+  scope TEXT,
+  surface TEXT,
+  verify TEXT,
+  lens TEXT,
+  flaws INTEGER
+) STRICT;
+CREATE TABLE IF NOT EXISTS tier_choice(
+  cell TEXT PRIMARY KEY,
+  tier TEXT NOT NULL,
+  since TEXT NOT NULL
 ) STRICT;
 CREATE TABLE IF NOT EXISTS gh_cache(
   repo TEXT PRIMARY KEY,
@@ -128,8 +139,12 @@ def connect() -> sqlite3.Connection:
     for column in ("repeats", "landed"):
         if column not in columns:
             db.execute(f"ALTER TABLE runs ADD COLUMN {column} INTEGER")
-    if "arm" not in columns:
-        db.execute("ALTER TABLE runs ADD COLUMN arm TEXT")
+    for column in ("arm", "spec", "scope", "surface", "verify", "lens"):
+        if column not in columns:
+            db.execute(f"ALTER TABLE runs ADD COLUMN {column} TEXT")
+    if "flaws" not in columns:
+        db.execute("ALTER TABLE runs ADD COLUMN flaws INTEGER")
+    db.execute("CREATE TABLE IF NOT EXISTS tier_choice(cell TEXT PRIMARY KEY, tier TEXT NOT NULL, since TEXT NOT NULL) STRICT")
     return db
 
 
@@ -472,6 +487,15 @@ def cmd_unowned(db, a):
 
 BRIEF_FIELD = {name: re.compile(rf"\b{name}:[ \t]*([^\s`<>]+)") for name in ("Item", "Follows", "Arm")}
 CATEGORY = re.compile(r"\bCategory:[ \t]*([^.;,\n`<>]+)")
+LENS = re.compile(r"\bLens:[ \t]*([^.;,\n`<>]+)")
+# Orthogonal brief facets, each a closed vocabulary; worker-tier-guard holds the same lists.
+FACETS = {
+    "spec": ["exact", "measured", "judged"],
+    "scope": ["one-file", "module", "cross-module", "cross-repo"],
+    "surface": ["ts", "lua", "nix", "shell", "workflow", "docs", "assets"],
+    "verify": ["none", "local-test", "farm", "native", "visual"],
+}
+FACET_FIELD = {f: re.compile(rf"\b{f.capitalize()}:[ \t]*([A-Za-z-]+)") for f in FACETS}
 
 
 def brief_fields(brief: str) -> dict:
@@ -483,6 +507,13 @@ def brief_fields(brief: str) -> dict:
     m = CATEGORY.search(brief)
     if m:
         out["category"] = m.group(1).strip().lower()
+    for facet, pattern in FACET_FIELD.items():
+        m = pattern.search(brief)
+        if m and m.group(1).lower() in FACETS[facet]:
+            out[facet] = m.group(1).lower()
+    m = LENS.search(brief)
+    if m:
+        out["lens"] = m.group(1).strip().lower()
     return out
 
 
@@ -517,16 +548,23 @@ def hold(db, item, r, claim, follows):
 def cmd_ingest(db, a):
     """Read worker-ledger's JSON rows on stdin. A running worker holds its Item; a finished one
     releases it and becomes a run; a stale one (idle 2 h) releases it. Recorded runs are skipped."""
-    added = 0
+    added = backfilled = 0
     with Tx(db):
         for line in sys.stdin:
             if not line.strip():
                 continue
             r = json.loads(line)
             status = r.get("status", "finished")
-            if db.execute("SELECT 1 FROM runs WHERE agent = ?", (r["id"],)).fetchone():
-                continue
             f = brief_fields(r.get("brief") or "")
+            if db.execute("SELECT 1 FROM runs WHERE agent = ?", (r["id"],)).fetchone():
+                if r.get("backfill"):
+                    backfilled += db.execute(
+                        "UPDATE runs SET spec = coalesce(spec, ?), scope = coalesce(scope, ?), surface = coalesce(surface, ?),"
+                        " verify = coalesce(verify, ?), lens = coalesce(lens, ?), flaws = coalesce(flaws, ?) WHERE agent = ?"
+                        " AND (spec IS NULL OR scope IS NULL OR surface IS NULL OR verify IS NULL OR lens IS NULL OR flaws IS NULL)",
+                        (f.get("spec"), f.get("scope"), f.get("surface"), f.get("verify"), f.get("lens"),
+                         r.get("flaws"), r["id"])).rowcount if any(k in f for k in (*FACETS, "lens")) else 0
+                continue
             item = issue_ref(f.get("item") or r.get("item"))
             follows = f.get("follows") or r.get("follows")
             claim = db.execute("SELECT owner FROM claims WHERE item = ?", (item,)).fetchone() if item else None
@@ -552,19 +590,22 @@ def cmd_ingest(db, a):
             eta = r.get("eta_min")
             db.execute(
                 """INSERT INTO runs(agent, item, follows, session, tier, category, started, ended, minutes,
-                                    eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed, arm)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                    eta_min, tokens, peak_ctx, outcome, report, note, repeats, landed, arm,
+                                    spec, scope, surface, verify, lens, flaws)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (r["id"], item, follows, r.get("session"), r["tier"], category, r.get("started"), r["ended"],
                  r["actual_min"], None if eta is None else round(eta), r.get("tokens"), r.get("peak_ctx"),
                  r["outcome"], r.get("report") or "", r.get("note"), r.get("repeats"), r.get("landed"),
-                 (f.get("arm") or "").lower() or None),
+                 (f.get("arm") or "").lower() or None, f.get("spec"), f.get("scope"), f.get("surface"),
+                 f.get("verify"), f.get("lens"), r.get("flaws")),
             )
             if prev and prev != r["id"]:
                 event(db, item, "handoff", r["id"], r["tier"], **{"from": prev, "to": r["id"]})
             event(db, item, "run", r["id"], r["tier"], category=category, brief_category=raw,
                   minutes=r["actual_min"], eta_min=eta, outcome=r["outcome"], note=r.get("note"))
             added += 1
-    print(f"threads: {added} runs recorded in {DB}", file=sys.stderr)
+    print(f"threads: {added} runs recorded" + (f", {backfilled} backfilled" if backfilled else "") + f" in {DB}",
+          file=sys.stderr)
 
 
 def cmd_run_ids(db, a):
@@ -577,24 +618,42 @@ def median(xs):
     return xs[(len(xs) - 1) // 2] if xs else None
 
 
-TIER_RANK = {"low": 0, "medium": 1, "high": 2, "xhigh": 3, "max": 4}
+TIER_RANK = {"haiku": -1, "low": 0, "medium": 1, "high": 2, "xhigh": 3, "max": 4}
+
+
+GROUPS = ["category", *FACETS]
+
+
+def group_list(text):
+    keys = [k.strip().lower() for k in text.split(",") if k.strip()]
+    bad = [k for k in keys if k not in GROUPS]
+    if bad or not keys:
+        raise Refused(f"--group takes a comma list of {', '.join(GROUPS)}; got {text!r}")
+    return keys
+
+
+def cell_value(r, key):
+    if key == "category":
+        return r["category"] if r["category"] in CATEGORIES else "unknown"
+    return r[key] or "-"
 
 
 def cmd_summary(db, a):
     rows = db.execute("SELECT * FROM runs WHERE ended >= ?", (a.since or "",)).fetchall()
     if not rows:
         raise Refused(f"no runs in {DB}")
+    keys = group_list(a.group)
     groups: dict = {}
     for r in rows:
-        groups.setdefault((r["category"] if r["category"] in CATEGORIES else "unknown", r["tier"], r["arm"] or "-"), []).append(r)
-    out = [("category", "tier", "arm", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
+        groups.setdefault((*(cell_value(r, k) for k in keys), r["tier"], r["arm"] or "-"), []).append(r)
+    out = [(*keys, "tier", "arm", "n", "done", "success", "eta_med", "actual_med", "x_eta_med", "over_2x_eta", "tokens_med",
             "repeat_runs", "no_landing")]
-    for (cat, tier, arm), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], TIER_RANK.get(kv[0][1], 5), kv[0][2])):
+    for key, rs in sorted(groups.items(), key=lambda kv: (kv[0][:-2], TIER_RANK.get(kv[0][-2], 5), kv[0][-1])):
         done = sum(r["outcome"] == "done" for r in rs)
         timed = [r for r in rs if r["eta_min"]]
         ratio = median([r["minutes"] / r["eta_min"] for r in timed])
         tok = median([r["tokens"] for r in rs])
-        out.append((cat, tier, arm, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
+        out.append((*key, str(len(rs)), str(done), f"{done * 100 // len(rs)}%",
                     str(median([r["eta_min"] for r in rs]) or "-"), str(median([r["minutes"] for r in rs])),
                     f"{ratio:.1f}" if ratio is not None else "-",
                     f"{sum(r['minutes'] > 2 * r['eta_min'] for r in timed)}/{len(timed)}",
@@ -602,11 +661,76 @@ def cmd_summary(db, a):
                     str(sum(r["repeats"] or 0 for r in rs)),
                     f"{sum(r['landed'] == 0 for r in rs)}/{sum(r['landed'] is not None for r in rs)}"))
     table(out)
+    lenses: dict = {}
+    for r in rows:
+        if r["lens"]:
+            lenses.setdefault(r["lens"], []).append(r)
+    if lenses:
+        print()
+        table([("lens", "reviews", "accepted_flaws", "reviews_with_flaws")] + [
+            (lens, str(len(rs)), str(sum(r["flaws"] or 0 for r in rs)), str(sum((r["flaws"] or 0) > 0 for r in rs)))
+            for lens, rs in sorted(lenses.items())])
     print()
     try:
         closure(db, rows)
     except Refused as e:
         print(f"threads: closure table needs GitHub: {e}", file=sys.stderr)
+
+
+BAR, MIN_RUNS, MARGIN = 80, 5, 15
+BACKOFF = ["surface", "verify", "scope", "spec"]
+
+
+def recommend(runs, asked, incumbent):
+    """Pure core. runs: dicts with category, the facets, tier and ok (closed without escalation and landed).
+    asked: facet -> value, category required. incumbent: cell -> tier. Returns (cell, n, tier, rates) where
+    cell is the finest one with a tier holding MIN_RUNS runs, backing off along BACKOFF; tier is the cheapest
+    reaching BAR, kept at the incumbent unless a pricier challenger beats it by MARGIN points on MIN_RUNS each."""
+    keys = ["category", *(k for k in reversed(BACKOFF) if k in asked)]
+    while True:
+        cell = {k: asked[k] for k in keys}
+        rs = [r for r in runs if all(r.get(k) == v for k, v in cell.items())]
+        by_tier: dict = {}
+        for r in rs:
+            by_tier.setdefault(r["tier"], []).append(r["ok"])
+        rates = {t: (sum(oks) * 100 // len(oks), len(oks)) for t, oks in by_tier.items() if t in TIER_RANK}
+        if any(n >= MIN_RUNS for _, n in rates.values()) or len(keys) == 1:
+            break
+        keys.pop()
+    name = ", ".join(f"{k.capitalize()}: {v}" for k, v in cell.items())
+    sampled = {t: rn for t, rn in rates.items() if rn[1] >= MIN_RUNS}
+    passing = sorted((t for t, (rate, _) in sampled.items() if rate >= BAR), key=TIER_RANK.get)
+    best = passing[0] if passing else (max(sampled, key=lambda t: (sampled[t][0], -TIER_RANK[t])) if sampled else "medium")
+    held = incumbent.get(name)
+    if held and held != best and held in sampled and best in sampled:
+        pricier = TIER_RANK[best] > TIER_RANK[held]
+        if pricier and sampled[best][0] < sampled[held][0] + MARGIN:
+            best = held
+    return name, len(rs), best, rates
+
+
+def run_ok(db):
+    escalated = {r["follows"] for r in db.execute("SELECT follows FROM runs WHERE follows IS NOT NULL")}
+    return lambda r: r["outcome"] == "done" and r["landed"] != 0 and r["agent"] not in escalated
+
+
+def cmd_recommend(db, a):
+    asked = brief_fields(a.facets)
+    if "category" not in asked or asked["category"] not in CATEGORIES:
+        raise Refused(f"recommend needs `Category: <one of {', '.join(CATEGORIES)}>` in {a.facets!r}")
+    asked = {k: v for k, v in asked.items() if k in GROUPS}
+    ok = run_ok(db)
+    runs = [{**{k: cell_value(r, k) for k in GROUPS}, "tier": r["tier"], "ok": ok(r)}
+            for r in db.execute("SELECT * FROM runs WHERE follows IS NULL AND ended >= ?", (a.since or "",))]
+    incumbent = dict(db.execute("SELECT cell, tier FROM tier_choice").fetchall())
+    cell, n, tier, rates = recommend(runs, asked, incumbent)
+    if incumbent.get(cell) != tier:
+        with Tx(db):
+            db.execute("INSERT INTO tier_choice(cell, tier, since) VALUES (?,?,?) ON CONFLICT(cell) DO UPDATE SET"
+                       " tier = excluded.tier, since = excluded.since", (cell, tier, now()))
+    print(f"tier {tier}  cell [{cell}]  n {n}")
+    for t, (rate, k) in sorted(rates.items(), key=lambda kv: TIER_RANK[kv[0]]):
+        print(f"  {t:<7} {rate}% of {k}")
 
 
 def table(out):
@@ -652,7 +776,9 @@ def parser() -> argparse.ArgumentParser:
                     f"({', '.join(r + '#N' for r in REPOS)}). Database: {DB}",
         epilog="A running worker whose brief has `Item: <repo#N>` holds that issue (worker-ledger, run by "
                "worker-sweep); claim/release are for humans and lanes. Brief categories: "
-               + ", ".join(CATEGORIES) + "; anything else counts as unknown. unowned: order is priority:now, unlabeled, "
+               + ", ".join(CATEGORIES) + "; anything else counts as unknown. Facets: "
+               + "; ".join(f"{k.capitalize()}: {' | '.join(v)}" for k, v in FACETS.items())
+               + "; Lens: <reviewer lens>. unowned: order is priority:now, unlabeled, "
                "priority:next, priority:later; the owner is a threads claim not past 2x its ETA, else an origin claude/* or "
                f"*land-* branch with a commit in the last {BRANCH_HOURS} h whose name, or a commit headline or "
                "Item:/Closes/Fixes/Refs line ahead of main, names the issue; blocked:REASON comes from `threads block` "
@@ -691,7 +817,15 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("id")
     s.add_argument("reason", nargs="*")
     s.add_argument("--clear", action="store_true")
-    s = cmd("summary", cmd_summary, "runs by category and tier: success and minutes against ETA")
+    s = cmd("summary", cmd_summary, "runs by category (or --group facets) and tier: success and minutes against ETA, "
+            "and accepted flaws per reviewer Lens")
+    s.add_argument("--since", help="only runs that ended on or after DATE")
+    s.add_argument("--group", default="category", help=f"comma list of {', '.join(GROUPS)} (default category)")
+    s = cmd("recommend", cmd_recommend,
+            f"cheapest tier whose first-assignment runs closed without escalation and landed at >= {BAR}% in the finest "
+            f"cell holding a tier with >= {MIN_RUNS} runs, backing off {', '.join(BACKOFF)}; a pricier tier replaces the "
+            f"cell's last recommendation only when it beats it by {MARGIN} points on >= {MIN_RUNS} runs each")
+    s.add_argument("facets", help="brief facet lines, e.g. 'Category: tooling, Spec: measured, Scope: one-file'")
     s.add_argument("--since", help="only runs that ended on or after DATE")
     return p
 

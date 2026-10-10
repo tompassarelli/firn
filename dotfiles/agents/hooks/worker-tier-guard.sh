@@ -2,7 +2,9 @@
 # Claude PreToolUse(Agent) tier gate for lead sessions: a `Category: mechanical`
 # or `Category: docs-policy` brief goes to worker-haiku, and worker-high or
 # worker-xhigh take only escalations. A `Follows:` line marks an escalation and
-# allows any worker tier. Non-worker agent types always allow.
+# allows any worker tier. A Spec/Scope/Surface/Verify facet outside its closed
+# vocabulary (threads FACETS) is denied at any worker tier. Non-worker agent
+# types always allow.
 #
 # Kill-switch: `north config agents off worker-tier-guard` or env
 # AGENT_NO_AUTHORING_HOOKS (shared impl: lib/authoring-killswitch.sh).
@@ -30,11 +32,30 @@ kind = ti.get("subagent_type")
 prompt = ti.get("prompt")
 if not isinstance(kind, str) or not kind.startswith("worker") or not isinstance(prompt, str):
     sys.exit(0)
-if re.search(r"(?mi)^\W*Follows:\s*\S", prompt):
-    sys.exit(0)
+FACETS = {
+    "Spec": ["exact", "measured", "judged"],
+    "Scope": ["one-file", "module", "cross-module", "cross-repo"],
+    "Surface": ["ts", "lua", "nix", "shell", "workflow", "docs", "assets"],
+    "Verify": ["none", "local-test", "farm", "native", "visual"],
+}
 reason = None
-m = re.search(r"(?mi)\bCategory:\W*(mechanical|docs-policy)\b", prompt)
-if m and kind != "worker-haiku":
+for facet, values in FACETS.items():
+    for m in re.finditer(rf"\b{facet}:[ \t]*([^\s.,;`'<>|)]*)", prompt):
+        if m.group(1).lower() not in values:
+            reason = (
+                f"{facet}: {m.group(1) or '(empty)'} is not a facet value; use one of {' | '.join(values)}, "
+                "so worker-ledger can group runs by it."
+            )
+            break
+    if reason:
+        break
+follows = re.search(r"(?mi)^\W*Follows:\s*\S", prompt)
+if reason is None and follows:
+    sys.exit(0)
+m = None if reason else re.search(r"(?mi)\bCategory:\W*(mechanical|docs-policy)\b", prompt)
+if reason:
+    pass
+elif m and kind != "worker-haiku":
     reason = (
         f"Category: {m.group(1).lower()} goes to worker-haiku, not {kind}: mechanical and "
         "docs-policy work goes to Haiku (ledger 28/31 mechanical). Escalate to worker only "

@@ -8,24 +8,35 @@ set -uo pipefail
 
 usage() {
   cat >&2 <<'EOF'
-usage: worker-ledger [--session ID] [--since DATE]   record finished workers as runs in threads
-       worker-ledger --summary [--since DATE]        per category x tier: runs against ETA, and issues closed
+usage: worker-ledger [--session ID] [--since DATE] [--backfill]   record finished workers as runs in threads
+       worker-ledger --summary [--since DATE] [--by LIST]         per cell x tier: runs against ETA, issues closed, flaws per Lens
+       worker-ledger --recommend 'FACETS' [--since DATE]          tier for a brief's facets, with the cell used and n
   --session ID  only that session's workers (default: every provider, active in the last day)
   --since DATE  only workers active on or after DATE (e.g. 2026-10-08)
+  --backfill    also reread recorded runs and fill facets their briefs state explicitly
+  --by LIST     group by a comma list of category, spec, scope, surface, verify (default category)
 A running worker whose brief names `Item:` holds that issue until it finishes.
 Codex workers repeat their brief fields in commentary when the runtime encrypts prompts.
-Briefs carry `Item: <repo#N>`, `Follows: <agent id>`, `Category: <name>` and optional `Arm: escalate|cheap-fix` lines.
+Briefs carry `Item: <repo#N>`, `Follows: <agent id>`, `Category: <name>`, optional `Arm: escalate|cheap-fix`, the facets
+`Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`,
+`Surface: ts|lua|nix|shell|workflow|docs|assets`, `Verify: none|local-test|farm|native|visual`, and for adversarial
+reviewers `Lens: <lens>`; a reviewer report stating `Accepted flaws: N` counts N for its lens.
+--recommend picks the cheapest tier at >= 80% closed without escalation and landed in the finest cell with >= 5 runs,
+backing off Surface, Verify, Scope, then Spec; a pricier tier replaces a cell's last pick only when 15 points better.
 Runs live in threads' database (${THREADS_DB:-~/.local/state/threads/threads.db}).
 EOF
   exit 2
 }
 
-session="" since="" summary=0
+session="" since="" summary=0 by="category" facets="" backfill=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --session) [ $# -ge 2 ] || usage; session=$2; shift 2 ;;
     --since) [ $# -ge 2 ] || usage; since=$2; shift 2 ;;
     --summary) summary=1; shift ;;
+    --by) [ $# -ge 2 ] || usage; by=$2; shift 2 ;;
+    --recommend) [ $# -ge 2 ] || usage; facets=$2; shift 2 ;;
+    --backfill) backfill=1; shift ;;
     -h|--help) usage ;;
     *) usage ;;
   esac
@@ -62,11 +73,16 @@ def tally(steps):
 '
 
 if [ "$summary" -eq 1 ]; then
-  exec "$threads" summary ${since:+--since "$since"}
+  exec "$threads" summary --group "$by" ${since:+--since "$since"}
+fi
+if [ -n "$facets" ]; then
+  exec "$threads" recommend "$facets" ${since:+--since "$since"}
 fi
 
 projects="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
 known=$("$threads" run-ids) || exit 1
+recorded=$known
+[ "$backfill" -eq 0 ] || known=""
 rows=""
 
 while IFS= read -r f; do
@@ -74,7 +90,7 @@ while IFS= read -r f; do
   id=${id#agent-}
   grep -qxF "$id" <<<"$known" && continue
   tier=$(jq -r '.agentType // empty' "${f%.jsonl}.meta.json" 2>/dev/null)
-  row=$(jq -cRn --arg id "$id" --arg tier "$tier" --arg since "$since" '
+  row=$(jq -cRn --arg id "$id" --arg tier "$tier" --arg since "$since" --argjson backfill "$(grep -qxF "$id" <<<"$recorded" && echo true || echo false)" '
     def texts: [(.message.content | if type == "array" then .[] | select(.type == "text") | .text else tostring end)] | join("\n");
     def ts: sub("\\.[0-9]+Z$"; "Z") | fromdate;
     [inputs | fromjson? | select(type == "object")] as $lines
@@ -120,6 +136,8 @@ while IFS= read -r f; do
                   elif ($head | test("^\\W*done\\b"; "i")) then "done"
                   else "unclear" end),
         note: ([$report | scan("(?:~|/home/[^/\\s]+)/[^\\s`]*handoffs?/[^\\s`]+?\\.md")] | first),
+        flaws: ([$report | scan("(?i)\\baccepted flaws?:\\s*([0-9]+)")] | first | if . == null then null else (.[0] | tonumber) end),
+        backfill: $backfill,
         report: ($head | gsub("\\s+"; " ") | .[0:160])
       } end
   ' <"$f" 2>/dev/null)
@@ -156,14 +174,14 @@ printf '%s' "$rows" | "$threads" ingest
 
 # Join plaintext spawn briefs by parent thread and task path. Encrypted
 # prompts require the worker to repeat its brief fields in commentary.
-python3 - "$session" "$since" "$known" <<'PY' | "$threads" ingest
+python3 - "$session" "$since" "$known" "$recorded" <<'PY' | "$threads" ingest
 import json, os, re, sqlite3, sys, time
 exec(os.environ["LEDGER_CHECKS_PY"])
 from datetime import datetime, timezone
 from pathlib import Path
 
-session, since, known = sys.argv[1:]
-known = set(known.splitlines())
+session, since, known, recorded = sys.argv[1:]
+known, recorded = set(known.splitlines()), set(recorded.splitlines())
 root = Path(os.environ.get("CODEX_CONFIG_DIR", os.path.expanduser("~/code/north-data/codex-pooled")))
 cutoff = datetime.fromisoformat(since.replace("Z", "+00:00")).replace(tzinfo=timezone.utc).timestamp() if since else time.time() - 86400
 
@@ -290,7 +308,8 @@ for path in candidates:
         continue
     eta = re.search(r"(?i)\bETA\b[^0-9\n]{0,12}([0-9]+(?:\.[0-9]+)?)\s*(hours?|hrs?|h|minutes?|mins?|m)\b", brief)
     eta = float(eta[1]) * (60 if eta[2].lower().startswith("h") else 1) if eta else None
-    fields = re.findall(r"\b(?:Item|Follows|Category|Arm):[^\n]+", brief)
+    fields = re.findall(r"\b(?:Item|Follows|Category|Arm|Spec|Scope|Surface|Verify|Lens):[^\n]+", brief)
+    flaws = re.search(r"(?i)\baccepted flaws?:\s*([0-9]+)", report)
     head = report[:400]
     outcome = "handoff" if "HANDOFF" in head else "not done" if re.match(r"\W*(not|partly|mostly|half) done", head, re.I) else "escalated" if re.match(r"\W*blocked", head, re.I) else "done" if re.match(r"\W*done\b", head, re.I) else "unclear"
     note = re.search(r"(?:~|/home/[^/\s]+)/[^\s`]*handoffs?/[^\s`]+?\.md", report)
@@ -299,6 +318,7 @@ for path in candidates:
                status="finished" if final else "running" if time.time() - stamp(ended) < 7200 else "stale",
                actual_min=max(0, int((stamp(ended) - stamp(meta["timestamp"])) / 60)),
                tokens=tokens, peak_ctx=peak, outcome=outcome, note=note[0] if note else None,
-               report=re.sub(r"\s+", " ", head)[:160], **tally(steps))
+               report=re.sub(r"\s+", " ", head)[:160], flaws=int(flaws[1]) if flaws else None,
+               backfill=meta["id"] in recorded, **tally(steps))
     print(json.dumps(row))
 PY

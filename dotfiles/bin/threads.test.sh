@@ -107,6 +107,25 @@ check '[spec] a category outside the fixed list counts as unknown' 'grep -qE "^u
 check '[spec] closure groups by the first run: issues, closed, runs and tokens per closed issue, escalations' \
   'grep -qE "^bug-known-cause +medium +1 +1 +2.0 +8k +100%" <<<"$out"'
 
+# Recommend: tier from first-assignment runs that closed without escalation and landed.
+runs() {  # runs TIER CATEGORY-AND-FACETS OK FAIL
+  local i
+  for i in $(seq 1 "$3"); do row --arg t "$1" --arg b "$2" --arg id "$1$RANDOM$i" '{id:$id,ended:"2026-10-09T00:00:00Z",tier:$t,actual_min:5,outcome:"done",landed:1,brief:$b}'; done
+  for i in $(seq 1 "$4"); do row --arg t "$1" --arg b "$2" --arg id "$1$RANDOM$i" '{id:$id,ended:"2026-10-09T00:00:00Z",tier:$t,actual_min:5,outcome:"not done",landed:0,brief:$b}'; done
+}
+{ runs haiku 'Category: research. Spec: measured.' 5 0; runs medium 'Category: research. Spec: measured. Scope: one-file.' 2 0; } |
+  "$threads" ingest 2>/dev/null
+out=$(t recommend 'Category: research, Spec: measured, Scope: one-file'; t summary --group category,spec,scope)
+check '[spec] recommend backs off to the finest cell with 5 runs and names it and n'   'grep -qx "tier haiku  cell \[Category: research, Spec: measured\]  n 7" <<<"$out" && grep -qE "^research +measured +one-file +medium +- +2 " <<<"$out"'
+{ runs haiku 'Category: performance' 4 1; runs medium 'Category: performance' 4 1; } | "$threads" ingest 2>/dev/null
+first=$(t recommend 'Category: performance' | head -1)
+runs haiku 'Category: performance' 0 1 | "$threads" ingest 2>/dev/null
+held=$(t recommend 'Category: performance' | head -1)
+runs haiku 'Category: performance' 0 1 | "$threads" ingest 2>/dev/null
+moved=$(t recommend 'Category: performance' | head -1)
+out="$first / $held / $moved"
+check '[spec] hysteresis: haiku at 80% wins, holds at 66% against medium 80%, and yields at 57%'   '[ "$out" = "tier haiku  cell [Category: performance]  n 10 / tier haiku  cell [Category: performance]  n 11 / tier medium  cell [Category: performance]  n 12" ]'
+
 t claim smashcraft#11 --by alice --eta 30 >/dev/null
 t block wisp#20 waits on smashcraft#13 >/dev/null
 out=$(t unowned)

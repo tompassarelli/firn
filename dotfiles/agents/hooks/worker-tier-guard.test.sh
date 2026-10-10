@@ -56,6 +56,9 @@ run deny  'worker-xhigh first'          worker-xhigh  "$FEAT"
 run allow 'worker-high escalated'       worker-high   $'Follows: worker run c3 wrong cause twice.\n'"$FEAT"
 run allow 'worker-xhigh escalated'      worker-xhigh  $'Follows: worker-high run d4 failed.\n'"$FEAT"
 run allow 'feature to worker'           worker        "$FEAT"
+run allow 'known facets'                worker        $'Category: tooling. Spec: measured. Scope: one-file.\nSurface: shell. Verify: local-test'
+run deny  'unknown facet value'         worker        $'Category: tooling\nSpec: measured\nScope: whole-repo'
+run deny  'unknown facet escalated'     worker-high   $'Follows: worker run c3 failed.\nCategory: tooling\nVerify: eyeball'
 run allow 'mechanical to Explore'       Explore       "$MECH"
 run allow 'mechanical to general'       ''            "$MECH"
 run allow 'mechanical to fork'          fork          "$MECH"

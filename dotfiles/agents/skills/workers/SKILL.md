@@ -12,16 +12,16 @@ written: 2026-10-10
 - Run `agents plan` before staffing and choose a difficulty band from its signed-in providers and escalation order.
 - Read `worker-ledger --summary` for category success, closed issues, actual median time and cost.
 - Pick ready work with `threads ready` and read its GitHub Done when through `threads show repo#N`.
-- Put Item, Category, goal, files, Done when and ETA in each brief.
+- Put Item, Category, goal, files, Done when and ETA in each brief, plus the four facet lines `Spec: exact|measured|judged`, `Scope: one-file|module|cross-module|cross-repo`, `Surface: ts|lua|nix|shell|workflow|docs|assets` and `Verify: none|local-test|farm|native|visual`; give adversarial reviewers a `Lens:` line and have them report `Accepted flaws: N`.
 - Put `Follows: <earlier agent id and tier>` plus the failed evidence in a fresh worker for retries, escalations and continuations; never revive a finished or idle worker by message, because its expired cache makes the message re-read its whole context.
 - Require reports beginning `Done:`, `Not done:` or `Blocked:`; every Not done or handoff names `Stop: landing|capacity|client|leash|reasoning|decision`.
 - Choose Category from mechanical, docs-policy, tooling, feature, bug-known-cause, debugging-unknown-cause, netcode-determinism, performance, balance-tuning, native-check or research.
 - Claim/release shared-resource work through `threads`; treat a running brief as its worker's claim.
-- Start at the cheapest tier with 4 of its last 5 issues closed without escalation.
+- Choose the tier with `worker-ledger --recommend '<Category and facet lines>'`: it names the cheapest tier at 80% closed without escalation and landed in the finest cell with 5 runs, backs off Surface, Verify, Scope, then Spec, and changes a cell's pick only on a 15-point lead.
 - Alternate each feature or native-check that Opus medium left unfinished between escalation to Opus high and the cheaper fix (split the feature into smaller boxes; fix the native-check's client, capacity or host cause), and compare closures on those leftovers only; Opus high's overall rates (feature 6/25, native-check 0/8) come from escalated hard cases and do not rank tiers.
 - Treat these ledger-derived rules as experiments: recheck `worker-ledger --summary` after every 10 new closures in a category and change the rule when the numbers move.
 - Send mechanical work and lane mechanics (rebase, regenerate, conflicts, box ticks) to Haiku first; never judged art, bisects or native checks.
-- Send every other tooling, balance-tuning and bug-known-cause item with a named file and a measured Done when to worker-haiku with `Arm: haiku-trial`, until that category has 5 Haiku closures or 2 Haiku failures; a failure goes to Opus medium with `Follows:`, and the ledger's haiku rows decide the category's default (Haiku 29/32 mechanical at a 1-minute median, 2026-10-10).
+- Send every other tooling, balance-tuning and bug-known-cause item with a named file and a measured Done when to worker-haiku with `Arm: haiku-trial`, until the finest facet cell with 5 runs has 5 Haiku closures or 2 Haiku failures; a failure goes to Opus medium with `Follows:`, and the ledger's haiku rows decide the category's default (Haiku 29/32 mechanical at a 1-minute median, 2026-10-10).
 - Use provider benchmarks only before 5 closed category issues at that tier.
 - Size each brief to one box with an ETA of 20 minutes or less, splitting larger work before staffing; set ETA to the category/tier's actual median and label missing evidence uncalibrated.
 - Expect a report at 45 minutes or twice ETA, whichever comes first.
