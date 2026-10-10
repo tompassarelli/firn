@@ -70,6 +70,7 @@
     enable = true;
     role = "client";
   };
+  myConfig.modules.nexus-pull.enable = true;
   networking.wireguard.interfaces.wg0 = {
     ips = [ "10.8.0.2/24" ];
     privateKeyFile = config.sops.secrets.wireguard-laptop.path;

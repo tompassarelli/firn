@@ -1,0 +1,32 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  (let [username config.myConfig.modules.users.username
+        description "nexus-pull: daily rsync of nexus's encrypted *.age backups into ~/backups/nexus, plus a weekly restore test"
+        path (s "PATH=/run/wrappers/bin:" (lib.makeBinPath [pkgs.openssh pkgs.rsync pkgs.age pkgs.zstd pkgs.sqlite pkgs.findutils pkgs.coreutils pkgs.gnused]))
+        pull (pkgs.writeShellApplication
+               {:name "nexus-pull" :runtimeInputs [pkgs.openssh pkgs.rsync pkgs.findutils pkgs.coreutils]
+                :text (builtins.readFile (p "./nexus-pull.sh"))})
+        restoreTest (pkgs.writeShellApplication
+                      {:name "nexus-restore-test" :runtimeInputs [pkgs.openssh pkgs.age pkgs.zstd pkgs.sqlite pkgs.findutils pkgs.coreutils pkgs.gnused]
+                       :text (builtins.readFile (p "./nexus-restore-test.sh"))})]
+    {:options.myConfig.modules.nexus-pull.enable (lib.mkEnableOption description)
+     :config (lib.mkIf config.myConfig.modules.nexus-pull.enable
+       {:environment.systemPackages [pull restoreTest]
+        :home-manager.users {username (nix/module [config ...]
+         {:systemd.user.services.nexus-pull
+           {:Unit {:Description "Pull nexus's encrypted backups" :OnFailure ["update-notify@%n.service"]}
+            :Service {:Type "oneshot" :Environment [path] :ExecStart (s pull "/bin/nexus-pull")}}
+          :systemd.user.timers.nexus-pull
+           {:Unit {:Description "Pull nexus's encrypted backups daily and after boot"}
+            :Timer {:OnCalendar "*-*-* 05:30:00" :Persistent true :OnBootSec "10min"}
+            :Install {:WantedBy ["timers.target"]}}
+          :systemd.user.services.nexus-restore-test
+           {:Unit {:Description "Decrypt the newest nexus backups in tmpfs and check their integrity" :OnFailure ["update-notify@%n.service"]}
+            :Service {:Type "oneshot" :Environment [path] :ExecStart (s restoreTest "/bin/nexus-restore-test")}}
+          :systemd.user.timers.nexus-restore-test
+           {:Unit {:Description "Weekly nexus backup restore test"}
+            :Timer {:OnCalendar "Sun *-*-* 06:00:00" :Persistent true}
+            :Install {:WantedBy ["timers.target"]}}})}})}))
