@@ -159,11 +159,8 @@ hooks = true
 [hooks]
 managed_dir = "/etc/codex/hooks"
 """
-CODEX_DISABLED = {
-    "allow_managed_hooks_only": True,
-    "allow_remote_control": False,
-    "features": {"hooks": False},
-}
+GATE_CALL = re.compile(r"^[^#\n]*\bauthoring_guards_off\b[^#\n]*&&[ \t]*exit 0", re.M)
+GATE_SOURCE = re.compile(r"^[^#\n]*authoring-killswitch\.sh", re.M)
 
 
 def guard_command(guard: dict, provider: str) -> str:
@@ -182,7 +179,7 @@ def wiring(policy: dict, provider: str) -> dict[str, list[tuple[str, list[str]]]
             )
     return {
         event: list(events[event].items())
-        for event in sorted(events, key=EVENT_ORDER.index)
+        for event in sorted(events, key=lambda e: EVENT_ORDER.index(e) if e in EVENT_ORDER else len(EVENT_ORDER))
     }
 
 
@@ -224,23 +221,33 @@ def codex_adapters(policy: dict, catalog: dict) -> list[str]:
 
 
 def bnix_adapters(module: Path) -> list[str]:
-    return sorted(re.findall(r'\(providerAdapter "([^"]+)"\)', module.read_text()))
+    return sorted(
+        re.findall(r'^[^;\n]*\(providerAdapter "([^"]+)"\)', module.read_text(), re.M)
+    )
 
 
-def hook_targets(catalog: dict) -> dict[str, set[str]]:
-    targets: dict[str, set[str]] = {}
+def hook_units(catalog: dict) -> dict[str, tuple[set[str], str]]:
+    units: dict[str, tuple[set[str], str]] = {}
     for unit, entry in catalog["activation"].items():
         for distribution in entry.get("distributions", []):
-            if distribution.get("type") in {"hook", "providerAdapter"}:
-                targets.setdefault(unit, set()).update(
-                    set(distribution.get("targets", [])) & set(PROVIDERS)
-                )
-    return targets
+            kind = distribution.get("type")
+            if kind not in {"hook", "providerAdapter"}:
+                continue
+            owner = catalog["registrations"].get(unit, {}).get("owner", {})
+            identity = (
+                distribution.get("adapterId")
+                if kind == "providerAdapter"
+                else Path(owner.get("path", "")).name
+            )
+            targets = set(distribution.get("targets", [])) & set(PROVIDERS)
+            units[unit] = (units.get(unit, (set(), ""))[0] | targets, identity)
+    return units
 
 
 def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, Path]) -> None:
     catalog = json.loads(paths["catalog"].read_text())
-    targets = hook_targets(catalog)
+    units = hook_units(catalog)
+    targets = {unit: entry[0] for unit, entry in units.items() if entry[0]}
     seen: set[str] = set()
     for guard in policy.get("guard", []):
         unit = guard.get("unit", "")
@@ -248,6 +255,19 @@ def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, P
             contract.reject(f"invalid or duplicate provider guard unit: {unit!r}")
             continue
         seen.add(unit)
+        command = guard.get("command", "")
+        if command != units.get(unit, (set(), None))[1]:
+            contract.reject(
+                f"{unit}: command {command!r} is not the hook catalog-config.json registers "
+                f"for it ({units.get(unit, (set(), None))[1]!r})"
+            )
+        for provider in PROVIDERS:
+            override = guard.get(f"{provider}_command", "")
+            if override and Path(override.split()[-1]).name != command:
+                contract.reject(f"{unit}: {provider}_command must run {command}")
+            for binding in guard.get(provider, []):
+                if binding.partition(":")[0] not in EVENT_ORDER:
+                    contract.reject(f"{unit}: unknown {provider} event in {binding!r}")
         wired = {provider for provider in PROVIDERS if guard.get(provider)}
         if wired != targets.get(unit, set()):
             contract.reject(
@@ -260,11 +280,16 @@ def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, P
                     f"{unit}: give {provider}_absent a reason exactly when it has no "
                     f"{provider} binding"
                 )
-        source = paths["hooks"] / guard.get("command", "")
+        source = paths["hooks"] / command
         if not source.is_file():
             contract.reject(f"{unit}: wired hook source is missing: {source}")
-        elif "authoring-killswitch.sh" not in source.read_text():
-            contract.reject(f"{unit}: wired hook does not source lib/authoring-killswitch.sh")
+        elif not (
+            GATE_SOURCE.search(source.read_text()) and GATE_CALL.search(source.read_text())
+        ):
+            contract.reject(
+                f"{unit}: wired hook must source lib/authoring-killswitch.sh and exit 0 "
+                "when authoring_guards_off"
+            )
     for unit in sorted(set(targets) - seen):
         contract.reject(f"{unit}: registered hook targets {sorted(targets[unit])} but is unwired")
 
@@ -280,7 +305,7 @@ def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, P
                 "scripts/agent-policy-contract.py --repo . --write"
             )
     codex = paths["codex"].read_text()
-    if tomllib.loads(codex) != CODEX_DISABLED and codex != render_codex(policy):
+    if codex != render_codex(policy):
         contract.reject(
             f"{paths['codex']} differs from guard[]; run "
             "scripts/agent-policy-contract.py --repo . --write"
