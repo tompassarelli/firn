@@ -65,6 +65,10 @@
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";
   myConfig.modules.stylix.chosenTheme = "everforest-dark-hard";
   sops.secrets."wireguard-laptop".sopsFile = ../../secrets/wireguard.yaml;
+  myConfig.modules.wg-nexus = {
+    enable = true;
+    role = "client";
+  };
   networking.wireguard.interfaces.wg0 = {
     ips = [ "10.8.0.2/24" ];
     privateKeyFile = config.sops.secrets.wireguard-laptop.path;

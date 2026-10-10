@@ -1,0 +1,48 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs flakeRoot ...]
+  (let [cfg config.myConfig.modules.wg-nexus
+        hubPublicKey "Dvmfg8eA5NBuadrl3CoEW1ZstHMxD7CT9r3l6HlMQx4="
+        laptopPublicKey "ynrELQcn+uM+tllUWa/o5IpPbjHKPPJAStI3gq23EhI="
+        template (builtins.getAttr "wg-nexus.conf" config.sops.templates)]
+    {:options.myConfig.modules.wg-nexus.enable
+      (lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3")
+     :options.myConfig.modules.wg-nexus.role
+      (lib.mkOption
+        {:type (lib.types.enum ["hub" "client"])
+         :description "hub listens on UDP 51820 with the laptop and phone as peers; client is the laptop dialing the hub"})
+     :options.myConfig.modules.wg-nexus.phonePublicKey
+      (lib.mkOption
+        {:type (lib.types.nullOr lib.types.str)
+         :default nil
+         :description "Public key of the phone peer (10.77.0.3); the hub omits the peer while null"})
+     :config (lib.mkIf cfg.enable (lib.mkMerge [
+       {:environment.systemPackages [pkgs.wireguard-tools]}
+       (lib.mkIf (== cfg.role "hub")
+         {:sops.secrets.wireguard-nexus {:sopsFile (s flakeRoot "/secrets/nexus/wireguard.yaml")}
+          :networking.wireguard.interfaces.wg-nexus
+           {:ips ["10.77.0.1/24"]
+            :listenPort 51820
+            :privateKeyFile config.sops.secrets.wireguard-nexus.path
+            :peers (lib.concatLists
+              [[{:publicKey laptopPublicKey :allowedIPs ["10.77.0.2/32"]}]
+               (lib.optional (!= cfg.phonePublicKey nil)
+                 {:publicKey cfg.phonePublicKey :allowedIPs ["10.77.0.3/32"]})])}})
+       (lib.mkIf (== cfg.role "client")
+         {:sops.secrets.wireguard-nexus-laptop {:sopsFile (s flakeRoot "/secrets/wireguard.yaml")}
+          :sops.secrets.nexus-endpoint {:sopsFile (s flakeRoot "/secrets/wireguard.yaml")}
+          :sops.templates {"wg-nexus.conf"
+            {:restartUnits ["wg-quick-wg-nexus.service"]
+             :content (ms "[Interface]"
+                          (s "PrivateKey = " config.sops.placeholder.wireguard-nexus-laptop)
+                          "Address = 10.77.0.2/24"
+                          ""
+                          "[Peer]"
+                          (s "PublicKey = " hubPublicKey)
+                          (s "Endpoint = " config.sops.placeholder.nexus-endpoint)
+                          "AllowedIPs = 10.77.0.0/24"
+                          "PersistentKeepalive = 25"
+                          "")}}
+          :networking.wg-quick.interfaces.wg-nexus.configFile template.path
+          :networking.firewall.extraCommands
+           "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP"})]))}))
