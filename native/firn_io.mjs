@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+import { existsSync } from 'node:fs';
+
 const clauseModule = process.env.FIRN_CLAUSE_HOST_LIST_MODULE;
 const hostList = clauseModule ? await import(clauseModule) : undefined;
 
@@ -14,8 +16,9 @@ export function executeRuntime(name, args) {
     );
     return 127;
   }
+  const bundled = `${runtimeBin}/${name}`;
   return Bun.spawnSync({
-    cmd: [`${runtimeBin}/${name}`, ...args],
+    cmd: [existsSync(bundled) ? bundled : name, ...args],
     env: process.env,
     stdin: 'inherit',
     stdout: 'inherit',

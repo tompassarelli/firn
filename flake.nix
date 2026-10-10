@@ -77,6 +77,7 @@
         hostConfig
         ({ config, pkgs, ... }: {
           networking.hostName = hostname;
+          system.configurationRevision = if builtins.hasAttr "rev" self then self.rev else if builtins.hasAttr "dirtyRev" self then self.dirtyRev else null;
           sops.age.keyFile = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) "/var/lib/sops-nix/key.txt";
           environment.sessionVariables.SOPS_AGE_KEY_FILE = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) "/var/lib/sops-nix/key.txt";
           systemd.tmpfiles.rules = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) [

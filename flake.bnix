@@ -125,6 +125,7 @@
                  hostConfig
                  (nix/module [config pkgs ...]
                    {:networking.hostName hostname
+                    :system.configurationRevision (if (builtins.hasAttr "rev" self) self.rev (if (builtins.hasAttr "dirtyRev" self) self.dirtyRev nil))
                     :sops.age.keyFile
                      (nixpkgs.lib.mkIf
                        (not config.myConfig.modules.sops-host-key.enable)

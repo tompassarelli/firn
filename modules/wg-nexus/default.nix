@@ -54,6 +54,18 @@
         '';
       };
       networking.wg-quick.interfaces.wg-nexus.configFile = template.path;
+      programs.ssh.extraConfig = ''
+        Host nexus
+          HostName 10.77.0.1
+          User tom
+          IdentityFile ~/.ssh/nexus
+          IdentitiesOnly yes
+
+      '';
+      programs.ssh.knownHosts.nexus = {
+        hostNames = [ "nexus" "10.77.0.1" ];
+        publicKeyFile = "${flakeRoot}/secrets/nexus/ssh_host_ed25519_key.pub";
+      };
       networking.firewall.extraCommands = "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP";
     })
   ]);

@@ -35,6 +35,7 @@ host
   list all         list every host directory under hosts/
   status <host>    all modules enabled directly in a host's configuration.bnix
   gen <host>       current and next NixOS generation numbers
+  deploy <host>    start a remote host's self-upgrade from origin/main and print its revision
 
 module
   list all|used|unused  list modules (all, used = enabled somewhere, unused = orphan)

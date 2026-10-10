@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "${1:-}" == host && "${2:-}" == deploy ]] && shift 2
+host="${1:?usage: firn host deploy <host>}"
+case "$host" in
+  nexus) unit=nexus-upgrade.service ;;
+  *) printf 'firn host deploy: no remote upgrade unit for host: %s\n' "$host" >&2; exit 2 ;;
+esac
+
+repo="${FIRN_REPO:-$PWD}"
+git -C "$repo" fetch --quiet origin main
+head="$(git -C "$repo" rev-parse HEAD)"
+main="$(git -C "$repo" rev-parse origin/main)"
+if [[ "$head" != "$main" ]]; then
+  printf 'firn host deploy: HEAD %s is not origin/main %s; land first\n' "$head" "$main" >&2
+  exit 1
+fi
+
+printf 'starting %s on %s for %s\n' "$unit" "$host" "$main"
+ssh "$host" systemctl start "$unit"
+revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
+printf '%s configurationRevision: %s\norigin/main:                 %s\n' "$host" "$revision" "$main"
+[[ "$revision" == "$main" ]]

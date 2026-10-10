@@ -46,9 +46,9 @@ const diagnostic = (args, message, status = 1) => {
   assert.deepEqual(m['parse-dispatch'](args), { message, status, descriptor: status === 0 ? 1 : 2 });
 };
 const commands = m.commands();
-assert.equal(m['command-count'](), 47);
-assert.equal(commands.length, 47);
-assert.equal(new Set(commands.map(c => `${c.node} ${c.edge}`)).size, 47);
+assert.equal(m['command-count'](), 48);
+assert.equal(commands.length, 48);
+assert.equal(new Set(commands.map(c => `${c.node} ${c.edge}`)).size, 48);
 const owners = [
   ['tag', 'resolve', 'tag'], ['flake-input', 'resolve', 'flake-input'],
   ['module', 'refs', 'inventory'], ['secret', 'edit', 'authoring'],
@@ -119,5 +119,5 @@ assert.equal(hosts.status,0); assert.equal(hosts.err,''); assert.match(hosts.out
 assert.deepEqual(hosts.calls,[]);
 const inferred=cli(['repo','build'],{FIRN_REPO:undefined});
 assert.equal(inferred.status,0); assert.deepEqual(inferred.calls,[['firn-repo-build','repo','build','all']]);
-console.log('PASS firn-dispatch: 47 commands, defaults, help, diagnostics, aliases, chains, early exit, prewarm, and ordinary launcher');
+console.log('PASS firn-dispatch: 48 commands, defaults, help, diagnostics, aliases, chains, early exit, prewarm, and ordinary launcher');
 JS

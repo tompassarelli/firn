@@ -101,6 +101,13 @@ host-gen(): Command
    common-gap: "", common-summary: "",
    executable: "firn-views"}
 
+host-deploy(): Command
+  {node: "host", edge: "deploy",
+   leaf: {required: "<host>"},
+   detail-gap: "    ", summary: "start a remote host's self-upgrade from origin/main and print its revision",
+   common-gap: "", common-summary: "",
+   executable: "firn-host-deploy"}
+
 module-list(): Command
   {node: "module", edge: "list",
    leaf: {usage: "all|used|unused", arguments: ["all"]},
@@ -363,7 +370,7 @@ template-host(): Command
 export command-groups(): Sequence<Sequence<Command>>
   [[flake-inputs()],
    [flake-input-resolve()],
-   [host-prepare(), host-activate(), host-rebuild(), host-rollback(), host-impact(), host-list(), host-status(), host-gen()],
+   [host-prepare(), host-activate(), host-rebuild(), host-rollback(), host-impact(), host-list(), host-status(), host-gen(), host-deploy()],
    [module-list(), module-refs(), module-status(), module-add(), module-enable(), module-disable()],
    [platform-list(), platform-show(), platform-safelist()],
    [repo-watch(), repo-diff(), repo-doctor(), repo-pin-ancestry(), repo-upgrade(), repo-build(), repo-validate(), repo-lint(), repo-architecture()],
