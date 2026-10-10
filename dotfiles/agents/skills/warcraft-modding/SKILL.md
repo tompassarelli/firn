@@ -1,9 +1,9 @@
 ---
 name: warcraft-modding
 description: >-
-  Develop and test Warcraft III maps with Wisp TypeScript (hot reload, headless
-  and 32-bit Lua tests) or the native game (LAN and signed-in clients, startup
-  recovery, desync debugging), including Smashcraft's ts/.
+  Use for any Warcraft III map work: Wisp TypeScript maps (hot reload, headless
+  and 32-bit Lua tests), the native game (LAN and signed-in clients, startup
+  recovery, desync debugging), and Smashcraft's ts/.
 grounded: 2026-10-10
 written: 2026-10-10
 metadata:
@@ -37,9 +37,9 @@ metadata:
 
 ## Native clients and checks
 
-- Parity: meet a subsystem's native box through its headless check plus the weekly native spot batch only when corpus divergence is zero. Keep recorded covered sessions in smashcraft:ts/test/corpus/ for `bun wisp parity corpus` on every push, and fix the first divergent frame or field before substituting headless coverage.
+- Parity: meet a subsystem's native box through its headless check plus the weekly native spot batch only when corpus divergence is zero. Keep automatically recorded covered sessions in smashcraft:ts/test/corpus/ for `bun wisp parity corpus` on every push in Bun/32-bit Lua, and fix the first divergent frame or field before substituting headless coverage.
 - Measure native truth with exact reads before pixels: on offline 3.0.0 pool clients, use the engine debugger's reads (frame number, Lua state, checksums, per-frame cost; see wisp:docs/builds.md) and stack-trace builds, aligned by frame number. Use screenshots only for appearance that only pixels show. Gameplay checks pass when native pad output matches headless through `bun wisp pad ... --compare`.
-- Clients: Classic runs on the offline LAN pool at build 3.0.0.24268; Definitive, Battle.net tests and the updated install feeding the Classic pool run on signed-in clones B/C/D. Check the live build with `curl http://us.patch.battle.net:1119/w3/versions` before relying on the build-specific LAN plugin, and keep pool pairs in solo games when the live build leaves 24268. Use integrity maps for pad chat setup, not default dev maps. Read [lan-pair-batching.md](references/lan-pair-batching.md) for pool setup, capacity, pair ownership and issue queues.
+- Clients: Classic runs on the offline LAN pool at build 3.0.0.24268; Definitive, Battle.net tests and the updated install feeding the Classic pool run on signed-in clones B/C/D. Check the live build with `curl http://us.patch.battle.net:1119/w3/versions` before relying on the build-specific LAN plugin, and keep pool pairs in solo games when the live build leaves 24268 until the plugin is checked on that build. Use integrity maps for pad chat setup, not default dev maps. Read [lan-pair-batching.md](references/lan-pair-batching.md) for pool setup, capacity, pair ownership and issue queues.
 - Native work runs off Tom's machine on the vast.ai Warcraft VM through the vast-ai skill's path and pool recipe; account b is signed in there only.
 - Never touch Tom's game install; use account a only as clone-a through its launch.sh, which yields to Tom's game.
 - Lifecycle: start signed-in clients as user services with `bun wisp client start [CLIENT...] --clients-file FILE`, not shell or background tasks; manage them with `client status` and `client stop`; keep them at the menu for the next Battle.net check. Give each one-client capture one worker, and a pair one worker only for sync, netplay and EX checks. Run passive engine reads only on signed-in clients.

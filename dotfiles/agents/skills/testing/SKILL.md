@@ -25,8 +25,8 @@ rule on every future change.
    injected fault that must trip the detector.
 2. **Properties over a pure core.** Generated inputs against rules that always
    hold: bounds, conservation, symmetry, idempotence, round-trips, agreement
-   with a reference model. Fixed seeds locally, wide search in CI. Keep a
-   shrunk failure as a named case.
+   with a reference model. Fixed seeds and counts locally, wide search in CI.
+   Keep a shrunk failure as a named case.
 3. **Product measurements.** Owner-decided numbers with their source: frame
    budgets, balance bands, size limits. CI sweeps, with the smallest form in the
    suite.
@@ -49,22 +49,23 @@ rule on every future change.
 ## Design for fewer tests
 - Put logic in a pure, deterministic core (state + input → state) and test it
   there; make time, randomness and peers its inputs so scenarios replay exactly.
-  Keep effects in a thin typed shell, tested only at its boundary.
+  Keep side effects in a thin, typed, scoped shell, tested at its boundary.
 
 ## Running and flakes
-- On save: type check, affected tests, one fast end-to-end path. Every push runs
-  the suite plus sweeps and properties on CI or the farm. Never rerun a passing
-  check on unchanged code.
+- On save: type check, affected tests and one fast end-to-end path, in seconds.
+  Every push runs the suite plus sweeps, properties and mutation testing on CI or
+  the farm. Never rerun a passing check on unchanged code.
 - Bound cost by the repository's ceiling in a deterministic quantity
   (instructions, simulated frames, allocations), never CPU or wall seconds; wall
-  clock is only a generous hang timeout. Print the seed and commit on failure.
+  clock is only a generous hang timeout. Shrink inputs or move work to CI instead
+  of raising the ceiling. Print the seed and commit on failure.
 - Quarantine a flake at first sight with its seed, log and an issue; fix or
-  delete within a week; cap the quarantine at 8. Never retry to green, add
-  sleeps or widen tolerances, or weaken an expectation.
+  delete within a week; cap the quarantine at 8. Never retry to green, add sleeps
+  or widen tolerances, or weaken an expectation.
 
 ## Pruning
 - Audit each test against the five kinds: keep it, fold it into a property or
   scenario, or delete it. Report counts and CPU per test, before and after.
-  Break the rule once to confirm a kept test fails.
+  Break a kept rule once to confirm its test fails.
 
 Sources for each rule: `references/sources.md`, read only when revising a rule.
