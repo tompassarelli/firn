@@ -18,6 +18,7 @@ written: 2026-10-10
 - Respect secondary limits of 100 concurrent requests, 900 points/minute and 80 content-creating requests/minute.
 - Limit a workflow to about 8 of the 20 slots with `strategy.max-parallel`, leaving CI's first job able to start within one minute.
 - Use fewer, larger shards to reduce checkout/setup and queue cost.
+- Route heavy shard jobs with `runs-on: ${{ vars.FARM_RUNNER || 'ubuntu-latest' }}` (smashcraft, wisp: the `farm-big` self-hosted box, never for pull requests); delete the variable when the box is gone, or those jobs queue instead of falling back to hosted runners.
 - Treat the legal 256-job matrix as a ceiling.
 - Set CI concurrency to `${{ github.workflow }}-${{ github.ref }}` with `cancel-in-progress: true`.
 - Keep fixed non-cancelling concurrency groups for landings only.
