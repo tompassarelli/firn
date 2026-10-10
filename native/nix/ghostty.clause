@@ -18,4 +18,4 @@ foreign darwin(): Bool
 export ghostty-module()
   configuration-module(path(myConfig.modules.ghostty.enable), "Ghostty terminal",
     {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {programs: {ghostty: {enable: true, package: if(darwin(), nix-null(), package(path(unstable.ghostty))), settings: {window-padding-x: 6, window-padding-y: 4, app-notifications: "no-clipboard-copy", command: "/run/current-system/sw/bin/bash", working-directory: "home"}}}})}})
+      {programs: {ghostty: {enable: true, package: if(darwin(), nix-null(), package(path(unstable.ghostty))), settings: {async-backend: "epoll", window-padding-x: 6, window-padding-y: 4, app-notifications: "no-clipboard-copy", command: "/run/current-system/sw/bin/bash", working-directory: "home"}}}})}})
