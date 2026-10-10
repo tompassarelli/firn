@@ -14,7 +14,7 @@
           Nice = 10;
           TimeoutStartSec = "10min";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
               pkgs.python3
               pkgs.jq
               pkgs.git

@@ -11,7 +11,7 @@
          {:systemd.user.services.skill-review-queue
            {:Unit {:Description description :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot"
-              :Environment [(s "PATH=" homeDir "/.local/share/north/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git]))]
+              :Environment [(s "PATH=" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git]))]
               :ExecStart (jobRun "skill-review-queue" (s homeDir "/.local/share/north/bin/skill-review-queue"))}}
           :systemd.user.timers.skill-review-queue
            {:Unit {:Description description}

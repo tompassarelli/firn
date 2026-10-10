@@ -11,8 +11,8 @@
          {:systemd.user.services.proton-log-watchdog
            {:Unit {:Description description}
             :Service {:Type "oneshot"
-              :Environment [(s "PATH=" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify]))]
-              :ExecStart (jobRun "proton-log-watchdog" (s homeDir "/.local/bin/proton-log-watchdog"))}}
+              :Environment [(s "PATH=" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify]))]
+              :ExecStart (jobRun "proton-log-watchdog" (s homeDir "/.local/share/firn/bin/proton-log-watchdog"))}}
           :systemd.user.timers.proton-log-watchdog
            {:Unit {:Description description}
             :Timer {:OnStartupSec "1min" :OnUnitActiveSec "10min"}

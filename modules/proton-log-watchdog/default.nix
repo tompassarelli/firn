@@ -11,9 +11,9 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify ]}"
+            "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify ]}"
           ];
-          ExecStart = jobRun "proton-log-watchdog" "${homeDir}/.local/bin/proton-log-watchdog";
+          ExecStart = jobRun "proton-log-watchdog" "${homeDir}/.local/share/firn/bin/proton-log-watchdog";
         };
       };
       systemd.user.timers.proton-log-watchdog = {

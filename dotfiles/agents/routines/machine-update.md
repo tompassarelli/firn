@@ -10,4 +10,4 @@ placement: laptop
 deadline: 3d
 ---
 
-~/.local/bin/machine-update
+~/.local/share/firn/bin/machine-update

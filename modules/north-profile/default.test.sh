@@ -37,7 +37,7 @@ jq -e --argjson hook_units "$hook_units" '
   | ($commands | length == $hook_units)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
-      and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin")
+      and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin")
     ))
     and ([
       $commands[] | select(contains("firn-system-policy"))

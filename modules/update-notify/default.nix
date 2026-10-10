@@ -11,9 +11,9 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.libnotify ]}"
+            "PATH=${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.libnotify ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/update-notify %i";
+          ExecStart = "${homeDir}/.local/share/firn/bin/update-notify %i";
         };
       };
     });

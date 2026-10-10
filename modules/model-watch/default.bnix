@@ -13,7 +13,7 @@
                    :After ["agent-runtime-update.service"]
                    :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot" :Nice 10 :TimeoutStartSec "10min"
-              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.python3]))]
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.python3]))]
               :ExecStart (jobRun "model-watch" (s homeDir "/.local/share/north/bin/model-watch"))}}
           :systemd.user.timers.model-watch
            {:Unit {:Description description}

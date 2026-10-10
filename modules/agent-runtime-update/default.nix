@@ -13,7 +13,7 @@
           Type = "oneshot";
           TimeoutStartSec = "4h";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
               pkgs.bash
               pkgs.bun
               pkgs.coreutils

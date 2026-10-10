@@ -12,7 +12,7 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
           ];
           ExecStart = jobRun "vast-reaper" "${homeDir}/.local/share/north/bin/vast-reaper";
         };

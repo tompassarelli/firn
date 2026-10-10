@@ -12,7 +12,7 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git ]}"
+            "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git ]}"
           ];
           ExecStart = jobRun "skill-review-queue" "${homeDir}/.local/share/north/bin/skill-review-queue";
         };

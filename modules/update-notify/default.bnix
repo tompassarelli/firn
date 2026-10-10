@@ -9,5 +9,5 @@
          {:systemd.user.services {"update-notify@"
             {:Unit {:Description "Report an automatic-update failure"}
              :Service {:Type "oneshot"
-               :Environment [(s "PATH=" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.libnotify]))]
-               :ExecStart (s homeDir "/.local/bin/update-notify %i")}}}})}})}))
+               :Environment [(s "PATH=" homeDir "/.local/share/firn/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.libnotify]))]
+               :ExecStart (s homeDir "/.local/share/firn/bin/update-notify %i")}}}})}})}))

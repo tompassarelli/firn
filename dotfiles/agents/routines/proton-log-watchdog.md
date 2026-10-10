@@ -9,4 +9,4 @@ expires: never
 placement: laptop
 ---
 
-~/.local/bin/proton-log-watchdog
+~/.local/share/firn/bin/proton-log-watchdog

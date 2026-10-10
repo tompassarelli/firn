@@ -15,7 +15,7 @@
           Nice = 10;
           TimeoutStartSec = "4min";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.python3 ]}"
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.python3 ]}"
           ];
           ExecStart = "${homeDir}/.local/share/north/bin/model-watch --alerts-only";
         };

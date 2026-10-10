@@ -9,4 +9,4 @@ expires: never
 placement: laptop
 ---
 
-~/.local/bin/firn-liveness-floor
+~/.local/share/firn/bin/firn-liveness-floor

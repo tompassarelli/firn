@@ -30,6 +30,6 @@ export activity-module()
         {
         systemd: {user: {services: {activity-daemon: {
           Unit: {Description: "activity daemon (niri activity layer)", PartOf: ["graphical-session.target"], After: ["graphical-session.target"], Requisite: ["graphical-session.target"]},
-          Service: {ExecStart: "{configured-text(path(myConfig.modules.users.homeDir))}/.local/bin/activity daemon", Restart: "on-failure", RestartSec: 2},
+          Service: {ExecStart: "{configured-text(path(myConfig.modules.users.homeDir))}/.local/share/firn/bin/activity daemon", Restart: "on-failure", RestartSec: 2},
           Install: {WantedBy: ["niri.service"]}}}}},
         xdg: {configFile: {"activity/activities.json": {source: ?home.config.lib.file.mkOutOfStoreSymlink("{?home.config.home.homeDirectory}/{configured-text(path(myConfig.modules.activity.activitiesFile))}")}}}})}})}

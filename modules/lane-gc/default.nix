@@ -14,7 +14,7 @@
           Nice = 10;
           TimeoutStartSec = "20min";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils ]}"
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils ]}"
           ];
           ExecStart = jobRun "lane-gc" "${homeDir}/.local/share/north/bin/lane-gc";
         };
