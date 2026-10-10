@@ -36,6 +36,7 @@ written: 2026-10-10
 
 - Staff `planner` (Opus xhigh; `effort: max` for an expensive-to-reverse decision) for a plan, not code, when an issue gets its second Not done, a category's last 10 runs fall below 40% closed, or the change is architectural.
 - Before staffing a max planner's design, have one reviewer from another model family try to break it, plus Gemini Pro as an extra reviewer (`gemini-review`, public diffs only). Revise once.
+- Claude Opus owns delivery quality for Codex-implemented work: before landing, a Claude review checks it against Tom's intent and cuts formal machinery the spec does not ask for.
 - Give each adversarial reviewer one lens, a different one per reviewer; it reports `Accepted flaws: N`.
 - Weigh each finding by evidence first, reviewer tier second. A failing scenario, test or measurement counts whatever raised it; an unevidenced finding from a larger model gets investigated, a smaller model's gets one check by a stronger model first.
 - Weigh rewrite and maintenance effort at AI cost (agents do it 10–100x more cheaply than a human); rank review findings and alternatives by leverage, not by human effort.
