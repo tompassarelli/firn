@@ -3,7 +3,7 @@
 (nix/module [config lib pkgs ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
-        description "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor"]
+        description "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor, and tear down the runner VM at the credit floor"]
     {:tags-opt-in [development]
      :options.myConfig.modules.vast-reaper.enable (lib.mkEnableOption description)
      :config (lib.mkIf config.myConfig.modules.vast-reaper.enable
@@ -11,7 +11,7 @@
          {:systemd.user.services.vast-reaper
            {:Unit {:Description description :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot"
-              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.coreutils pkgs.sops]))]
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify]))]
               :ExecStart (s homeDir "/.local/bin/vast-reaper")}}
           :systemd.user.timers.vast-reaper
            {:Unit {:Description description}

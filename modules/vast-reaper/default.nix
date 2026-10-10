@@ -12,7 +12,7 @@
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops ]}"
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
           ];
           ExecStart = "${homeDir}/.local/bin/vast-reaper";
         };
@@ -31,4 +31,4 @@
       };
     });
   };
-}) "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}) "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor, and tear down the runner VM at the credit floor")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)

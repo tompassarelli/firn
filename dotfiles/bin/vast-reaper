@@ -1,13 +1,19 @@
 #!/usr/bin/env bun
-import { existsSync, readFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { hostname } from "os";
 
 const USAGE = `usage: vast-reaper [--dry-run]
+       vast-reaper floor-decide < {credit, instances, keys, state}
 
 Destroys every vast.ai instance whose vast-job label deadline has passed, or whose
 vast-job supervisor on this host is no longer running, then verifies it is gone and
 removes that job's SSH key. Instances without a vast-job label are reported and left
-alone. Exit 3 when a destroy is not verified.`;
+alone. Exit 3 when a destroy is not verified.
+
+Credit floor for the runner VM (label vast-launch-check): at credit <= $5.00 one
+notify-send warning and incident per crossing; at credit <= $2.50 delete the
+FARM_RUNNER variable on the farm repos, destroy the VM and remove its SSH key.
+floor-decide prints the floor actions for recorded inputs without side effects.`;
 
 const VASTAI = process.env.VAST_JOB_VASTAI ?? `${process.env.HOME}/.local/bin/vastai`;
 const SECRETS = `${process.env.HOME}/code/nixos-config/main/secrets/vastai.yaml`;
@@ -30,6 +36,37 @@ export function decide(insts: Inst[], nowS: number, host: string, live: (pid: nu
     if (OLD_LABEL.test(label)) return anyLive ? { id: i.id, label, action: "keep", why: "old-format label while a vast-job runs" } : { id: i.id, label, action: "destroy", why: "old-format label and no vast-job running" };
     return { id: i.id, label, action: "report", why: "no vast-job label; left alone" };
   });
+}
+
+export const RUNNER_LABEL = "vast-launch-check";
+export const FARM_REPOS = ["tompassarelli/smashcraft", "tompassarelli/wisp"];
+export const WARN_AT = 5;
+export const TEARDOWN_AT = 2.5;
+type Key = { id: number; public_key?: string; ssh_key?: string };
+type FloorState = { warned: boolean };
+type FloorAction =
+  | { kind: "warn"; message: string }
+  | { kind: "unset-farm-runner"; repos: string[] }
+  | { kind: "destroy"; id: number }
+  | { kind: "delete-key"; id: number };
+
+const keyComment = (k: Key) => String(k.public_key ?? k.ssh_key ?? "").trim().split(/\s+/).at(-1) ?? "";
+
+export function creditFloor(credit: number, insts: Inst[], keys: Key[], state: FloorState): { actions: FloorAction[]; state: FloorState } {
+  const runners = insts.filter((i) => i.label === RUNNER_LABEL);
+  const runnerKeys = keys.filter((k) => keyComment(k) === RUNNER_LABEL);
+  if (credit > WARN_AT) return { actions: [], state: { warned: false } };
+  const actions: FloorAction[] = [];
+  let warned = state.warned;
+  if (runners.length && !warned) {
+    actions.push({ kind: "warn", message: `vast.ai credit $${credit.toFixed(2)} <= $${WARN_AT.toFixed(2)}; runner VM ${runners.map((r) => r.id).join(" ")} is torn down at $${TEARDOWN_AT.toFixed(2)}` });
+    warned = true;
+  }
+  if (credit <= TEARDOWN_AT) {
+    if (runners.length) actions.push({ kind: "unset-farm-runner", repos: FARM_REPOS }, ...runners.map((r) => ({ kind: "destroy" as const, id: r.id })));
+    actions.push(...runnerKeys.map((k) => ({ kind: "delete-key" as const, id: k.id })));
+  }
+  return { actions, state: { warned } };
 }
 
 function cmdline(pid: number): string {
@@ -55,6 +92,11 @@ if (import.meta.main) {
   const argv = process.argv.slice(2);
   if (argv.includes("-h") || argv.includes("--help")) {
     console.log(USAGE);
+    process.exit(0);
+  }
+  if (argv[0] === "floor-decide") {
+    const i = JSON.parse(await Bun.stdin.text());
+    console.log(JSON.stringify(creditFloor(i.credit, i.instances, i.keys, i.state)));
     process.exit(0);
   }
   const dry = argv.includes("--dry-run");
@@ -113,5 +155,62 @@ if (import.meta.main) {
     }
   }
   if (verdicts.length === 0) log("no instances");
-  process.exit(unverified ? 3 : 0);
+
+  const STATE_DIR = `${process.env.HOME}/.local/state/vast-reaper`;
+  const FLOOR_STATE = `${STATE_DIR}/credit-floor.json`;
+  const INCIDENTS = `${process.env.HOME}/.local/state/agents/watchdog/incidents.md`;
+  const incident = (summary: string) => {
+    mkdirSync(`${process.env.HOME}/.local/state/agents/watchdog`, { recursive: true });
+    appendFileSync(INCIDENTS, `- ${new Date().toISOString()} vast-credit-floor: ${summary}\n`);
+  };
+  const farmRunnerSet = (repo: string) => {
+    const r = Bun.spawnSync(["gh", "variable", "list", "-R", repo, "--json", "name"], { stdout: "pipe", stderr: "pipe" });
+    if (r.exitCode !== 0) return null;
+    return (JSON.parse(r.stdout.toString()) as { name: string }[]).some((v) => v.name === "FARM_RUNNER");
+  };
+  const credit = Number(vast("show", "user").credit);
+  const remaining = insts.filter((i) => verdicts.every((v) => v.id !== i.id || v.action !== "destroy" || dry));
+  const keys = (() => { try { return vast("show", "ssh-keys"); } catch { return []; } })();
+  const prev: FloorState = (() => { try { return JSON.parse(readFileSync(FLOOR_STATE, "utf8")); } catch { return { warned: false }; } })();
+  const floor = creditFloor(credit, remaining, Array.isArray(keys) ? keys : [], prev);
+  log(`credit $${credit.toFixed(2)}: ${floor.actions.length ? floor.actions.map((a) => a.kind).join(", ") : "no floor action"}`);
+  let floorFailed = false;
+  for (const a of dry ? [] : floor.actions) {
+    if (a.kind === "warn") {
+      Bun.spawnSync(["notify-send", "--urgency=critical", "vast.ai credit low", a.message]);
+      incident(a.message);
+    } else if (a.kind === "unset-farm-runner") {
+      for (const repo of a.repos) {
+        Bun.spawnSync(["gh", "variable", "delete", "FARM_RUNNER", "-R", repo], { stdout: "pipe", stderr: "pipe" });
+        const set = farmRunnerSet(repo);
+        log(set === false ? `FARM_RUNNER deleted on ${repo} and verified absent` : `FARM_RUNNER on ${repo} NOT verified absent`);
+        if (set !== false) floorFailed = true;
+      }
+      incident(`credit $${credit.toFixed(2)} <= $${TEARDOWN_AT.toFixed(2)}: FARM_RUNNER deleted on ${a.repos.join(" ")}${floorFailed ? " (not verified on all)" : ""}`);
+    } else if (a.kind === "destroy") {
+      try { vast("destroy", "instance", String(a.id), "-y"); } catch (e: any) { log(`destroy ${a.id} failed: ${e.message}`); }
+      let gone = false;
+      for (let attempt = 0; attempt < 12 && !gone; attempt++) {
+        Bun.sleepSync(10_000);
+        const list = (() => { try { return vast("show", "instances"); } catch { return null; } })();
+        gone = Array.isArray(list) && !list.some((i: Inst) => i.id === a.id);
+      }
+      log(gone ? `runner VM ${a.id} destroyed and verified gone` : `RUNNER VM ${a.id} STILL PRESENT after destroy`);
+      incident(gone ? `runner VM ${a.id} destroyed at credit $${credit.toFixed(2)}` : `runner VM ${a.id} still present after destroy at credit $${credit.toFixed(2)}`);
+      if (!gone) { floorFailed = true; break; }
+    } else if (a.kind === "delete-key") {
+      try {
+        vast("delete", "ssh-key", String(a.id));
+        log(`runner SSH key ${a.id} removed`);
+      } catch (e: any) {
+        log(`delete ssh-key ${a.id} failed: ${e.message}`);
+        floorFailed = true;
+      }
+    }
+  }
+  if (!dry) {
+    mkdirSync(STATE_DIR, { recursive: true });
+    writeFileSync(FLOOR_STATE, JSON.stringify(floor.state));
+  }
+  process.exit(unverified || floorFailed ? 3 : 0);
 }
