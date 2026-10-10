@@ -46,7 +46,7 @@ written: 2026-10-10
 - Close finished Codex workers as soon as their report arrives.
 - Ask a worker idle 10 minutes without a report for one, then archive it; never park a worker to wait on a farm run, a client or another worker.
 - In an Autoland repository a worker ends once `safe-push --to main` has pushed its `claude/land-*` branch, reporting `Done: queued <branch>`; Autoland lands it and a Haiku worker ticks its boxes after landing. Elsewhere the worker runs `safe-push` in the foreground with a 10-minute timeout and, when the landing outlasts that, reports its exact lane for the parent to land in the background.
-- Recycle a worker at 45 minutes or 350k context, before 500k auto-compaction (the worker-handoff hook nudges between tool calls; the lead's sweep catches workers blocked in a wait): it queues what passes, then it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
+- Recycle a worker at 45 minutes or 350k context, before 500k auto-compaction (the worker-handoff hook nudges between tool calls; the worker-wait-guard hook keeps workers out of foreground waits so messages arrive at once): it queues what passes, then it writes a complete handoff at a natural checkpoint and a fresh worker continues from it; check the fresh worker 5 minutes later for rediscovery.
 - Keep workers out of wait loops; messages reach a worker only between its commands.
 - Put the state checked at spawn time in every brief (main SHA and CI, lane SHAs, what landed) so workers never act on a stale report.
 - Check `threads list` and open issues before filing or staffing; never duplicate an item someone holds.

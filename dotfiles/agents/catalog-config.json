@@ -478,6 +478,16 @@
         "path": "dotfiles/agents/hooks/worker-handoff.sh"
       }
     },
+    "worker-wait-guard": {
+      "kind": "hook",
+      "title": "Worker foreground wait guard",
+      "triggerDescription": "Refuse a Claude Code worker's foreground command that can block past 60 seconds, so lead messages reach it at once.",
+      "category": "agents",
+      "owner": {
+        "repo": "nixos-config",
+        "path": "dotfiles/agents/hooks/worker-wait-guard.sh"
+      }
+    },
     "subagent-teardown": {
       "kind": "hook",
       "title": "Subagent background-task teardown",
@@ -1265,6 +1275,19 @@
       ]
     },
     "worker-handoff": {
+      "supports": [
+        "agent-machinery"
+      ],
+      "distributions": [
+        {
+          "type": "hook",
+          "targets": [
+            "claude"
+          ]
+        }
+      ]
+    },
+    "worker-wait-guard": {
       "supports": [
         "agent-machinery"
       ],
