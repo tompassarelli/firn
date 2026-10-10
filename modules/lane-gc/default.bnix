@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
         description "lane-gc: hourly retire landed, clean, idle worktrees and branches in ~/code containers; report unlanded work"]
@@ -13,7 +13,7 @@
               :Nice 10
               :TimeoutStartSec "20min"
               :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/north/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils]))]
-              :ExecStart (s homeDir "/.local/share/north/bin/lane-gc")}}
+              :ExecStart (jobRun "lane-gc" (s homeDir "/.local/share/north/bin/lane-gc"))}}
           :systemd.user.timers.lane-gc
            {:Unit {:Description description}
             :Timer {:OnBootSec "10min" :OnUnitActiveSec "1h"}

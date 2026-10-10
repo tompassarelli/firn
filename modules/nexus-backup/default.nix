@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((cfg: ((username: ((homeDir: ((stateBackup: {
   options.myConfig.modules.nexus-backup.enable = lib.mkEnableOption "nexus state-backup: nightly zstd+age encrypted ledger dumps and state archives in /var/lib/nexus-backup";
@@ -27,7 +27,7 @@
         StateDirectoryMode = "0700";
         Nice = 10;
         IOSchedulingClass = "idle";
-        ExecStart = "${stateBackup}/bin/state-backup";
+        ExecStart = jobRun "state-backup" "${stateBackup}/bin/state-backup";
       };
     };
     systemd.timers.state-backup = {

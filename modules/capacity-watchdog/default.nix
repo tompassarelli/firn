@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: ((nightly: ((path: {
   options.myConfig.modules.capacity-watchdog.enable = lib.mkEnableOption description;
@@ -31,7 +31,7 @@
           Nice = 10;
           TimeoutStartSec = "4h";
           Environment = [ path ];
-          ExecStart = "${homeDir}/.local/share/north/bin/git-maintenance-nightly";
+          ExecStart = jobRun "git-maintenance-nightly" "${homeDir}/.local/share/north/bin/git-maintenance-nightly";
         };
       };
       systemd.user.timers.git-maintenance-nightly = {

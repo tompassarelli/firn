@@ -1,0 +1,9 @@
+#lang beagle/nix
+(ns default)
+(nix/module [config lib pkgs ...]
+  (let [homeDir config.myConfig.modules.users.homeDir
+        username config.myConfig.modules.users.username
+        recordPath (lib.makeBinPath [pkgs.python3 pkgs.openssh pkgs.coreutils pkgs.util-linux pkgs.hostname])]
+    {:_module.args.jobRun
+      (fn [name String cmd String] String
+        (s pkgs.bash "/bin/bash " homeDir "/.local/share/north/bin/job-run --path " recordPath " --user " username " " name " -- " cmd))}))

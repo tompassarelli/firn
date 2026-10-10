@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
         description "Twice-daily ranked public watch digest"]
@@ -14,7 +14,7 @@
                    :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot" :Nice 10 :TimeoutStartSec "10min"
               :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.python3]))]
-              :ExecStart (s homeDir "/.local/share/north/bin/model-watch")}}
+              :ExecStart (jobRun "model-watch" (s homeDir "/.local/share/north/bin/model-watch"))}}
           :systemd.user.timers.model-watch
            {:Unit {:Description description}
             :Timer {:OnCalendar ["08:00" "18:00"] :Persistent true}

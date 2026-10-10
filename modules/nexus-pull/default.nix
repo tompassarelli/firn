@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((username: ((description: ((path: ((pull: ((restoreTest: {
   options.myConfig.modules.nexus-pull.enable = lib.mkEnableOption description;
@@ -13,7 +13,7 @@
         Service = {
           Type = "oneshot";
           Environment = [ path ];
-          ExecStart = "${pull}/bin/nexus-pull";
+          ExecStart = jobRun "nexus-pull" "${pull}/bin/nexus-pull";
         };
       };
       systemd.user.timers.nexus-pull = {
@@ -37,7 +37,7 @@
         Service = {
           Type = "oneshot";
           Environment = [ path ];
-          ExecStart = "${restoreTest}/bin/nexus-restore-test";
+          ExecStart = jobRun "nexus-restore-test" "${restoreTest}/bin/nexus-restore-test";
         };
       };
       systemd.user.timers.nexus-restore-test = {

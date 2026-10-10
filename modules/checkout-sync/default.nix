@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((username: ((description: {
   options.myConfig.modules.checkout-sync.enable = lib.mkEnableOption description;
@@ -15,7 +15,7 @@
           Environment = [
             "PATH=${lib.makeBinPath [ pkgs.git pkgs.openssh pkgs.coreutils ]}:/run/current-system/sw/bin"
           ];
-          ExecStart = "${pkgs.bash}/bin/bash ${./checkout-sync.sh}";
+          ExecStart = jobRun "checkout-sync" "${pkgs.bash}/bin/bash ${./checkout-sync.sh}";
         };
       };
       systemd.user.timers.checkout-sync = {

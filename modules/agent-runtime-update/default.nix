@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: {
   options.myConfig.modules.agent-runtime-update.enable = lib.mkEnableOption "Twice-daily agent runtime updates";
@@ -30,7 +30,7 @@
               pkgs.systemd
             ]}"
           ];
-          ExecStart = "${homeDir}/.local/share/north/bin/agent-runtime-update";
+          ExecStart = jobRun "agent-runtime-update" "${homeDir}/.local/share/north/bin/agent-runtime-update";
         };
       };
       systemd.user.timers.agent-runtime-update = {

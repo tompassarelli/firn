@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: {
   options.myConfig.modules.vast-reaper.enable = lib.mkEnableOption description;
@@ -14,7 +14,7 @@
           Environment = [
             "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify ]}"
           ];
-          ExecStart = "${homeDir}/.local/share/north/bin/vast-reaper";
+          ExecStart = jobRun "vast-reaper" "${homeDir}/.local/share/north/bin/vast-reaper";
         };
       };
       systemd.user.timers.vast-reaper = {

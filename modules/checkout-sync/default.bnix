@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [username config.myConfig.modules.users.username
         description "checkout-sync: every 15 min fast-forward each clean ~/code/<project>/main to origin/main on hosts where nothing lands locally"]
     {:options.myConfig.modules.checkout-sync.enable (lib.mkEnableOption description)
@@ -12,7 +12,7 @@
               :Nice 10
               :TimeoutStartSec "10min"
               :Environment [(s "PATH=" (lib.makeBinPath [pkgs.git pkgs.openssh pkgs.coreutils]) ":/run/current-system/sw/bin")]
-              :ExecStart (s pkgs.bash "/bin/bash " (p "./checkout-sync.sh"))}}
+              :ExecStart (jobRun "checkout-sync" (s pkgs.bash "/bin/bash " (p "./checkout-sync.sh")))}}
           :systemd.user.timers.checkout-sync
            {:Unit {:Description description}
             :Timer {:OnBootSec "5min" :OnUnitActiveSec "15min"}

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((username: ((stateDir: ((authorizedKeys: ((checks: ((heartbeat: ((timer: {
   options.myConfig.modules.nexus-checks.enable = lib.mkEnableOption "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat";
@@ -10,7 +10,7 @@
         serviceConfig = {
           Type = "oneshot";
           StateDirectory = "nexus-checks";
-          ExecStart = "${checks}/bin/nexus-checks run";
+          ExecStart = jobRun "nexus-checks" "${checks}/bin/nexus-checks run";
         };
       };
       "nexus-lynis" = {
@@ -19,7 +19,7 @@
           Type = "oneshot";
           StateDirectory = "nexus-checks";
           Nice = 10;
-          ExecStart = "${checks}/bin/nexus-checks --lynis";
+          ExecStart = jobRun "nexus-lynis" "${checks}/bin/nexus-checks --lynis";
         };
       };
       "nexus-heartbeat" = {
@@ -32,7 +32,7 @@
         serviceConfig = {
           Type = "oneshot";
           StateDirectory = "nexus-checks";
-          ExecStart = "${heartbeat}/bin/nexus-heartbeat";
+          ExecStart = jobRun "nexus-heartbeat" "${heartbeat}/bin/nexus-heartbeat";
         };
       };
     };

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: {
   options.myConfig.modules.worker-ledger.enable = lib.mkEnableOption description;
@@ -23,7 +23,7 @@
               pkgs.gnugrep
             ]}"
           ];
-          ExecStart = "${homeDir}/.local/share/north/bin/worker-ledger";
+          ExecStart = jobRun "worker-ledger" "${homeDir}/.local/share/north/bin/worker-ledger";
           ExecStartPost = "${homeDir}/.local/share/north/bin/agents usage --refresh";
         };
       };

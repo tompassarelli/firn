@@ -2,7 +2,7 @@
 
 (ns default)
 
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [cfg config.myConfig.modules.nexus-backup
         username config.myConfig.modules.users.username
         homeDir config.myConfig.modules.users.homeDir
@@ -39,7 +39,7 @@
                            :StateDirectoryMode "0700"
                            :Nice 10
                            :IOSchedulingClass "idle"
-                           :ExecStart (s stateBackup "/bin/state-backup")}}
+                           :ExecStart (jobRun "state-backup" (s stateBackup "/bin/state-backup"))}}
          :systemd.timers.state-backup
           {:wantedBy ["timers.target"]
            :timerConfig {:OnCalendar "*-*-* 19:00:00" :Persistent true}}

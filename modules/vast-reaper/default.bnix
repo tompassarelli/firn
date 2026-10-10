@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
         description "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor, and tear down the runner VM at the credit floor"]
@@ -12,7 +12,7 @@
            {:Unit {:Description description :OnFailure ["update-notify@%n.service"]}
             :Service {:Type "oneshot"
               :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/north/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bun pkgs.coreutils pkgs.sops pkgs.gh pkgs.libnotify]))]
-              :ExecStart (s homeDir "/.local/share/north/bin/vast-reaper")}}
+              :ExecStart (jobRun "vast-reaper" (s homeDir "/.local/share/north/bin/vast-reaper"))}}
           :systemd.user.timers.vast-reaper
            {:Unit {:Description description}
             :Timer {:OnBootSec "2min" :OnUnitActiveSec "5min"}

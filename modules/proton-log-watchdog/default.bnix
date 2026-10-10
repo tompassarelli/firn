@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
         description "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB"]
@@ -12,7 +12,7 @@
            {:Unit {:Description description}
             :Service {:Type "oneshot"
               :Environment [(s "PATH=" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify]))]
-              :ExecStart (s homeDir "/.local/bin/proton-log-watchdog")}}
+              :ExecStart (jobRun "proton-log-watchdog" (s homeDir "/.local/bin/proton-log-watchdog"))}}
           :systemd.user.timers.proton-log-watchdog
            {:Unit {:Description description}
             :Timer {:OnStartupSec "1min" :OnUnitActiveSec "10min"}

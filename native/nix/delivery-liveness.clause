@@ -13,6 +13,12 @@ foreign binary-path(?packages: Sequence<Delayed<nix,Package>>): Text
   from: "lib"
   failure: throw
 
+foreign package-text(?value: Delayed<nix,Package>): Text
+  construction: "nix"
+  call: "toString"
+  from: "builtins"
+  failure: throw
+
 export delivery-liveness-module()
   configuration-module(path(myConfig.modules.delivery-liveness.enable), "periodically build the committed Firn toplevel without switching",
     {environment: {etc: {"north/delivery-liveness-required": {text: "1\n"}}},
@@ -23,7 +29,7 @@ export delivery-liveness-module()
          systemd: {user: {
            services: {firn-delivery-liveness: {
              Unit: {Description: "Firn delivery liveness floor (non-switching)"},
-             Service: {Type: "oneshot", ExecStart: "{?home.config.home.homeDirectory}/.local/bin/firn-liveness-floor",
+             Service: {Type: "oneshot", ExecStart: "{package-text(package(path(bash)))}/bin/bash {?home.config.home.homeDirectory}/.local/share/north/bin/job-run --path {binary-path([package(path(python3)), package(path(openssh)), package(path(coreutils)), package(path(util-linux)), package(path(hostname))])} firn-delivery-liveness -- {?home.config.home.homeDirectory}/.local/bin/firn-liveness-floor",
                Environment: ["NORTH_BIN={?home.config.home.homeDirectory}/.local/share/north/bin/north", "PATH={?home.config.home.homeDirectory}/.local/bin:{?home.config.home.homeDirectory}/.local/share/north/bin:{binary-path([package(path(bash)), package(path(coreutils)), package(path(gawk)), package(path(git)), package(path(nix)), package(path(python3)), package(path(util-linux))])}"],
                TimeoutStartSec: "30m"}}},
            timers: {firn-delivery-liveness: {Unit: {Description: "Run Firn delivery liveness floor"}, Timer: {OnCalendar: "*:0/30", Persistent: true, RandomizedDelaySec: "5m"}, Install: {WantedBy: ["timers.target"]}}},

@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: {
   options.myConfig.modules.skill-review-queue.enable = lib.mkEnableOption description;
@@ -14,7 +14,7 @@
           Environment = [
             "PATH=${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git ]}"
           ];
-          ExecStart = "${homeDir}/.local/share/north/bin/skill-review-queue";
+          ExecStart = jobRun "skill-review-queue" "${homeDir}/.local/share/north/bin/skill-review-queue";
         };
       };
       systemd.user.timers.skill-review-queue = {

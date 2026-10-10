@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: {
   options.myConfig.modules.machine-update.enable = lib.mkEnableOption "Nightly machine software update";
@@ -29,7 +29,7 @@
               pkgs.systemd
             ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/machine-update";
+          ExecStart = jobRun "machine-update" "${homeDir}/.local/bin/machine-update";
         };
       };
       systemd.user.timers.machine-update = {

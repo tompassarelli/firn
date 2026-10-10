@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...]
+(nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username]
     {:tags-opt-in [development]
@@ -11,7 +11,7 @@
            {:Unit {:Description "Nightly machine software update" :OnFailure ["update-notify@%n.service"] :X-SwitchMethod "keep-old"}
             :Service {:Type "oneshot" :TimeoutStartSec "4h"
               :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" (lib.makeBinPath [pkgs.bash pkgs.bun pkgs.coreutils pkgs.curl pkgs.git pkgs.gh pkgs.nix pkgs.python3 pkgs.zstd pkgs.util-linux pkgs.libnotify pkgs.systemd]))]
-              :ExecStart (s homeDir "/.local/bin/machine-update")}}
+              :ExecStart (jobRun "machine-update" (s homeDir "/.local/bin/machine-update"))}}
           :systemd.user.timers.machine-update
            {:Unit {:Description "Nightly machine software update"}
             :Timer {:OnCalendar "02:00" :Persistent true :RandomizedDelaySec "5m"}

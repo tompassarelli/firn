@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: {
   options.myConfig.modules.proton-log-watchdog.enable = lib.mkEnableOption description;
@@ -13,7 +13,7 @@
           Environment = [
             "PATH=${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify ]}"
           ];
-          ExecStart = "${homeDir}/.local/bin/proton-log-watchdog";
+          ExecStart = jobRun "proton-log-watchdog" "${homeDir}/.local/bin/proton-log-watchdog";
         };
       };
       systemd.user.timers.proton-log-watchdog = {

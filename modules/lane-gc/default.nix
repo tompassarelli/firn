@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, pkgs, jobRun, ... }:
 
 ((homeDir: ((username: ((description: {
   options.myConfig.modules.lane-gc.enable = lib.mkEnableOption description;
@@ -16,7 +16,7 @@
           Environment = [
             "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.openssh pkgs.gh pkgs.coreutils ]}"
           ];
-          ExecStart = "${homeDir}/.local/share/north/bin/lane-gc";
+          ExecStart = jobRun "lane-gc" "${homeDir}/.local/share/north/bin/lane-gc";
         };
       };
       systemd.user.timers.lane-gc = {
