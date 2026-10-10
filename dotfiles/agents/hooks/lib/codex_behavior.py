@@ -878,6 +878,27 @@ MEASURE_ONLY = re.compile(
 MEASURE_OUTCOME = re.compile(r"\bPEER\b|\bland(s|ing)? (a |the |its |one )?fix\b|\bfix it lands\b", re.IGNORECASE)
 
 
+# Model-side space loss (openai/codex#45021, #50903): prose with words run together. Agents act on
+# handoff lines and spawn briefs, so those are refused until rewritten.
+JOINED = re.compile(r"(?<![\w/.\-])[a-z]{25,}(?![\w/.\-])")
+HANDOFF = re.compile(r"agents/handoffs/")
+
+
+def joined_words(event, brief=False):
+    tool_input = event.get("tool_input") or {}
+    text = json.dumps(tool_input) if not isinstance(tool_input, str) else tool_input
+    if not (brief or HANDOFF.search(text)):
+        return None
+    runs = JOINED.findall(text.replace("\\n", "\n"))
+    if not runs:
+        return None
+    return deny(
+        f"No. This text runs words together (\"{runs[0][:40]}\"): {len(runs)} run(s) of 25+ letters with no "
+        "spaces. Another agent acts on it and misreads it. Rewrite each in full sentences with normal spaces "
+        "between words and numbers, then retry."
+    )
+
+
 def pre_spawn(event):
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -887,6 +908,9 @@ def pre_spawn(event):
         reason = None
     if reason:
         return deny(reason)
+    decision = joined_words(event, brief=True)
+    if decision:
+        return decision
     tool_input = event.get("tool_input") or {}
     brief = json.dumps(tool_input) if not isinstance(tool_input, str) else tool_input
     if MEASURE_ONLY.search(brief) and not MEASURE_OUTCOME.search(brief):
@@ -1235,7 +1259,7 @@ def decide_event(event):
     if name == "PreToolUse" and str(tool).endswith("spawn_agent"):
         return pre_spawn(event)
     if name == "PreToolUse" and tool in ("Bash", "apply_patch", "Write", "Edit"):
-        decision = pre_scaffold(event)
+        decision = joined_words(event) or pre_scaffold(event)
         if decision or tool != "Bash":
             return decision
         return pre_bash(event)

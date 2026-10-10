@@ -280,6 +280,14 @@ expect relay-delivered-once quiet '' '{"hook_event_name":"PostToolUse","session_
 printf 'Close #163 next.' >"$scratch/state/relay-rr.txt"
 expect relay-at-stop fires 'Close #163 next' "$(printf '{"hook_event_name":"Stop","session_id":"rr","stop_hook_active":false,"last_assistant_message":"Done: closed #147.\\nNeeds you: nothing"}')"
 
+# Prose with words run together, as Codex wrote on 10 Oct, is refused in handoff lines and spawn briefs.
+peer='~/.local/state/agents/handoffs/codex-lead-peer.md'
+expect joined-peer-line fires 'runs words together' "$(pre j1 "$game" "\"printf 'PEER 21:09 2.6: checks thefirstbindingbutthelowererhoistsalllets now' >> $peer\"")"
+expect spaced-peer-line quiet '' "$(pre j1 "$game" "\"printf 'PEER 21:09 2.6: checks the first binding but the lowerer hoists all lets' >> $peer\"")"
+expect joined-elsewhere quiet '' "$(pre j1 "$game" '"echo thefirstbindingbutthelowererhoistsalllets"')"
+expect joined-path-in-handoff quiet '' "$(pre j1 "$game" "\"cat /home/tom/.local/state/agents/handoffs/smashcraft-codex-lead-status-abcdefghijklmnopqrstuvwxyz.md\"")"
+expect joined-spawn-brief fires 'runs words together' '{"hook_event_name":"PreToolUse","session_id":"j2","tool_name":"collaborationspawn_agent","tool_input":{"message":"Fix 2.6 so thefirstbindingbutthelowererhoistsalllets holds."}}'
+
 # Other tools skip the interpreter; the off switch and malformed input allow.
 expect other-tool quiet '' '{"hook_event_name":"PreToolUse","session_id":"x","tool_name":"apply_patch","tool_input":{"command":"bun test"}}'
 out="$(prompt k1 '"stop asking, wtf"' | AGENT_NO_AUTHORING_HOOKS=1 "$HOOK" 2>/dev/null)"
