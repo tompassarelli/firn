@@ -128,6 +128,8 @@ function sweep(container: string, o: Opts, live: string[], c: Counts) {
     if (newestMtime([path, join(admin, "HEAD"), join(admin, "index"), join(admin, "logs/HEAD"), join(common, "logs/refs/heads", branch)]) > cutoff) {
       keep(`touched within ${o.idleHours}h`); continue;
     }
+    const readOnly = Bun.spawnSync(["find", path, "-type", "d", "!", "-perm", "-u+w", "-print", "-quit"]).stdout.toString().trim();
+    if (readOnly) { keep(`read-only directory ${tilde(readOnly)}`); continue; }
     if (o.dryRun) { log(`retire ${tilde(path)} (${branch || "detached"}, ${v.how})`); c.retiredWorktrees++; if (branch) c.deletedBranches++; continue; }
     const rm = git(main, ["worktree", "remove", path]);
     if (!rm.ok) { keep(`worktree remove failed: ${rm.err.split("\n").pop()}`); log(`kept ${tilde(path)}: ${rm.err.split("\n").pop()}`); continue; }
