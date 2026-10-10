@@ -129,16 +129,16 @@ printf '{"type":"user","message":{"role":"user","content":"Delegation: role=sub-
 subagent() { printf '{"session_id":"s","transcript_path":"%s","agent_id":"%s","agent_type":"worker","cwd":"/tmp","hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":%s}' "$SCRATCH/home/.claude/projects/p/s.jsonl" "$1" "$worker"; }
 dodeny "$(subagent w0)" 'a subagent whose brief has no Delegation line is a worker and is denied'
 expect_allow "$(subagent w1)" 'a subagent briefed with budget=1 may spawn'
-printf '{"version":1,"nodes":[{"id":"sc","domain":"Smashcraft"},{"id":"mu","domain":"muove"}]}\n' >"$SCRATCH/org.json"
+printf '{"version":1,"nodes":[{"id":"sc","domain":"Smashcraft"},{"id":"mu","domain":"galileo"}]}\n' >"$SCRATCH/org.json"
 cat >"$SCRATCH/orchestration.toml" <<'TOML'
-[projects.muove]
+[projects.galileo]
 priority = 1
 [projects.smashcraft]
 priority = 2
 TOML
 status 17 5
 out="$(CALL_ENV=(AGENT_ORG_NAME=sc); call "$HOOK" "$(agent "$worker")")"
-case "$out" in "Domain smashcraft ranks below muove"*) check ok 'a lower-priority domain stops at 80% of the limit' ;; *) check bad 'a lower-priority domain stops at 80% of the limit' "$out" ;; esac
+case "$out" in "Domain smashcraft ranks below galileo"*) check ok 'a lower-priority domain stops at 80% of the limit' ;; *) check bad 'a lower-priority domain stops at 80% of the limit' "$out" ;; esac
 CALL_ENV=(AGENT_ORG_NAME=mu); expect_allow "$(agent "$worker")" 'the first-priority domain keeps the headroom'
 CALL_ENV=()
 

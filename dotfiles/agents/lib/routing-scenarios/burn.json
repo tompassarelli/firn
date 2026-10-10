@@ -138,7 +138,7 @@
   }
  },
  "projects": {
-  "muove": {
+  "galileo": {
    "priority": 1,
    "u": 1.0,
    "bar": "solid",
@@ -148,7 +148,7 @@
  "boxes": [
   {
    "id": "b1",
-   "project": "muove",
+   "project": "galileo",
    "category": "feature",
    "difficulty": 70,
    "sensitivity": "private",

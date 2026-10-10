@@ -139,8 +139,8 @@ for s in burn conserve new-model deadline; do
 done
 out="$("$agents" plan --at "$scenarios/burn.json")"
 grep -Fq 'account codex: state burn, slack +36.0, week resets in 4h00m, fast on' <<<"$out" || fail "burn replay account: $out"
-grep -Fxq 'box b1 (muove feature d70): codex:sol-high, fast on' <<<"$out" || fail "burn replay box: $out"
-grep -Fxq 'project muove: priority 1, bar solid, target 14 Oct, urgency 1.00' <<<"$out" || fail "burn replay project: $out"
+grep -Fxq 'box b1 (galileo feature d70): codex:sol-high, fast on' <<<"$out" || fail "burn replay box: $out"
+grep -Fxq 'project galileo: priority 1, bar solid, target 14 Oct, urgency 1.00' <<<"$out" || fail "burn replay project: $out"
 out="$("$agents" plan --at "$scenarios/burn.json" --state codex=conserve)"
 grep -Fq 'account codex: state conserve (--state)' <<<"$out" || fail "--state on replay: $out"
 
@@ -163,7 +163,7 @@ PY
 cat >"$AGENTS_ORCHESTRATION" <<'TOML'
 mode = "split"
 usage = { burn_slack = 15, conserve_slack = -5, horizon_h = 36, money_ceiling = 95, fast_floor = 10, stale_min = 30, urgent = 1.2, shift = 15, late = 1.5 }
-[projects.muove]
+[projects.galileo]
 priority = 1
 bar = "critical"
 [accounts.codex]
@@ -181,7 +181,7 @@ TOML
 out="$("$agents" plan)"
 grep -Fxq 'override codex burn until 2026-01-01T00:00Z: expired, ignored' <<<"$out" || fail "expired override: $out"
 grep -Eq '^account codex: state (even|conserve), ' <<<"$out" || fail "expired override applied: $out"
-grep -Fxq 'project muove: priority 1, bar critical, no target' <<<"$out" || fail "project line: $out"
+grep -Fxq 'project galileo: priority 1, bar critical, no target' <<<"$out" || fail "project line: $out"
 base_claude="$(grep '^account claude:' <<<"$out")"
 out="$("$agents" plan --state codex=burn)"
 grep -Fq 'account codex: state burn (--state), ' <<<"$out" || fail "--state codex=burn: $out"

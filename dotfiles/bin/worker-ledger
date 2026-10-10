@@ -301,7 +301,7 @@ def stamp(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
 
 # Codex leads already log each spawn: Smashcraft-style `Running: #446 pivot446 Sol high, ETA 15:43Z` in
-# <repo>-codex-lead-status.md, Muove-style `STAFF 21:09 7.10: ... ETA 15.` and
+# <repo>-codex-lead-status.md, Galileo-style `STAFF 21:09 7.10: ... ETA 15.` and
 # `REVIEWED-CODEX 7.10 pass <sha> category=<c>` in codex-lead-peer.md.
 RUNNING = re.compile(r"^Running: #(\d+)\S* (\S+) (?:Sol|Astra)\b[^\n]*?\bETA (\d{1,2}):(\d{2})Z", re.M)
 STAFF = re.compile(r"^STAFF \d{1,2}:\d{2} (\S+?): [^\n]*?\bETA (\d+)\b", re.M)

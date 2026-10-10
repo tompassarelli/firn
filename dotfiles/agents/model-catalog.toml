@@ -237,7 +237,7 @@ checked = 2026-10-11
 [models."gemini:3.1-pro-high"]
 model = "gemini-3.1-pro"
 effort = "high"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["adversarial review from another model family", "design review"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.1 Pro; model-level, effort not stated)", rank = 63, score = 40.2, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -247,7 +247,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.1-pro-low"]
 model = "gemini-3.1-pro"
 effort = "low"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["quick second opinion on a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.1 Pro; model-level, effort not stated)", rank = 63, score = 40.2, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -257,7 +257,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.8-flash-high"]
 model = "gemini-3.8-flash"
 effort = "high"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -267,7 +267,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.8-flash-medium"]
 model = "gemini-3.8-flash"
 effort = "medium"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -277,7 +277,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.8-flash-low"]
 model = "gemini-3.8-flash"
 effort = "low"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.8 Flash; model-level, effort not stated)", rank = 14, score = 62.5, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -287,7 +287,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.7-flash-high"]
 model = "gemini-3.7-flash"
 effort = "high"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -297,7 +297,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.7-flash-medium"]
 model = "gemini-3.7-flash"
 effort = "medium"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -307,7 +307,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.7-flash-low"]
 model = "gemini-3.7-flash"
 effort = "low"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.7 Flash; model-level, effort not stated)", rank = 23, score = 58.6, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -317,7 +317,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.6-flash-high"]
 model = "gemini-3.6-flash"
 effort = "high"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -327,7 +327,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.6-flash-medium"]
 model = "gemini-3.6-flash"
 effort = "medium"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },
@@ -337,7 +337,7 @@ value = { plan = "Tom's Google AI Pro via agy", monthly_price = 20, currency = "
 [models."gemini:3.6-flash-low"]
 model = "gemini-3.6-flash"
 effort = "low"
-restriction = "public code only: never Muove, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
+restriction = "public code only: never Galileo, ~/code/clients or other private repositories, secrets or private transcripts (Google may use prompts to train)"
 strengths = ["fast review of a public diff"]
 benchmarks = [
   { name = "BenchLM coding (Gemini 3.6 Flash; model-level, effort not stated)", rank = 38, score = 51.9, source = "https://benchlm.ai/coding", checked = 2026-10-11 },

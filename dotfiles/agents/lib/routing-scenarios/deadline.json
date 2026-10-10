@@ -1,5 +1,5 @@
 {
- "note": "\u00a74 example 4: muove needs 4/day, measures 2.8/day, u = 1.43; muove-late shows the same project at u 1.55",
+ "note": "\u00a74 example 4: galileo needs 4/day, measures 2.8/day, u = 1.43; galileo-late shows the same project at u 1.55",
  "now": "2026-10-11T17:20Z",
  "usage": {
   "burn_slack": 15,
@@ -143,14 +143,14 @@
   "codex:sol-medium|netcode": 55
  },
  "projects": {
-  "muove": {
+  "galileo": {
    "priority": 1,
    "u": 1.43,
    "bar": "critical",
    "target": "14 Oct"
   },
-  "muove-late": {
-   "name": "muove",
+  "galileo-late": {
+   "name": "galileo",
    "priority": 1,
    "u": 1.55,
    "bar": "critical",
@@ -160,7 +160,7 @@
  "boxes": [
   {
    "id": "m1",
-   "project": "muove",
+   "project": "galileo",
    "category": "feature",
    "difficulty": 30,
    "sensitivity": "private",
@@ -168,7 +168,7 @@
   },
   {
    "id": "m2",
-   "project": "muove",
+   "project": "galileo",
    "category": "tooling",
    "difficulty": 15,
    "sensitivity": "private",
@@ -176,7 +176,7 @@
   },
   {
    "id": "m3",
-   "project": "muove",
+   "project": "galileo",
    "category": "netcode",
    "difficulty": 80,
    "sensitivity": "private",
@@ -184,7 +184,7 @@
   },
   {
    "id": "m4",
-   "project": "muove-late",
+   "project": "galileo-late",
    "category": "netcode",
    "difficulty": 80,
    "sensitivity": "private",
@@ -209,7 +209,7 @@
    "m4": false
   },
   "needs": [
-   "Needs Tom: muove misses 14 Oct at current pace; Claude fast would bill usage credits"
+   "Needs Tom: galileo misses 14 Oct at current pace; Claude fast would bill usage credits"
   ]
  }
 }
