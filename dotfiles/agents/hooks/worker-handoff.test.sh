@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fixture transcripts for the worker handoff hook: workers at 200k+ get the
+# Fixture transcripts for the worker handoff hook: workers at 350k+ get the
 # handoff text with their note path, repeated once per further 50k; workers
 # whose first transcript entry is 45+ minutes old get the leash text; workers
 # below both, other agent types and the main session get nothing.
@@ -82,14 +82,6 @@ expect_silent() {
   out="$(call "$1" "$2" "$3" "${5:-}")"
   if [ -z "$out" ]; then check ok "$4"; else check bad "$4" "$out"; fi
 }
-expect_hard() {
-  local out note="$HANDOFFS/$1.md"
-  out="$(call "$1" "$2" "$3")"
-  case "$out" in
-    *"350k hard limit"*"HANDOFF $note"*) check ok "$4" ;;
-    *) check bad "$4" "$out" ;;
-  esac
-}
 expect_leash() {
   local out
   out="$(call "$1" "$2" 1000 "$3")"
@@ -99,13 +91,12 @@ expect_leash() {
   esac
 }
 
-expect_handoff a1 worker-high 210000 'worker at 210k gets the handoff text with its path'
-expect_silent a1 worker-high 230000 'second call at 230k is silent'
-expect_handoff a1 worker-high 260000 'reminder at 260k'
-expect_silent a1 worker-high 280000 'no reminder at 280k'
-expect_hard a6 worker 360000 'worker at 360k gets the hard-limit handoff'
-expect_silent a2 worker 190000 'worker at 190k is silent'
-expect_handoff a3 worker 200000 'plain worker at exactly 200k gets the handoff text'
+expect_handoff a1 worker-high 360000 'worker at 360k gets the handoff text with its path'
+expect_silent a1 worker-high 380000 'second call at 380k is silent'
+expect_handoff a1 worker-high 410000 'reminder at 410k'
+expect_silent a1 worker-high 430000 'no reminder at 430k'
+expect_silent a2 worker 340000 'worker at 340k is silent'
+expect_handoff a3 worker 350000 'plain worker at exactly 350k gets the handoff text'
 expect_silent a4 Explore 900000 'Explore agent is silent'
 expect_silent a5 '' 900000 'main session (no agent_type) is silent'
 expect_leash t1 worker 46 'worker whose first entry is 46 minutes old gets the leash text'

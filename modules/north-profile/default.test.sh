@@ -33,7 +33,7 @@ jq -e '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
   ] as $commands
-  | ($commands | length == 16)
+  | ($commands | length == 17)
     and ($commands | all(
       contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
       and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin")
@@ -95,7 +95,7 @@ jq -e --slurpfile projection "$claude_projection" '
   .model == "preserved-model"
   and .permissions == {"allow": ["Read"]}
   and .hooks == $projection[0].hooks
-  and .autoCompactWindow == 400000
+  and .autoCompactWindow == 500000
   and .subagentPromptCacheTtl == "1h"
 ' "$target" >/dev/null
 [[ $(stat -c '%a' "$target") == 600 ]]

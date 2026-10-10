@@ -471,7 +471,7 @@
     "worker-handoff": {
       "kind": "hook",
       "title": "Worker context handoff",
-      "triggerDescription": "Tell a Claude Code worker at 400k tokens of context to write a handoff note and stop.",
+      "triggerDescription": "Tell a Claude Code worker at 350k tokens of context to land what passes and hand off the rest.",
       "category": "agents",
       "owner": {
         "repo": "nixos-config",
