@@ -1,14 +1,14 @@
 ---
 name: passer-hetzner
 description: >-
-  Access Tom's Hetzner account for Passer Systems (Robot dedicated servers), including the GEX45 GPU box.
+  Access Tom's personal Hetzner account (Robot dedicated servers), including the GEX45 GPU box.
 grounded: 2026-10-10
 written: 2026-10-10
 ---
 
-# Passer Hetzner
+# Personal Hetzner
 
-- Account: Hetzner Robot (`https://robot.hetzner.com`) for Passer Systems; use Tom's established browser session and never create accounts or order/cancel servers without asking.
+- Account: Hetzner Robot (`https://robot.hetzner.com`) on Tom's personal Hetzner account; use Tom's established browser session and never create accounts or order/cancel servers without asking.
 - Server: GEX45 dedicated GPU box, ordered 2026-10-10 with public-key login only (no root password is emailed).
 - SSH alias `gex45` in `~/.ssh/config`: user `root`, key `~/.ssh/hetzner-gex45`, identities-only.
 - If `HostName` is still `CHANGE_ME_SERVER_IP`, take the IP from Robot's server list or Hetzner's ready email and update the alias.
