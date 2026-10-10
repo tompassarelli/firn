@@ -13,8 +13,7 @@ export proton-autopurge-module()
         services: {
           proton-bridge: {
             Unit: {Description: "Proton Mail Bridge (IMAP 127.0.0.1:1143 for proton-triage)", After: ["graphical-session.target"]},
-            Service: {ExecStart: "{package-text(package(path(protonmail-bridge)))}/bin/protonmail-bridge --noninteractive", Restart: "on-failure", RestartSec: 30},
-            Install: {WantedBy: ["niri.service"]}},
+            Service: {ExecStart: "{package-text(package(path(protonmail-bridge)))}/bin/protonmail-bridge --noninteractive", Restart: "on-failure", RestartSec: 30}},
           proton-spam-autopurge: {
             Unit: {Description: "Daily mail hygiene: Proton rescue/grace/purge and Gmail rules, ledgered", Wants: ["proton-bridge.service"], After: ["proton-bridge.service"]},
             Service: {Type: "oneshot", ExecStart: "{configured-text(path(myConfig.modules.users.homeDir))}/code/proton-triage/main/daily-run.sh"}}},
