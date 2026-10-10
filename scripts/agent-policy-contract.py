@@ -227,8 +227,20 @@ def bnix_adapters(module: Path) -> list[str]:
     return sorted(re.findall(r'\(providerAdapter "([^"]+)"\)', module.read_text()))
 
 
+def hook_targets(catalog: dict) -> dict[str, set[str]]:
+    targets: dict[str, set[str]] = {}
+    for unit, entry in catalog["activation"].items():
+        for distribution in entry.get("distributions", []):
+            if distribution.get("type") in {"hook", "providerAdapter"}:
+                targets.setdefault(unit, set()).update(
+                    set(distribution.get("targets", [])) & set(PROVIDERS)
+                )
+    return targets
+
+
 def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, Path]) -> None:
     catalog = json.loads(paths["catalog"].read_text())
+    targets = hook_targets(catalog)
     seen: set[str] = set()
     for guard in policy.get("guard", []):
         unit = guard.get("unit", "")
@@ -236,12 +248,25 @@ def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, P
             contract.reject(f"invalid or duplicate provider guard unit: {unit!r}")
             continue
         seen.add(unit)
+        wired = {provider for provider in PROVIDERS if guard.get(provider)}
+        if wired != targets.get(unit, set()):
+            contract.reject(
+                f"{unit}: wired for {sorted(wired)} but catalog-config.json targets "
+                f"{sorted(targets.get(unit, set()))}"
+            )
         for provider in PROVIDERS:
-            if bool(guard.get(provider)) == bool(guard.get(f"{provider}_absent")):
+            if (provider in wired) == bool(guard.get(f"{provider}_absent")):
                 contract.reject(
                     f"{unit}: give {provider}_absent a reason exactly when it has no "
                     f"{provider} binding"
                 )
+        source = paths["hooks"] / guard.get("command", "")
+        if not source.is_file():
+            contract.reject(f"{unit}: wired hook source is missing: {source}")
+        elif "authoring-killswitch.sh" not in source.read_text():
+            contract.reject(f"{unit}: wired hook does not source lib/authoring-killswitch.sh")
+    for unit in sorted(set(targets) - seen):
+        contract.reject(f"{unit}: registered hook targets {sorted(targets[unit])} but is unwired")
 
     try:
         settings = json.loads(paths["claude"].read_text())
