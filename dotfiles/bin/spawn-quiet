@@ -33,7 +33,13 @@ case "$(basename -- "$1")" in
   ghostty) cmd=( "$1" "--class=$MARK" "${@:2}" ) ;;
 esac
 
-if command -v setsid >/dev/null 2>&1; then
+# Own systemd scope per window, so capacity tools attribute its load to it
+# rather than to whichever terminal launched it.
+title="$(printf '%s\n' "$@" | sed -n 's/^--title=//p' | head -n1)"
+unit="app-spawn-quiet-$(printf '%s' "${title:-$(basename -- "$1")}" | tr -c 'A-Za-z0-9' '-' | cut -c1-40)-$$"
+if command -v setsid >/dev/null 2>&1 && command -v systemd-run >/dev/null 2>&1; then
+  setsid -f systemd-run --user --scope --quiet --collect --slice=app.slice --unit="$unit" -- "${cmd[@]}" >/dev/null 2>&1
+elif command -v setsid >/dev/null 2>&1; then
   setsid -f "${cmd[@]}" >/dev/null 2>&1
 else
   nohup "${cmd[@]}" >/dev/null 2>&1 &
