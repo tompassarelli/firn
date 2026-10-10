@@ -71,6 +71,7 @@
       MaxRetentionSec=30day
 
     '';
+    users.allowNoPasswordLogin = true;
     security.audit.enable = lib.mkDefault true;
     security.auditd.enable = true;
     security.audit.rules = [

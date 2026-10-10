@@ -7,6 +7,7 @@
   myConfig.modules.users.email = "6378995+tompassarelli@users.noreply.github.com";
   myConfig.modules.users.fullName = "tompassarelli";
   myConfig.modules.users.mutable = false;
+  myConfig.modules.users.extraGroups = [ ];
   myConfig.modules.users.authorizedKeys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFJ2c3khPX8NgkazmQdEI1kU9IrEZuE8m2/2OIquQbgh tom@nexus"
   ];

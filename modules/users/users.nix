@@ -37,6 +37,11 @@
     default = [ ];
     description = "SSH public keys allowed to log in as the primary user";
   };
+  options.myConfig.modules.users.extraGroups = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ "wheel" "networkmanager" "plugdev" ];
+    description = "Supplementary groups of the primary user";
+  };
   options.myConfig.modules.users.passwordHashSopsFile = lib.mkOption {
     type = lib.types.nullOr lib.types.path;
     default = null;
@@ -48,7 +53,7 @@
       shell = pkgs.bashInteractive;
       isNormalUser = true;
       home = homeDir;
-      extraGroups = [ "wheel" "networkmanager" "plugdev" ];
+      extraGroups = config.myConfig.modules.users.extraGroups;
       openssh.authorizedKeys.keys = config.myConfig.modules.users.authorizedKeys;
       hashedPasswordFile = lib.mkIf (config.myConfig.modules.users.passwordHashSopsFile != null) config.sops.secrets.user-password-hash.path;
     };
