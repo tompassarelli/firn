@@ -216,8 +216,9 @@ def show(org):
 
 def launch(node, extra, cwd, resume=False):
     """Open the node's session without focus; returns the session id or None."""
+    # Claude fast mode bills usage credits even with plan usage left (code.claude.com/docs/en/fast-mode).
     env = dict(os.environ, AGENT_ROLE=node["role"], AGENT_DEPTH=str(node["depth"]),
-               AGENT_DELEGATION_BUDGET=str(node["budget"]), AGENT_ORG_NAME=node["id"])
+               AGENT_DELEGATION_BUDGET=str(node["budget"]), AGENT_ORG_NAME=node["id"], CLAUDE_CODE_DISABLE_FAST_MODE="1")
     prompt = f"Read {node['brief']} and follow it."
     if resume and node.get("status_file"):
         prompt += f" You were restarted after an unexpected exit; resume from {node['status_file']}."
