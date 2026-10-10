@@ -12,7 +12,6 @@ bash -n "$checker"
 # shellcheck source=agent-config-check.sh
 source "$checker"
 
-[ "$(codex_managed_policy_binding_count "$requirements")" = 14 ]
 grep -Fq '[mcp_servers.linear-mcp-msa-new]' "$config"
 if grep -Fq '[mcp_servers.north]' "$config"; then
   printf 'retired North MCP declaration remains\n' >&2
@@ -59,22 +58,6 @@ assert catalog["baselines"][1]["owner"] == {
     "path": "dotfiles/agents/code/AGENTS.md",
 }
 PY
-
-for adapter in \
-  lib/north-agent-activation.sh \
-  firn-system-policy \
-  concrete-model-identity-guard.sh \
-  launch-critical-worktree-guard.sh \
-  lib/launch_critical_decide.py \
-  lib/launch_critical_paths.py \
-  tripwire-guard.sh \
-  corpus-scan-guard.sh \
-  resource-safe-search-guard.sh \
-  modern-search-guard.sh \
-  session-kill-guard.sh \
-  lib/authoring-killswitch.sh; do
-  grep -Fq "(providerAdapter \"$adapter\")" "$module"
-done
 
 if rg -n \
   'north-mcp|north-coordinator|north-on-|north-mark-delegated|harness-dial|/var/lib/north-enforcement' \

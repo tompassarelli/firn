@@ -9,7 +9,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import sys
 import tomllib
 
@@ -128,90 +127,151 @@ def check_surfaces(contract: Contract, surfaces: dict[str, Path]) -> None:
             seen[block_digest] = (surface, section)
 
 
-def command_identity(command: str) -> str:
-    try:
-        words = shlex.split(command)
-    except ValueError:
-        words = command.split()
-    return Path(words[-1]).name if words else ""
+PROVIDERS = ("claude", "codex")
+EVENT_ORDER = (
+    "PreToolUse",
+    "PostToolUse",
+    "PermissionRequest",
+    "UserPromptSubmit",
+    "Stop",
+    "SubagentStop",
+    "SessionStart",
+)
+HOOK_TIMEOUT = 10
+RUNTIME = "/etc/codex/hooks/runtime"
+SEARCH_PATH = f"PATH={RUNTIME}:/home/tom/.local/bin:/run/current-system/sw/bin"
+DEFAULT_COMMAND = {
+    "claude": (
+        f"{RUNTIME}/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON={RUNTIME}/python3 "
+        f"{SEARCH_PATH} {RUNTIME}/bash /home/tom/.agents/hooks/{{command}}"
+    ),
+    "codex": (
+        f"{RUNTIME}/env -u BASH_ENV -u ENV {SEARCH_PATH} "
+        f"{RUNTIME}/bash /etc/codex/hooks/{{command}}"
+    ),
+}
+CODEX_HEADER = """allow_managed_hooks_only = true
+allow_remote_control = false
+
+[features]
+hooks = true
+
+[hooks]
+managed_dir = "/etc/codex/hooks"
+"""
+CODEX_DISABLED = {
+    "allow_managed_hooks_only": True,
+    "allow_remote_control": False,
+    "features": {"hooks": False},
+}
 
 
-def codex_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
-    data = tomllib.loads(path.read_text())
-    events: list[str] = []
-    commands: list[str] = []
-    for event, groups in (data.get("hooks") or {}).items():
-        if event == "managed_dir" or not isinstance(groups, list):
-            continue
-        for group in groups:
-            matcher = group.get("matcher", "")
-            for hook in group.get("hooks", []):
-                command = hook.get("command", "")
-                if command_identity(command) == identity:
-                    events.append(f"{event}:{matcher}")
-                    commands.append(command)
-    return events, commands
+def guard_command(guard: dict, provider: str) -> str:
+    return guard.get(f"{provider}_command") or DEFAULT_COMMAND[provider].format(
+        command=guard["command"]
+    )
 
 
-def claude_bindings(path: Path, identity: str) -> tuple[list[str], list[str]]:
-    data = json.loads(path.read_text())
-    hooks = data.get("hooks")
-    if not isinstance(hooks, dict):
-        raise ValueError("hooks must be an object")
-    events: list[str] = []
-    commands: list[str] = []
-    for event, groups in hooks.items():
-        if not isinstance(groups, list):
-            raise ValueError(f"{event} hook groups must be an array")
-        for group in groups:
-            matcher = group.get("matcher", "")
-            for hook in group.get("hooks", []):
-                command = hook.get("command", "")
-                if command_identity(command) == identity:
-                    events.append(f"{event}:{matcher}")
-                    commands.append(command)
-    return events, commands
-
-
-def check_provider_bindings(
-    contract: Contract, policy: dict, requirements: Path, claude_hooks: Path
-) -> None:
-    seen_keys: set[str] = set()
-    seen_units: set[str] = set()
+def wiring(policy: dict, provider: str) -> dict[str, list[tuple[str, list[str]]]]:
+    events: dict[str, dict[str, list[str]]] = {}
     for guard in policy.get("guard", []):
-        key = guard.get("key", "")
-        unit = guard.get("unit", "")
-        if key in seen_keys:
-            contract.reject(f"duplicate provider guard key: {key}")
-        seen_keys.add(key)
-        if not UNIT.fullmatch(unit) or unit in seen_units:
-            contract.reject(f"invalid or duplicate provider guard unit: {unit!r}")
-        seen_units.add(unit)
-        identity = guard.get("command", "")
-        expected_command = guard.get("codex_command", "")
-        try:
-            events, commands = codex_bindings(requirements, identity)
-        except (OSError, tomllib.TOMLDecodeError) as exc:
-            contract.reject(f"{key}: Codex requirements are unreadable: {exc}")
-            continue
-        if sorted(events) != sorted(guard.get("codex", [])):
-            contract.reject(f"{key}: Codex provider event reachability drift")
-        if events and set(commands) != {expected_command}:
-            contract.reject(f"{key}: Codex provider command drift")
-        expected_claude_events = guard.get("claude", [])
-        expected_claude_command = guard.get("claude_command", "")
-        if expected_claude_events or expected_claude_command:
-            try:
-                claude_events, claude_commands = claude_bindings(
-                    claude_hooks, identity
+        for binding in guard.get(provider, []):
+            event, _, matcher = binding.partition(":")
+            events.setdefault(event, {}).setdefault(matcher, []).append(
+                guard_command(guard, provider)
+            )
+    return {
+        event: list(events[event].items())
+        for event in sorted(events, key=EVENT_ORDER.index)
+    }
+
+
+def render_claude(policy: dict, settings: dict) -> str:
+    hooks = {
+        event: [
+            ({"matcher": matcher} if matcher else {})
+            | {
+                "hooks": [
+                    {"type": "command", "command": command, "timeout": HOOK_TIMEOUT}
+                    for command in commands
+                ]
+            }
+            for matcher, commands in groups
+        ]
+        for event, groups in wiring(policy, "claude").items()
+    }
+    return json.dumps(settings | {"hooks": hooks}, indent=2) + "\n"
+
+
+def render_codex(policy: dict) -> str:
+    parts = [CODEX_HEADER]
+    for event, groups in wiring(policy, "codex").items():
+        for matcher, commands in groups:
+            parts.append(f"\n[[hooks.{event}]]\n")
+            if matcher:
+                parts.append(f"matcher = {json.dumps(matcher)}\n")
+            for command in commands:
+                parts.append(
+                    f"\n[[hooks.{event}.hooks]]\ntype = \"command\"\n"
+                    f"command = {json.dumps(command)}\ntimeout = {HOOK_TIMEOUT}\n"
                 )
-            except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
-                contract.reject(f"{key}: native-Claude hook projection is unreadable: {exc}")
-                continue
-            if sorted(claude_events) != sorted(expected_claude_events):
-                contract.reject(f"{key}: native-Claude provider event reachability drift")
-            if claude_events and set(claude_commands) != {expected_claude_command}:
-                contract.reject(f"{key}: native-Claude provider command drift")
+    return "".join(parts)
+
+
+def codex_adapters(policy: dict, catalog: dict) -> list[str]:
+    guards = [g["command"] for g in policy.get("guard", []) if g.get("codex")]
+    return sorted(set(guards) | {entry["path"] for entry in catalog["providerSupport"]})
+
+
+def bnix_adapters(module: Path) -> list[str]:
+    return sorted(re.findall(r'\(providerAdapter "([^"]+)"\)', module.read_text()))
+
+
+def check_provider_bindings(contract: Contract, policy: dict, paths: dict[str, Path]) -> None:
+    catalog = json.loads(paths["catalog"].read_text())
+    seen: set[str] = set()
+    for guard in policy.get("guard", []):
+        unit = guard.get("unit", "")
+        if not UNIT.fullmatch(unit) or unit in seen:
+            contract.reject(f"invalid or duplicate provider guard unit: {unit!r}")
+            continue
+        seen.add(unit)
+        for provider in PROVIDERS:
+            if bool(guard.get(provider)) == bool(guard.get(f"{provider}_absent")):
+                contract.reject(
+                    f"{unit}: give {provider}_absent a reason exactly when it has no "
+                    f"{provider} binding"
+                )
+
+    try:
+        settings = json.loads(paths["claude"].read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        contract.reject(f"Claude hook projection is unreadable: {exc}")
+    else:
+        settings.pop("hooks", None)
+        if paths["claude"].read_text() != render_claude(policy, settings):
+            contract.reject(
+                f"{paths['claude']} differs from guard[]; run "
+                "scripts/agent-policy-contract.py --repo . --write"
+            )
+    codex = paths["codex"].read_text()
+    if tomllib.loads(codex) != CODEX_DISABLED and codex != render_codex(policy):
+        contract.reject(
+            f"{paths['codex']} differs from guard[]; run "
+            "scripts/agent-policy-contract.py --repo . --write"
+        )
+    if bnix_adapters(paths["bnix"]) != codex_adapters(policy, catalog):
+        contract.reject(
+            "modules/codex/default.bnix providerAdapter list must be exactly the Codex-bound "
+            f"guards plus providerSupport: {codex_adapters(policy, catalog)}"
+        )
+
+
+def write_wiring(policy: dict, paths: dict[str, Path]) -> None:
+    settings = json.loads(paths["claude"].read_text())
+    settings.pop("hooks", None)
+    paths["claude"].write_text(render_claude(policy, settings))
+    paths["codex"].write_text(render_codex(policy))
 
 
 def activation_path() -> Path:
@@ -314,6 +374,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", type=Path, required=True)
     parser.add_argument("--local", action="store_true")
+    parser.add_argument("--write", action="store_true", help="regenerate provider hook wiring from guard[]")
+    parser.add_argument("--codex-adapters", action="store_true", help="print the Codex provider adapter paths")
     args = parser.parse_args()
     repo = args.repo.resolve()
     policy_path = env_path(
@@ -327,17 +389,27 @@ def main() -> int:
 
     bootstrap = env_path("AGENT_POLICY_BOOTSTRAP", repo / "dotfiles/agents/AGENTS.md")
     repo_agents = env_path("AGENT_POLICY_REPO_AGENTS", repo / "AGENTS.md")
-    requirements = env_path(
-        "AGENT_POLICY_CODEX_REQUIREMENTS", repo / "modules/codex/requirements.toml"
-    )
-    claude_hooks = env_path(
-        "AGENT_POLICY_CLAUDE_HOOKS",
-        repo / "modules/north-profile/claude-hooks.json",
-    )
+    paths = {
+        "catalog": repo / "dotfiles/agents/catalog-config.json",
+        "hooks": repo / "dotfiles/agents/hooks",
+        "claude": env_path(
+            "AGENT_POLICY_CLAUDE_HOOKS", repo / "modules/north-profile/claude-hooks.json"
+        ),
+        "codex": env_path(
+            "AGENT_POLICY_CODEX_REQUIREMENTS", repo / "modules/codex/requirements.toml"
+        ),
+        "bnix": repo / "modules/codex/default.bnix",
+    }
+    if args.write:
+        write_wiring(policy, paths)
+    if args.codex_adapters:
+        catalog = json.loads(paths["catalog"].read_text())
+        print("\n".join(codex_adapters(policy, catalog)))
+        return 0
 
     contract = Contract()
     check_surfaces(contract, {"bootstrap": bootstrap, "repo": repo_agents})
-    check_provider_bindings(contract, policy, requirements, claude_hooks)
+    check_provider_bindings(contract, policy, paths)
     if args.local:
         check_activation(contract, policy, repo)
 
@@ -345,7 +417,7 @@ def main() -> int:
         for error in contract.errors:
             print(f"policy-contract: {error}", file=sys.stderr)
         return 1
-    print("policy-contract: ownership and Firn provider bindings passed")
+    print("policy-contract: surface ownership and generated provider wiring passed")
     return 0
 
 

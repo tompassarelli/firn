@@ -17,83 +17,14 @@ codex_managed_policy_binding_count() {
 import sys
 import tomllib
 
-def command(path, timeout, with_path=True):
-    interpreter = "python3" if path.endswith(".py") else "bash"
-    environment = (
-        "PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin "
-        if interpreter == "bash" and with_path
-        else ""
-    )
-    return {
-        "type": "command",
-        "command": (
-            "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV %s"
-            "/etc/codex/hooks/runtime/%s /etc/codex/hooks/%s"
-            % (environment, interpreter, path)
-        ),
-        "timeout": timeout,
-    }
-
-enabled = {
-    "allow_managed_hooks_only": True,
-    "allow_remote_control": False,
-    "features": {"hooks": True},
-    "hooks": {
-        "managed_dir": "/etc/codex/hooks",
-        "PreToolUse": [
-            {
-                "hooks": [command("firn-system-policy", 10, False)],
-            },
-            {
-                "matcher": "^(Edit|Write|MultiEdit|apply_patch)$",
-                "hooks": [
-                    command("launch-critical-worktree-guard.sh", 10),
-                    command("concrete-model-identity-guard.sh", 10),
-                ],
-            },
-            {
-                "matcher": "^Bash$",
-                "hooks": [
-                    command("tripwire-guard.sh", 10),
-                    command("launch-critical-worktree-guard.sh", 10),
-                    command("corpus-scan-guard.sh", 10),
-                    command("resource-safe-search-guard.sh", 10),
-                    command("modern-search-guard.sh", 10),
-                    command("session-kill-guard.sh", 10),
-                    command("concrete-model-identity-guard.sh", 10),
-                ],
-            },
-            {"hooks": [command("codex-behavior-guard.sh", 10)]},
-        ],
-        "PostToolUse": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
-        "UserPromptSubmit": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
-        "Stop": [{"hooks": [command("codex-behavior-guard.sh", 10)]}],
-    },
-}
-
-disabled = {
-    "allow_managed_hooks_only": True,
-    "allow_remote_control": False,
-    "features": {"hooks": False},
-}
-
 with open(sys.argv[1], "rb") as handle:
     policy = tomllib.load(handle)
-if type(policy.get("allow_managed_hooks_only")) is not bool:
-    raise SystemExit("allow_managed_hooks_only must be a boolean")
-if type(policy.get("allow_remote_control")) is not bool:
-    raise SystemExit("allow_remote_control must be a boolean")
-if policy == disabled:
-    print(0)
-elif policy == enabled:
-    print(sum(
-        len(binding["hooks"])
-        for event, bindings in policy["hooks"].items()
-        if event != "managed_dir"
-        for binding in bindings
-    ))
-else:
-    raise SystemExit("managed Codex policy differs from an authoritative enabled or disabled contract")
+print(sum(
+    len(binding["hooks"])
+    for event, bindings in policy.get("hooks", {}).items()
+    if event != "managed_dir"
+    for binding in bindings
+))
 PY
 }
 
@@ -233,30 +164,18 @@ if policy_output="$(run_agent_policy_contract "$REPO" "$LOCAL" 2>&1)"; then
 else
   bad "$policy_output"
 fi
-group policy 'explicit ownership and exact Firn provider bindings' "$before"
+group policy 'surface ownership · provider wiring generated from guard[]' "$before"
 
 # North-composed constitution plus hook/skill implementations from each owner.
 before=$fail
 hook_count=0
 if command -v shellcheck >/dev/null 2>&1; then
-  for hook_root in \
-    "$LIVE_AGENT_ROOT/current/provider-hooks" \
-    "$FIRN_INTEGRATION/hooks"; do
-    if [ ! -d "$hook_root" ]; then
-      if [ "$LOCAL" -eq 1 ]; then
-        bad "composed hook owner root is missing: $hook_root"
-      else
-        note "external hook owner root unavailable in repository-only mode: $hook_root"
-      fi
-      continue
-    fi
-    while IFS= read -r hook; do
-      hook_count=$((hook_count + 1))
-      if output="$(shellcheck -S warning "$hook" 2>&1)"; then
-        ok_detail "shellcheck ${hook##*/}"
-      else bad "shellcheck ${hook##*/}:\n$output"; fi
-    done < <(find "$hook_root" -maxdepth 1 -type f -name '*.sh' -print | sort)
-  done
+  while IFS= read -r hook; do
+    hook_count=$((hook_count + 1))
+    if output="$(shellcheck -S warning "$hook" 2>&1)"; then
+      ok_detail "shellcheck ${hook##*/}"
+    else bad "shellcheck ${hook##*/}:\n$output"; fi
+  done < <(find "$REPO/dotfiles/agents/hooks" -maxdepth 1 -type f -name '*.sh' ! -name '*.test.sh' -print | sort)
 else bad "shellcheck is required to lint shared hooks"; fi
 skill_count=0
 for skill_root in \
@@ -336,39 +255,20 @@ validate_codex_managed_policy() {
   CODEX_MANAGED_BINDINGS="$(
     codex_managed_policy_binding_count "$CODEX_REQUIREMENTS" 2>/dev/null
   )" || CODEX_MANAGED_BINDINGS=''
-  if [ "$CODEX_MANAGED_BINDINGS" = 14 ]; then
-    ok_detail 'Codex managed-only, fail-closed, remote-control-disabled policy is the exact 14-binding authoritative contract'
-  elif [ "$CODEX_MANAGED_BINDINGS" = 0 ]; then
-    ok_detail 'Codex managed hooks are authoritatively disabled; remote control remains disabled'
+  if [ -n "$CODEX_MANAGED_BINDINGS" ]; then
+    ok_detail "Codex managed policy has $CODEX_MANAGED_BINDINGS bindings generated from guard[]"
   else
-    bad 'Codex managed requirements differ from the authoritative hook contract'
+    bad 'Codex managed requirements are unreadable'
   fi
 
   local module="$REPO/modules/codex/default.bnix"
   local live resolved adapter expected_adapter
-  local -a provider_adapters=(
-    lib/north-agent-activation.sh
-    firn-system-policy
-    concrete-model-identity-guard.sh
-    launch-critical-worktree-guard.sh
-    lib/launch_critical_decide.py
-    lib/launch_critical_paths.py
-    tripwire-guard.sh
-    corpus-scan-guard.sh
-    resource-safe-search-guard.sh
-    modern-search-guard.sh
-    session-kill-guard.sh
-    lib/authoring-killswitch.sh
-    codex-behavior-guard.sh
-    lib/codex_behavior.py
-    lib/spawn_capacity.py
+  local -a provider_adapters
+  mapfile -t provider_adapters < <(
+    "$AGENT_CONFIG_PYTHON" "$REPO/scripts/agent-policy-contract.py" --repo "$REPO" --codex-adapters
   )
   if grep -Fq '(s flakeRoot "/modules/codex/requirements.toml")' "$module"; then :
   else bad 'Codex module does not install its managed requirements'; fi
-  for adapter in "${provider_adapters[@]}"; do
-    if grep -Fq "(providerAdapter \"$adapter\")" "$module"; then :
-    else bad "Codex module does not link provider adapter $adapter from the current North generation"; fi
-  done
   local runtime package binary
   local -a runtimes=(
     'bash|pkgs.bash|bash'

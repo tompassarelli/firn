@@ -8,27 +8,45 @@ hooks = true
 managed_dir = "/etc/codex/hooks"
 
 [[hooks.PreToolUse]]
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-system-policy"
-timeout = 10
-
-[[hooks.PreToolUse]]
 matcher = "^(Edit|Write|MultiEdit|apply_patch)$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
-timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/concrete-model-identity-guard.sh"
 timeout = 10
 
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
+timeout = 10
+
 [[hooks.PreToolUse]]
 matcher = "^Bash$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/concrete-model-identity-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/corpus-scan-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/modern-search-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/resource-safe-search-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/session-kill-guard.sh"
+timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
@@ -40,36 +58,16 @@ type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/launch-critical-worktree-guard.sh"
 timeout = 10
 
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/corpus-scan-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/resource-safe-search-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/modern-search-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/session-kill-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/concrete-model-identity-guard.sh"
-timeout = 10
-
 [[hooks.PreToolUse]]
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/codex-behavior-guard.sh"
+timeout = 10
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV /etc/codex/hooks/runtime/bash /etc/codex/hooks/firn-system-policy"
 timeout = 10
 
 [[hooks.PostToolUse]]

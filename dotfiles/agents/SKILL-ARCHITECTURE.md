@@ -30,14 +30,16 @@ or a second routinely loaded instruction set.
 
 ## Provider bindings
 
-`nixos-config:modules/codex/requirements.toml` declares the exact managed Codex
-policy. The worktree and concrete model guards each bind both edit and shell
-events; Firn system policy applies to every tool. The Codex-only behavior guard
-binds every tool before and after it runs, `UserPromptSubmit` and `Stop`, so a
-new behavior check is a change to its decider rather than a new binding and a
-shared-server restart. Provider binding contracts live in
-`nixos-config:dotfiles/agents/policy-owners.toml` and are checked by
-`nixos-config:scripts/agent-policy-contract.py`.
+`guard[]` in `nixos-config:dotfiles/agents/policy-owners.toml` is the one
+source of provider wiring: each hook's Claude and Codex events, and a reason
+for each provider it does not bind. `scripts/agent-policy-contract.py --repo .
+--write` generates `modules/north-profile/claude-hooks.json` and
+`modules/codex/requirements.toml` from it; the contract rejects a hand edit of
+either, a `default.bnix` provider adapter list other than the Codex-bound
+hooks plus `providerSupport`, and an undeclared asymmetry. The Codex-only
+behavior guard binds every tool before and after it runs, `UserPromptSubmit`
+and `Stop`, so a new behavior check is a change to its decider rather than a
+new binding.
 
 Hook implementations live under `nixos-config:dotfiles/agents/hooks/`; shared
 activation support lives under `nixos-config:dotfiles/agents/lib/`. Firn's
