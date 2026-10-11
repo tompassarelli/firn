@@ -150,3 +150,6 @@ and [docs/TAGS.md](docs/TAGS.md) for tag composition.
 Firn is dual-licensed under either the [MIT License](LICENSE-MIT) or the
 [Apache License, Version 2.0](LICENSE-APACHE), at your option
 (`MIT OR Apache-2.0`).
+
+`spawn-quiet ghostty --title=NAME -e claude --chrome "BRIEF"` uses North’s
+`chrome-tabs` launcher to record created tab IDs and reap them when the session ends.

@@ -32,6 +32,18 @@ cmd=( "$@" )
 case "$(basename -- "$1")" in
   ghostty) cmd=( "$1" "--class=$MARK" "${@:2}" ) ;;
 esac
+chrome_session=0
+for arg in "${cmd[@]}"; do
+  [[ "$arg" != --chrome ]] || chrome_session=1
+done
+if (( chrome_session )); then
+  for index in "${!cmd[@]}"; do
+    if [[ "$(basename -- "${cmd[index]}")" == claude ]]; then
+      cmd=( "${cmd[@]:0:index}" chrome-tabs run -- "${cmd[@]:index}" )
+      break
+    fi
+  done
+fi
 cmd=( env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_JOB_DIR -u CLAUDE_CODE_SESSION_ATTENDED "${cmd[@]}" )
 
 # Own systemd scope per window, so capacity tools attribute its load to it
