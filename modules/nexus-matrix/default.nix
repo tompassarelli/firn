@@ -6,6 +6,11 @@
     type = lib.types.str;
     description = "Matrix server_name, the suffix of user and room ids; with tls it is also the https host name";
   };
+  options.myConfig.modules.nexus-matrix.admins = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "Matrix ids that are server admins without joining the admin room, e.g. a bot that force-joins users through escaped admin commands";
+  };
   options.myConfig.modules.nexus-matrix.tls.enable = lib.mkEnableOption "https for the server name on wg-nexus port 443 through nginx with an ACME DNS-01 Cloudflare certificate";
   options.myConfig.modules.nexus-matrix.tls.credentialsSopsFile = lib.mkOption {
     type = lib.types.path;
@@ -25,6 +30,8 @@
           trusted_servers = [ ];
           allow_announcements_check = false;
           new_user_displayname_suffix = "";
+          admin_room_notices = false;
+          admins_list = cfg.admins;
         };
       };
       systemd.services.continuwuity.serviceConfig = {
