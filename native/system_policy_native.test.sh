@@ -30,6 +30,7 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
+trap 'printf "system-policy-native: line %s failed: %s\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 
 die() {
   printf 'system-policy-native: %s\n' "$*" >&2
