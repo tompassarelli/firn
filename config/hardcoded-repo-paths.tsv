@@ -12,7 +12,6 @@ north/bin/convo.test.sh	2
 north/bin/north-runtime-update	2
 north/bin/north-runtime-update.test.sh	6
 north/bin/wc3-login-field.test.sh	1
-north/socrates/hooks/codex-behavior-guard.test.sh	2
 north/socrates/hooks/launch-critical-worktree-guard.test.py	57
 north/socrates/hooks/launch-critical-worktree-guard.test.sh	16
 north/socrates/hooks/session-kill-guard.test.sh	1
