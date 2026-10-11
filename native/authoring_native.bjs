@@ -9,6 +9,7 @@
 (declare-extern host-write-text-atomic (Fn [Any String String] Any))
 (declare-extern host-list-directory-bounded (Fn [Any String Int] Any))
 (declare-extern host-run-inherit (Fn [Any (Vec String)] Int))
+(declare-extern host-run-galileo (Fn [Any String (Vec String)] Int))
 (declare-extern host-out (Fn [Any String] Nil))
 (declare-extern host-err (Fn [Any String] Nil))
 (declare-extern host-result-tag (Fn [Any] String))
@@ -199,6 +200,23 @@
       (do (host-out bridge (authoring/authoringplan-success-output plan)) 0)
       (child-status bridge "git" status))))
 
+(defn generate-created [bridge Any root String plan authoring/AuthoringPlan] Int
+  (let [targets (Vec authoring/AuthoringTarget) (authoring/authoringplan-targets plan)
+        files (Vec String)
+        (loop [index Int 0 paths (Vec String) []]
+          (if (>= index (count targets))
+            paths
+            (recur (+ index 1)
+              (conj paths (authoring/authoringtarget-relative (nth targets index))))))
+        check-status Int (host-run-galileo bridge root (into ["check"] files))]
+    (if (not= check-status 0)
+      (child-status bridge "galileo" check-status)
+      (let [build-status Int
+            (host-run-galileo bridge root (into ["build"] files))]
+        (if (= build-status 0)
+          (stage-created bridge root plan)
+          (child-status bridge "galileo" build-status))))))
+
 (defn run-scaffold
   [bridge Any root String action authoring/AuthoringAction] Int
   (match (load-schema-for-action bridge root action)
@@ -217,7 +235,7 @@
               (match (write-targets bridge root
                        (authoring/authoringplan-targets plan) 0)
                 [(OperationRejected message) (emit-error bridge message)]
-                [(OperationOk token) (stage-created bridge root plan)])])])])]))
+                [(OperationOk token) (generate-created bridge root plan)])])])])]))
 
 (defn yaml-entry? [entry String] Bool
   (and (authoring/ends-with? entry ".yaml")

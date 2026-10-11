@@ -115,24 +115,25 @@
 
 (def module-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:options.myConfig.modules.sample-tool.enable\n"
-    "    (lib.mkEnableOption \"Enable sample-tool\")\n"
-    "   :config\n"
-    "    (lib.mkIf config.myConfig.modules.sample-tool.enable\n"
-    "      {:environment.systemPackages (nix/with pkgs [sample-tool])})})\n"))
+    "use firn/tags\n"
+    "\n"
+    "sample-tool is a Module\n"
+    "\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  option myConfig.modules.sample-tool.enable: enable \"Enable sample-tool\"\n"
+    "  config when config.myConfig.modules.sample-tool.enable\n"
+    "    environment.systemPackages: [pkgs.sample-tool]\n"))
 
 (defn case-module-exact [] Bool
   (match (a/plan-authoring (a/->ModuleAdd "sample-tool") [])
     [(AuthoringPlanRejected message) false]
     [(AuthoringPlanReady plan)
      (and (= 1 (count (a/authoringplan-targets plan)))
-          (= (target-path plan 0) "modules/sample-tool/default.bnix")
+          (= (target-path plan 0) "modules/sample-tool/default.gal")
           (= (target-text plan 0) module-expected)
           (= (a/authoringplan-success-output plan)
-             "Created modules/sample-tool/default.bnix (git added)\n"))]))
+             "Created modules/sample-tool/default.gal (git added)\n"))]))
 
 (def service-schema (Vec a/SchemaEntry)
   [(a/->SchemaEntry "services.openssh.generateHostKeys" "bool")
@@ -151,23 +152,24 @@
 
 (def service-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:options.myConfig.modules.openssh.enable\n"
-    "    (lib.mkEnableOption \"openssh service\")\n"
-    "   :config\n"
-    "    (lib.mkIf config.myConfig.modules.openssh.enable\n"
-    "      {;; common options — uncomment to override:\n"
-    "       ;; :services.openssh.allowSFTP <value>   ; bool\n"
-    "       ;; :services.openssh.authorizedKeysCommand <value>   ; str\n"
-    "       ;; :services.openssh.authorizedKeysCommandUser <value>   ; str\n"
-    "       ;; :services.openssh.authorizedKeysFiles <value>   ; listOf\n"
-    "       ;; :services.openssh.authorizedKeysInHomedir <value>   ; bool\n"
-    "       ;; :services.openssh.enableRecommendedAlgorithms <value>   ; bool\n"
-    "       ;; :services.openssh.extraConfig <value>   ; separatedString\n"
-    "       ;; :services.openssh.generateHostKeys <value>   ; bool\n"
-    "       :services.openssh.enable true})})\n"))
+    "use firn/tags\n"
+    "\n"
+    "openssh is a Module\n"
+    "\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  option myConfig.modules.openssh.enable: enable \"openssh service\"\n"
+    "  config when config.myConfig.modules.openssh.enable\n"
+    "    # common options — uncomment to override:\n"
+    "    # services.openssh.allowSFTP: <value>   # bool\n"
+    "    # services.openssh.authorizedKeysCommand: <value>   # str\n"
+    "    # services.openssh.authorizedKeysCommandUser: <value>   # str\n"
+    "    # services.openssh.authorizedKeysFiles: <value>   # listOf\n"
+    "    # services.openssh.authorizedKeysInHomedir: <value>   # bool\n"
+    "    # services.openssh.enableRecommendedAlgorithms: <value>   # bool\n"
+    "    # services.openssh.extraConfig: <value>   # separatedString\n"
+    "    # services.openssh.generateHostKeys: <value>   # bool\n"
+    "    services.openssh.enable: true\n"))
 
 (defn case-service-exact [] Bool
   (let [(selected (Vec a/SchemaEntry))
@@ -181,44 +183,41 @@
                   (a/->TemplateService "openssh") service-schema)
            [(AuthoringPlanRejected message) false]
            [(AuthoringPlanReady plan)
-            (and (= (target-path plan 0) "modules/openssh/default.bnix")
+            (and (= (target-path plan 0) "modules/openssh/default.gal")
                  (= (target-text plan 0) service-expected)
                  (= (a/authoringplan-success-output plan)
                     (str
-                      "Created modules/openssh/default.bnix (git added)\n"
+                      "Created modules/openssh/default.gal (git added)\n"
                       "  pre-filled 8 common options as commented stubs "
                       "(from schema)\n")))]))))
 
 (def submodule-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:options.myConfig.modules.sample-submodule\n"
-    "    {:enable (lib.mkEnableOption \"sample-submodule configuration\")\n"
-    "     :extraConfig\n"
-    "      (lib.mkOption\n"
-    "        {:type        lib.types.lines\n"
-    "         :default     \"\"\n"
-    "         :description \"Extra config text.\"})}\n"
-    "   :config\n"
-    "    (lib.mkIf config.myConfig.modules.sample-submodule.enable\n"
-    "      {:environment.systemPackages\n"
-    "        (nix/with pkgs [sample-submodule])})})\n"))
+    "use firn/tags\n"
+    "\n"
+    "sample-submodule is a Module\n"
+    "\n"
+    "nix file\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  value\n"
+    "    options.myConfig.modules.sample-submodule\n"
+    "      enable: lib.mkEnableOption(\"sample-submodule configuration\")\n"
+    "      extraConfig: lib.mkOption({type: lib.types.lines, default: \"\", description: \"Extra config text.\"})\n"
+    "    config when config.myConfig.modules.sample-submodule.enable\n"
+    "      environment.systemPackages: [pkgs.sample-submodule]\n"))
 
 (def home-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  (let [username config.myConfig.modules.users.username]\n"
-    "    {:options.myConfig.modules.sample-home.enable\n"
-    "      (lib.mkEnableOption \"sample-home (home-manager)\")\n"
-    "     :config\n"
-    "      (lib.mkIf config.myConfig.modules.sample-home.enable\n"
-    "        {:home-manager.users\n"
-    "          {username\n"
-    "            {:programs.sample-home.enable true}}})}))\n"))
+    "use firn/tags\n"
+    "\n"
+    "sample-home is a Module\n"
+    "\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  let username = config.myConfig.modules.users.username\n"
+    "  option myConfig.modules.sample-home.enable: enable \"sample-home (home-manager)\"\n"
+    "  config when config.myConfig.modules.sample-home.enable\n"
+    "    home-manager.users.{username}.programs.sample-home.enable: true\n"))
 
 (defn case-module-templates-exact [] Bool
   (and
@@ -234,41 +233,44 @@
 
 (def host-configuration-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns configuration)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:myConfig.modules.system.stateVersion \"25.11\"\n"
-    "   :myConfig.modules.users.username \"you\"\n"
-    "   :myConfig.modules.users.enable true\n"
-    "   :myConfig.modules.boot.enable true\n"
-    "   :myConfig.modules.networking.enable true\n"
-    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
+    "use hosts/sample-host/enabled-tags\n"
+    "\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  imports: [./_generated-enables.nix]\n"
+    "  config\n"
+    "    myConfig.modules.system.stateVersion: \"25.11\"\n"
+    "    myConfig.modules.users.username: \"you\"\n"
+    "    myConfig.modules.users.enable: true\n"
+    "    myConfig.modules.boot.enable: true\n"
+    "    myConfig.modules.networking.enable: true\n"))
 
 (def host-tags-expected String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns enabled-tags)\n\n"
-    "{:platform linux\n"
-    " :enabled\n"
-    "  [terminal\n"
-    "   cli-tools\n"
-    "   development]\n"
-    " :disabled []}\n"))
+    "use firn/tags\n"
+    "\n"
+    "sample-host is a Host\n"
+    "linux is a Platform\n"
+    "terminal is a Tag\n"
+    "cli-tools is a Tag\n"
+    "development is a Tag\n"
+    "sample-host runs linux\n"
+    "sample-host enables [terminal, cli-tools, development]\n"))
 
 (defn case-host-exact [] Bool
   (match (a/plan-authoring (a/->TemplateHost "sample-host") [])
     [(AuthoringPlanRejected message) false]
     [(AuthoringPlanReady plan)
      (and (= 2 (count (a/authoringplan-targets plan)))
-          (= (target-path plan 0) "hosts/sample-host/configuration.bnix")
+          (= (target-path plan 0) "hosts/sample-host/configuration.gal")
           (= (target-text plan 0) host-configuration-expected)
-          (= (target-path plan 1) "hosts/sample-host/enabled-tags.bnix")
+          (= (target-path plan 1) "hosts/sample-host/enabled-tags.gal")
           (= (target-text plan 1) host-tags-expected)
           (= (a/authoringplan-success-output plan)
              (str
-               "Created hosts/sample-host/configuration.bnix (git added)\n"
-               "Created hosts/sample-host/enabled-tags.bnix (git added)\n"
-               "Don't forget to add sample-host to flake.bnix's "
+               "Created hosts/sample-host/configuration.gal (git added)\n"
+               "Created hosts/sample-host/enabled-tags.gal (git added)\n"
+               "Don't forget to add sample-host to flake.gal's "
                "nixosConfigurations.\n")))]))
 
 (defn case-schema-json-name-authority [] Bool
@@ -294,17 +296,18 @@
     [(AuthoringPlanReady plan)
      (and (= (target-text plan 0)
              (str
-               "#lang beagle/nix\n\n"
-               "(ns default)\n\n"
-               "(nix/module [config lib pkgs ...]\n"
-               "  {:options.myConfig.modules.openssh.enable\n"
-               "    (lib.mkEnableOption \"openssh service\")\n"
-               "   :config\n"
-               "    (lib.mkIf config.myConfig.modules.openssh.enable\n"
-               "      {:services.openssh.enable true})})\n"))
+               "use firn/tags\n"
+               "\n"
+               "openssh is a Module\n"
+               "\n"
+               "nix module\n"
+               "  arguments: config, lib, pkgs, ...\n"
+               "  option myConfig.modules.openssh.enable: enable \"openssh service\"\n"
+               "  config when config.myConfig.modules.openssh.enable\n"
+               "    services.openssh.enable: true\n"))
           (= (a/authoringplan-success-output plan)
              (str
-               "Created modules/openssh/default.bnix (git added)\n"
+               "Created modules/openssh/default.gal (git added)\n"
                "  (no schema entries found for services.openssh — schema "
                "cache stale or service not in nixpkgs?)\n")))]))
 

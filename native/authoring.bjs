@@ -371,99 +371,89 @@
 
 (defn module-body [name String] String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:options.myConfig.modules." name ".enable\n"
-    "    (lib.mkEnableOption \"Enable " name "\")\n"
-    "   :config\n"
-    "    (lib.mkIf config.myConfig.modules." name ".enable\n"
-    "      {:environment.systemPackages (nix/with pkgs [" name "])})})\n"))
+    "use firn/tags\n\n"
+    name " is a Module\n\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  option myConfig.modules." name ".enable: enable \"Enable " name "\"\n"
+    "  config when config.myConfig.modules." name ".enable\n"
+    "    environment.systemPackages: [pkgs." name "]\n"))
 
 (defn service-stub-lines [entries (Vec SchemaEntry)] String
   (if (empty? entries)
     ""
     (str
-      "      {;; common options — uncomment to override:\n"
+      "    # common options — uncomment to override:\n"
       (loop [index Int 0
              text String ""]
         (if (>= index (count entries))
           text
           (let [entry SchemaEntry (nth entries index)]
             (recur (+ index 1)
-              (str text "       ;; :" (schemaentry-name entry)
-                " <value>   ; " (schemaentry-type entry) "\n"))))))))
+              (str text "    # " (schemaentry-name entry)
+                ": <value>   # " (schemaentry-type entry) "\n"))))))))
 
 (defn service-body
   [name String
    entries (Vec SchemaEntry)] String
   (let [selected (Vec SchemaEntry) (selected-service-entries entries name)]
     (str
-      "#lang beagle/nix\n\n"
-      "(ns default)\n\n"
-      "(nix/module [config lib pkgs ...]\n"
-      "  {:options.myConfig.modules." name ".enable\n"
-      "    (lib.mkEnableOption \"" name " service\")\n"
-      "   :config\n"
-      "    (lib.mkIf config.myConfig.modules." name ".enable\n"
-      (if (empty? selected)
-        (str "      {:services." name ".enable true})})\n")
-        (str (service-stub-lines selected)
-          "       :services." name ".enable true})})\n")))))
+      "use firn/tags\n\n"
+      name " is a Module\n\n"
+      "nix module\n"
+      "  arguments: config, lib, pkgs, ...\n"
+      "  option myConfig.modules." name ".enable: enable \"" name " service\"\n"
+      "  config when config.myConfig.modules." name ".enable\n"
+      (service-stub-lines selected)
+      "    services." name ".enable: true\n")))
 
 (defn submodule-body [name String] String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:options.myConfig.modules." name "\n"
-    "    {:enable (lib.mkEnableOption \"" name " configuration\")\n"
-    "     :extraConfig\n"
-    "      (lib.mkOption\n"
-    "        {:type        lib.types.lines\n"
-    "         :default     \"\"\n"
-    "         :description \"Extra config text.\"})}\n"
-    "   :config\n"
-    "    (lib.mkIf config.myConfig.modules." name ".enable\n"
-    "      {:environment.systemPackages\n"
-    "        (nix/with pkgs [" name "])})})\n"))
+    "use firn/tags\n\n"
+    name " is a Module\n\n"
+    "nix file\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  value\n"
+    "    options.myConfig.modules." name "\n"
+    "      enable: lib.mkEnableOption(\"" name " configuration\")\n"
+    "      extraConfig: lib.mkOption({type: lib.types.lines, default: \"\", description: \"Extra config text.\"})\n"
+    "    config when config.myConfig.modules." name ".enable\n"
+    "      environment.systemPackages: [pkgs." name "]\n"))
 
 (defn home-body [name String] String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns default)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  (let [username config.myConfig.modules.users.username]\n"
-    "    {:options.myConfig.modules." name ".enable\n"
-    "      (lib.mkEnableOption \"" name " (home-manager)\")\n"
-    "     :config\n"
-    "      (lib.mkIf config.myConfig.modules." name ".enable\n"
-    "        {:home-manager.users\n"
-    "          {username\n"
-    "            {:programs." name ".enable true}}})}))\n"))
+    "use firn/tags\n\n"
+    name " is a Module\n\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  let username = config.myConfig.modules.users.username\n"
+    "  option myConfig.modules." name ".enable: enable \"" name " (home-manager)\"\n"
+    "  config when config.myConfig.modules." name ".enable\n"
+    "    home-manager.users.{username}.programs." name ".enable: true\n"))
 
 (defn host-configuration-body [name String] String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns configuration)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    "  {:myConfig.modules.system.stateVersion \"25.11\"\n"
-    "   :myConfig.modules.users.username \"you\"\n"
-    "   :myConfig.modules.users.enable true\n"
-    "   :myConfig.modules.boot.enable true\n"
-    "   :myConfig.modules.networking.enable true\n"
-    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
+    "use hosts/" name "/enabled-tags\n\n"
+    "nix module\n"
+    "  arguments: config, lib, pkgs, ...\n"
+    "  imports: [./_generated-enables.nix]\n"
+    "  config\n"
+    "    myConfig.modules.system.stateVersion: \"25.11\"\n"
+    "    myConfig.modules.users.username: \"you\"\n"
+    "    myConfig.modules.users.enable: true\n"
+    "    myConfig.modules.boot.enable: true\n"
+    "    myConfig.modules.networking.enable: true\n"))
 
-(defn host-tags-body [] String
+(defn host-tags-body [name String] String
   (str
-    "#lang beagle/nix\n\n"
-    "(ns enabled-tags)\n\n"
-    "{:platform linux\n"
-    " :enabled\n"
-    "  [terminal\n"
-    "   cli-tools\n"
-    "   development]\n"
-    " :disabled []}\n"))
+    "use firn/tags\n\n"
+    name " is a Host\n"
+    "linux is a Platform\n"
+    "terminal is a Tag\n"
+    "cli-tools is a Tag\n"
+    "development is a Tag\n"
+    name " runs linux\n"
+    name " enables [terminal, cli-tools, development]\n"))
 
 (defn service-summary
   [name String
@@ -494,7 +484,7 @@
      (if (safe-authoring-name? name)
        (->AuthoringPlanReady
          (single-plan
-           (str "modules/" name "/default.bnix")
+           (str "modules/" name "/default.gal")
            (module-body name) ""))
        (invalid-authoring-name))]
     [(TemplateService name)
@@ -502,7 +492,7 @@
        (let [selected (Vec SchemaEntry) (selected-service-entries schema name)]
          (->AuthoringPlanReady
            (single-plan
-             (str "modules/" name "/default.bnix")
+             (str "modules/" name "/default.gal")
              (service-body name schema)
              (service-summary name (count selected)))))
        (invalid-authoring-name))]
@@ -510,30 +500,30 @@
      (if (safe-authoring-name? name)
        (->AuthoringPlanReady
          (single-plan
-           (str "modules/" name "/default.bnix")
+           (str "modules/" name "/default.gal")
            (submodule-body name) ""))
        (invalid-authoring-name))]
     [(TemplateHome name)
      (if (safe-authoring-name? name)
        (->AuthoringPlanReady
          (single-plan
-           (str "modules/" name "/default.bnix")
+           (str "modules/" name "/default.gal")
            (home-body name) ""))
        (invalid-authoring-name))]
     [(TemplateHost name)
      (if (safe-authoring-name? name)
-       (let [configuration String (str "hosts/" name "/configuration.bnix")
-             tags String (str "hosts/" name "/enabled-tags.bnix")]
+       (let [configuration String (str "hosts/" name "/configuration.gal")
+             tags String (str "hosts/" name "/enabled-tags.gal")]
          (->AuthoringPlanReady
            (->AuthoringPlan
              [(->AuthoringTarget configuration
                 (host-configuration-body name))
-              (->AuthoringTarget tags (host-tags-body))]
+              (->AuthoringTarget tags (host-tags-body name))]
              (str
                "Created " configuration " (git added)\n"
                "Created " tags " (git added)\n"
                "Don't forget to add " name
-               " to flake.bnix's nixosConfigurations.\n"))))
+               " to flake.gal's nixosConfigurations.\n"))))
        (invalid-authoring-name))]
     [(SecretList token)
      (->AuthoringPlanRejected "firn authoring: not a scaffold command\n")]

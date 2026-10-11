@@ -36,11 +36,11 @@ die() {
   exit 1
 }
 
-for command in bash bun cmp find git rg timeout; do
+for command in bash bun cmp find galileo git nix-instantiate rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle" ]] \
+[[ -x "$beagle/bin/beagle-build-all" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 
 json="$beagle/native-core/src/native/json.bjs"
@@ -51,7 +51,7 @@ bridge="$repo/native/authoring_host.mjs"
 
 printf 'authoring-js: building one closed typed family graph\n' >&2
 mkdir -p "$scratch/build"
-timeout --foreground 120 "$beagle/bin/beagle" build \
+timeout --foreground 120 "$beagle/bin/beagle-build-all" \
   "$json" "$core" "$pure" "$native" --out "$scratch/build" \
   >"$scratch/build.out" 2>"$scratch/build.err" \
   || {
@@ -62,6 +62,11 @@ pure_js="$(find "$scratch/build" -name authoring-test.js -print -quit)"
 native_js="$(find "$scratch/build" -name authoring-native.js -print -quit)"
 [[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
 [[ -n "$native_js" && -f "$native_js" ]] || die "authoring module was not emitted"
+mkdir -p "$scratch/build/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/build/node_modules/beagle/core.js"
+printf '%s\n' '{"name":"beagle","type":"module"}' \
+  >"$scratch/build/node_modules/beagle/package.json"
 
 cat >"$scratch/authoring-test" <<EOF
 #!/usr/bin/env bash
@@ -139,9 +144,11 @@ EOF
 chmod +x "$fakebin/git" "$fakebin/sops"
 
 last_status=0
+scenario_count=0
 run_cli() {
   local name="$1" log="$2"
   shift 2
+  scenario_count=$((scenario_count + 1))
   set +e
   timeout --foreground 30 env \
     PATH="$fakebin:$PATH" \
@@ -180,30 +187,29 @@ run_cli module "$module_log" \
   "$scratch/authoring-native" module add sample-tool
 expect_status module 0
 expect_empty "$scratch/module.err" "module stderr"
-printf '%s\n' 'Created modules/sample-tool/default.bnix (git added)' \
+printf '%s\n' 'Created modules/sample-tool/default.gal (git added)' \
   >"$scratch/module.expected.out"
 assert_file "$scratch/module.out" "$scratch/module.expected.out" \
   "module stdout"
-cat >"$scratch/module.expected.bnix" <<'EOF'
-#lang beagle/nix
+cat >"$scratch/module.expected.gal" <<'EOF'
+use firn/tags
 
-(ns default)
+sample-tool is a Module
 
-(nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.sample-tool.enable
-    (lib.mkEnableOption "Enable sample-tool")
-   :config
-    (lib.mkIf config.myConfig.modules.sample-tool.enable
-      {:environment.systemPackages (nix/with pkgs [sample-tool])})})
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.sample-tool.enable: enable "Enable sample-tool"
+  config when config.myConfig.modules.sample-tool.enable
+    environment.systemPackages: [pkgs.sample-tool]
 EOF
-assert_file "$fixture/modules/sample-tool/default.bnix" \
-  "$scratch/module.expected.bnix" "module bytes"
+assert_file "$fixture/modules/sample-tool/default.gal" \
+  "$scratch/module.expected.gal" "module bytes"
 printf 'git\t<-C>\t<%s>\t<add>\t<-->\t<%s>\n' \
-  "$fixture" "$fixture/modules/sample-tool/default.bnix" \
+  "$fixture" "$fixture/modules/sample-tool/default.gal" \
   >"$scratch/module.expected.log"
 assert_file "$module_log" "$scratch/module.expected.log" "module git argv"
 
-module_hash="$(sha256sum "$fixture/modules/sample-tool/default.bnix")"
+module_hash="$(sha256sum "$fixture/modules/sample-tool/default.gal")"
 module_log_bytes="$(wc -c <"$module_log")"
 run_cli module-again "$module_log" \
   "$scratch/authoring-native" module add sample-tool
@@ -213,7 +219,7 @@ printf '%s\n' 'Module sample-tool already exists' \
   >"$scratch/module-again.expected.err"
 assert_file "$scratch/module-again.err" "$scratch/module-again.expected.err" \
   "repeat module stderr"
-[[ "$(sha256sum "$fixture/modules/sample-tool/default.bnix")" == \
+[[ "$(sha256sum "$fixture/modules/sample-tool/default.gal")" == \
    "$module_hash" ]] || die "repeat module changed existing bytes"
 [[ "$(wc -c <"$module_log")" == "$module_log_bytes" ]] \
   || die "repeat module invoked git"
@@ -224,34 +230,33 @@ run_cli service "$service_log" \
 expect_status service 0
 expect_empty "$scratch/service.err" "service stderr"
 cat >"$scratch/service.expected.out" <<'EOF'
-Created modules/openssh/default.bnix (git added)
+Created modules/openssh/default.gal (git added)
   pre-filled 8 common options as commented stubs (from schema)
 EOF
 assert_file "$scratch/service.out" "$scratch/service.expected.out" \
   "service stdout"
-cat >"$scratch/service.expected.bnix" <<'EOF'
-#lang beagle/nix
+cat >"$scratch/service.expected.gal" <<'EOF'
+use firn/tags
 
-(ns default)
+openssh is a Module
 
-(nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.openssh.enable
-    (lib.mkEnableOption "openssh service")
-   :config
-    (lib.mkIf config.myConfig.modules.openssh.enable
-      {;; common options — uncomment to override:
-       ;; :services.openssh.allowSFTP <value>   ; bool
-       ;; :services.openssh.authorizedKeysCommand <value>   ; str
-       ;; :services.openssh.authorizedKeysCommandUser <value>   ; str
-       ;; :services.openssh.authorizedKeysFiles <value>   ; listOf
-       ;; :services.openssh.authorizedKeysInHomedir <value>   ; bool
-       ;; :services.openssh.enableRecommendedAlgorithms <value>   ; bool
-       ;; :services.openssh.extraConfig <value>   ; separatedString
-       ;; :services.openssh.generateHostKeys <value>   ; bool
-       :services.openssh.enable true})})
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.openssh.enable: enable "openssh service"
+  config when config.myConfig.modules.openssh.enable
+    # common options — uncomment to override:
+    # services.openssh.allowSFTP: <value>   # bool
+    # services.openssh.authorizedKeysCommand: <value>   # str
+    # services.openssh.authorizedKeysCommandUser: <value>   # str
+    # services.openssh.authorizedKeysFiles: <value>   # listOf
+    # services.openssh.authorizedKeysInHomedir: <value>   # bool
+    # services.openssh.enableRecommendedAlgorithms: <value>   # bool
+    # services.openssh.extraConfig: <value>   # separatedString
+    # services.openssh.generateHostKeys: <value>   # bool
+    services.openssh.enable: true
 EOF
-assert_file "$fixture/modules/openssh/default.bnix" \
-  "$scratch/service.expected.bnix" "service bytes"
+assert_file "$fixture/modules/openssh/default.gal" \
+  "$scratch/service.expected.gal" "service bytes"
 
 for template in submodule home; do
   name="sample-$template"
@@ -260,20 +265,17 @@ for template in submodule home; do
     "$scratch/authoring-native" template "$template" "$name"
   expect_status "$template" 0
   expect_empty "$scratch/$template.err" "$template stderr"
-  printf 'Created modules/%s/default.bnix (git added)\n' "$name" \
+  printf 'Created modules/%s/default.gal (git added)\n' "$name" \
     >"$scratch/$template.expected.out"
   assert_file "$scratch/$template.out" "$scratch/$template.expected.out" \
     "$template stdout"
-  rg -Fx '(ns default)' "$fixture/modules/$name/default.bnix" >/dev/null \
-    || die "$template did not emit the canonical namespace"
-  rg -F '(nix/module [config lib pkgs ...]' \
-    "$fixture/modules/$name/default.bnix" >/dev/null \
-    || die "$template did not emit nix/module"
+  rg -Fx "$name is a Module" "$fixture/modules/$name/default.gal" >/dev/null \
+    || die "$template did not emit its module fact"
 done
 rg -F 'sample-submodule configuration' \
-  "$fixture/modules/sample-submodule/default.bnix" >/dev/null \
+  "$fixture/modules/sample-submodule/default.gal" >/dev/null \
   || die "submodule kept a literal formatter placeholder"
-if rg -F '~a' "$fixture/modules/sample-submodule/default.bnix" >/dev/null; then
+if rg -F '~a' "$fixture/modules/sample-submodule/default.gal" >/dev/null; then
   die "submodule emitted a literal formatter placeholder"
 fi
 
@@ -283,64 +285,63 @@ run_cli host "$host_log" \
 expect_status host 0
 expect_empty "$scratch/host.err" "host stderr"
 cat >"$scratch/host.expected.out" <<'EOF'
-Created hosts/sample-host/configuration.bnix (git added)
-Created hosts/sample-host/enabled-tags.bnix (git added)
-Don't forget to add sample-host to flake.bnix's nixosConfigurations.
+Created hosts/sample-host/configuration.gal (git added)
+Created hosts/sample-host/enabled-tags.gal (git added)
+Don't forget to add sample-host to flake.gal's nixosConfigurations.
 EOF
 assert_file "$scratch/host.out" "$scratch/host.expected.out" "host stdout"
-cat >"$scratch/host.expected.configuration.bnix" <<'EOF'
-#lang beagle/nix
+cat >"$scratch/host.expected.configuration.gal" <<'EOF'
+use hosts/sample-host/enabled-tags
 
-(ns configuration)
-
-(nix/module [config lib pkgs ...]
-  {:myConfig.modules.system.stateVersion "25.11"
-   :myConfig.modules.users.username "you"
-   :myConfig.modules.users.enable true
-   :myConfig.modules.boot.enable true
-   :myConfig.modules.networking.enable true
-   :imports [(p "./_generated-enables.nix")]})
+nix module
+  arguments: config, lib, pkgs, ...
+  imports: [./_generated-enables.nix]
+  config
+    myConfig.modules.system.stateVersion: "25.11"
+    myConfig.modules.users.username: "you"
+    myConfig.modules.users.enable: true
+    myConfig.modules.boot.enable: true
+    myConfig.modules.networking.enable: true
 EOF
-cat >"$scratch/host.expected.tags.bnix" <<'EOF'
-#lang beagle/nix
+cat >"$scratch/host.expected.tags.gal" <<'EOF'
+use firn/tags
 
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [terminal
-   cli-tools
-   development]
- :disabled []}
+sample-host is a Host
+linux is a Platform
+terminal is a Tag
+cli-tools is a Tag
+development is a Tag
+sample-host runs linux
+sample-host enables [terminal, cli-tools, development]
 EOF
-assert_file "$fixture/hosts/sample-host/configuration.bnix" \
-  "$scratch/host.expected.configuration.bnix" "host configuration bytes"
-assert_file "$fixture/hosts/sample-host/enabled-tags.bnix" \
-  "$scratch/host.expected.tags.bnix" "host tag bytes"
+assert_file "$fixture/hosts/sample-host/configuration.gal" \
+  "$scratch/host.expected.configuration.gal" "host configuration bytes"
+assert_file "$fixture/hosts/sample-host/enabled-tags.gal" \
+  "$scratch/host.expected.tags.gal" "host tag bytes"
 printf 'git\t<-C>\t<%s>\t<add>\t<-->\t<%s>\t<%s>\n' \
   "$fixture" \
-  "$fixture/hosts/sample-host/configuration.bnix" \
-  "$fixture/hosts/sample-host/enabled-tags.bnix" \
+  "$fixture/hosts/sample-host/configuration.gal" \
+  "$fixture/hosts/sample-host/enabled-tags.gal" \
   >"$scratch/host.expected.log"
 assert_file "$host_log" "$scratch/host.expected.log" "host git argv"
 
 mkdir -p "$fixture/hosts/collision-host"
 printf '%s\n' 'preserve' \
-  >"$fixture/hosts/collision-host/enabled-tags.bnix"
+  >"$fixture/hosts/collision-host/enabled-tags.gal"
 collision_log="$scratch/collision.log"
 run_cli collision "$collision_log" \
   "$scratch/authoring-native" template host collision-host
 expect_status collision 1
 expect_empty "$scratch/collision.out" "collision stdout"
 printf 'firn scaffold: refusing to overwrite %s\n' \
-  "$fixture/hosts/collision-host/enabled-tags.bnix" \
+  "$fixture/hosts/collision-host/enabled-tags.gal" \
   >"$scratch/collision.expected.err"
 assert_file "$scratch/collision.err" "$scratch/collision.expected.err" \
   "collision stderr"
-[[ ! -e "$fixture/hosts/collision-host/configuration.bnix" ]] \
+[[ ! -e "$fixture/hosts/collision-host/configuration.gal" ]] \
   || die "host collision created the earlier target"
 [[ ! -e "$collision_log" ]] || die "host collision invoked git"
-[[ "$(<"$fixture/hosts/collision-host/enabled-tags.bnix")" == preserve ]] \
+[[ "$(<"$fixture/hosts/collision-host/enabled-tags.gal")" == preserve ]] \
   || die "host collision changed the existing target"
 
 invalid_log="$scratch/invalid-name.log"
@@ -361,13 +362,87 @@ run_cli git-failure "$git_failure_log" \
 expect_status git-failure 29
 expect_empty "$scratch/git-failure.out" "failed git success output"
 expect_empty "$scratch/git-failure.err" "failed git stderr"
-[[ -f "$fixture/modules/git-failure/default.bnix" ]] \
+[[ -f "$fixture/modules/git-failure/default.gal" ]] \
   || die "git failure lost the complete authored file"
 printf 'git\t<-C>\t<%s>\t<add>\t<-->\t<%s>\n' \
-  "$fixture" "$fixture/modules/git-failure/default.bnix" \
+  "$fixture" "$fixture/modules/git-failure/default.gal" \
   >"$scratch/git-failure.expected.log"
 assert_file "$git_failure_log" "$scratch/git-failure.expected.log" \
   "failed git argv"
+
+printf 'authoring-native: Galileo check/build and intended Nix semantics\n' >&2
+(
+  cd "$fixture"
+  galileo check modules hosts/sample-host >"$scratch/galileo-check.out" 2>"$scratch/galileo-check.err"
+  galileo build --check modules hosts/sample-host >"$scratch/galileo-build.out" 2>"$scratch/galileo-build.err"
+) || die "authored Galileo source or generated Nix failed"
+for module_kind in sample-tool openssh sample-submodule sample-home; do
+  [[ -f "$fixture/modules/$module_kind/default.nix" ]] \
+    || die "$module_kind did not generate Nix"
+done
+[[ "$(rg -c 'type = lib\.types\.lines;' "$fixture/modules/sample-submodule/default.nix")" == 1 ]] \
+  || die "submodule lines type did not occur exactly once"
+[[ -f "$fixture/hosts/sample-host/configuration.nix" ]] \
+  || die "host did not generate Nix"
+[[ ! -e "$fixture/hosts/sample-host/enabled-tags.nix" ]] \
+  || die "host facts generated an unintended Nix file"
+
+check_nix() {
+  local relative="$1" enabled="$2" expected="$3"
+  local expression
+  expression="$(cat <<EOF
+let
+  actual = import $fixture/$relative {
+    config.myConfig.modules = {
+      sample-tool.enable = $enabled;
+      openssh.enable = $enabled;
+      sample-submodule.enable = $enabled;
+      sample-home.enable = $enabled;
+      users.username = "tester";
+    };
+    lib = {
+      mkEnableOption = description: { inherit description; };
+      mkOption = value: value;
+      mkIf = condition: value: if condition then value else {};
+      types.lines = "lines";
+    };
+    pkgs = {
+      sample-tool = "sample-tool-package";
+      sample-submodule = "sample-submodule-package";
+    };
+  };
+in builtins.removeAttrs actual ["imports"] == ($expected)
+EOF
+)"
+  [[ "$(nix-instantiate --eval --strict --expr "$expression")" == true ]] \
+    || die "$relative emitted unexpected Nix for enable=$enabled"
+}
+
+for enabled in true false; do
+  package_config='{}'
+  submodule_config='{}'
+  service_config='{}'
+  home_config='{}'
+  if [[ "$enabled" == true ]]; then
+    package_config='{environment.systemPackages = ["sample-tool-package"];}'
+    submodule_config='{environment.systemPackages = ["sample-submodule-package"];}'
+    service_config='{services.openssh.enable = true;}'
+    home_config='{home-manager.users.tester.programs.sample-home.enable = true;}'
+  fi
+  check_nix modules/sample-tool/default.nix "$enabled" \
+    "{options.myConfig.modules.sample-tool.enable.description = \"Enable sample-tool\"; config = $package_config;}"
+  check_nix modules/openssh/default.nix "$enabled" \
+    "{options.myConfig.modules.openssh.enable.description = \"openssh service\"; config = $service_config;}"
+  check_nix modules/sample-submodule/default.nix "$enabled" \
+    "{options.myConfig.modules.sample-submodule = {enable.description = \"sample-submodule configuration\"; extraConfig = {type = \"lines\"; default = \"\"; description = \"Extra config text.\";};}; config = $submodule_config;}"
+  check_nix modules/sample-home/default.nix "$enabled" \
+    "{options.myConfig.modules.sample-home.enable.description = \"sample-home (home-manager)\"; config = $home_config;}"
+done
+check_nix hosts/sample-host/configuration.nix true \
+  '{config.myConfig.modules = {system.stateVersion = "25.11"; users.username = "you"; users.enable = true; boot.enable = true; networking.enable = true;};}'
+[[ "$(nix-instantiate --eval --strict --expr "let m = import $fixture/hosts/sample-host/configuration.nix {config = {}; lib = {}; pkgs = {};}; in map toString m.imports")" == \
+   "[ \"$fixture/hosts/sample-host/_generated-enables.nix\" ]" ]] \
+  || die "host imports changed"
 
 printf 'authoring-native: controlled inherited secret effects\n' >&2
 
@@ -512,4 +587,4 @@ assert_file "$scratch/usage.err" "$scratch/usage.expected.err" \
   "usage stderr"
 [[ ! -e "$usage_log" ]] || die "usage error spawned a child"
 
-printf 'ok: typed JS Firn authoring and inherited secret effects pass\n'
+printf 'ok: 8 pure fixtures, %s effect scenarios, 5 Galileo scaffolds, 10 Nix semantic checks pass\n' "$scenario_count"

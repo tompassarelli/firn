@@ -33,6 +33,7 @@ globalThis.host_write_text_atomic = (bridge, path, text) =>
 globalThis.host_list_directory_bounded = (bridge, path, limit) =>
   bridge.listDirectoryBounded(path, limit);
 globalThis.host_run_inherit = (bridge, argv) => bridge.runInherit(argv);
+globalThis.host_run_galileo = (bridge, root, argv) => bridge.runGalileo(root, argv);
 globalThis.host_out = (bridge, text) => bridge.out(text);
 globalThis.host_err = (bridge, text) => bridge.err(text);
 globalThis.host_result_tag = result => String(result.tag);
@@ -88,6 +89,24 @@ const bridge = Object.freeze({
         stderr: 'inherit',
       });
       return child.exitCode ?? 1;
+    } catch (error) { return -errnoOf(error); }
+  },
+  runGalileo(root, argv) {
+    try {
+      const child = Bun.spawnSync({
+        cmd: ['galileo', ...argv],
+        cwd: root,
+        env: process.env,
+        stdin: 'ignore',
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+      const status = child.exitCode ?? 1;
+      if (status !== 0) {
+        process.stdout.write(child.stdout);
+        process.stderr.write(child.stderr);
+      }
+      return status;
     } catch (error) { return -errnoOf(error); }
   },
 });
