@@ -1,38 +1,40 @@
 #lang beagle/js
 (ns firn.schema-transaction-test
-  (:require [clojure.string :as str]
-            [firn.schema-transaction :as transaction]))
+  (:require [clojure.string :as str] [firn.schema-transaction :as transaction]))
 
-(defrecord TestResult
-  [name String
-   passed Bool])
+(defn tool-files [seed Int] (Vec transaction/ToolFile)
+  [
+    (transaction/->ToolFile
+      "bin/beagle-extract-schema"
+      (str "extract-v1" (if (= seed 0) "" seed) "\n"))
+    (transaction/->ToolFile "bin/beagle-validate" (str "validate-v1" (if (= seed 0) "" seed) "\n"))
+    (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n")])
 
-(def tool-files (Vec transaction/ToolFile)
-  [(transaction/->ToolFile "bin/beagle-extract-schema" "extract-v1\n")
-   (transaction/->ToolFile "bin/beagle-validate" "validate-v1\n")
-   (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n")])
+(defn changed-tool-files [seed Int] (Vec transaction/ToolFile)
+  [
+    (transaction/->ToolFile
+      "bin/beagle-extract-schema"
+      (str "extract-v1" (if (= seed 0) "" seed) "\n"))
+    (transaction/->ToolFile "bin/beagle-validate" (str "validate-v1" (if (= seed 0) "" seed) "\n"))
+    (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n2\n")])
 
-(def changed-tool-files (Vec transaction/ToolFile)
-  [(transaction/->ToolFile "bin/beagle-extract-schema" "extract-v1\n")
-   (transaction/->ToolFile "bin/beagle-validate" "validate-v1\n")
-   (transaction/->ToolFile "beagle-lib/schema.rkt" "#lang racket/base\n2\n")])
-
-(defn lock-source
-  [nixpkgs-rev String
-   darwin-rev String
-   north-rev String]
-  String
+(defn lock-source [seed Int nixpkgs-rev String darwin-rev String north-rev String] String
   (str
     "{\"nodes\":{"
     "\"north-node\":{\"locked\":{\"rev\":"
-    "\"" north-rev "\",\"narHash\":\"north\"}},"
+    "\""
+    north-rev
+    "\",\"narHash\":\"north\"}},"
     "\"darwin-node\":{\"locked\":{\"rev\":"
-    "\"" darwin-rev "\",\"narHash\":\"darwin\"}},"
+    "\""
+    darwin-rev
+    "\",\"narHash\":\"darwin\"}},"
     "\"hm-node\":{\"locked\":{\"rev\":\"hm-1\","
     "\"narHash\":\"hm\"}},"
     "\"nixpkgs-node\":{"
     "\"inputs\":{\"home-manager\":\"hm-node\"},"
-    "\"locked\":{\"rev\":\"" nixpkgs-rev
+    "\"locked\":{\"rev\":\""
+    nixpkgs-rev
     "\",\"narHash\":\"nixpkgs\"}},"
     "\"root\":{\"inputs\":{"
     "\"north\":\"north-node\","
@@ -41,193 +43,245 @@
     "\"nixpkgs\":\"nixpkgs-node\"}}},"
     "\"root\":\"root\"}"))
 
-(defn fingerprint
-  [lock String
-   mode transaction/SchemaMode
-   files (Vec transaction/ToolFile)]
-  String
+(defn fingerprint [seed Int lock String mode transaction/SchemaMode files (Vec transaction/ToolFile)] String
   (match (transaction/schema-input-fingerprint lock mode files)
     [(FingerprintRejected message) ""]
     [(FingerprintReady value) value]))
 
 (js/export
   (defn real-lock-fingerprint-valid? [lock String] Bool
-    (match (transaction/schema-input-fingerprint
-             lock (transaction/nixos-mode) tool-files)
+    (match (transaction/schema-input-fingerprint lock (transaction/nixos-mode) (tool-files 0))
       [(FingerprintRejected message) false]
       [(FingerprintReady value) (= 64 (count value))])))
 
-(defn case-sha256-and-canonical-json [] Bool
-  (and
-    (= (sha256-bytes (utf8-encode "abc"))
-       "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-    (match (transaction/canonical-json
-             "{\"z\":2,\"a\":{\"y\":true,\"x\":null}}")
+(defn case-sha256-and-canonical-json [seed Int] Bool
+  (let [a String (str "{\"z\":" seed ",\"a\":true}") b String (str "{\"a\":true,\"z\":" seed "}")]
+    (match (transaction/canonical-json a)
       [(CanonicalJsonRejected message offset) false]
-      [(CanonicalJson text)
-       (= text "{\"a\":{\"x\":null,\"y\":true},\"z\":2}")]))
-  )
+      [
+        (CanonicalJson first)
+        (match (transaction/canonical-json b)
+          [(CanonicalJsonRejected message offset) false]
+          [(CanonicalJson second) (and (= first second) (= first b))])])))
 
-(defn case-fingerprint-input-authority [] Bool
-  (let [(initial String)
-        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-1")
-          (transaction/nixos-mode) tool-files)
-        (irrelevant String)
-        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-2")
-          (transaction/nixos-mode) tool-files)
-        (nixpkgs-changed String)
-        (fingerprint (lock-source "nixpkgs-2" "darwin-1" "north-1")
-          (transaction/nixos-mode) tool-files)
-        (darwin-initial String)
-        (fingerprint (lock-source "nixpkgs-1" "darwin-1" "north-1")
-          (transaction/darwin-mode) tool-files)
-        (darwin-changed String)
-        (fingerprint (lock-source "nixpkgs-1" "darwin-2" "north-1")
-          (transaction/darwin-mode) tool-files)]
-    (and (= 64 (count initial))
-         (= initial irrelevant)
-         (not= initial nixpkgs-changed)
-         (not= darwin-initial darwin-changed))))
+(defn case-fingerprint-input-authority [seed Int] Bool
+  (let [
+     (initial String)
+     (fingerprint
+       seed
+       (lock-source
+         seed
+         (str "nixpkgs-1" (if (= seed 0) "" seed))
+         (str "darwin-1" (if (= seed 0) "" seed))
+         (str "north-1" (if (= seed 0) "" seed)))
+       (transaction/nixos-mode)
+       (tool-files seed))
+     (irrelevant String)
+     (fingerprint
+       seed
+       (lock-source
+         seed
+         (str "nixpkgs-1" (if (= seed 0) "" seed))
+         (str "darwin-1" (if (= seed 0) "" seed))
+         (str "north-2" (if (= seed 0) "" seed)))
+       (transaction/nixos-mode)
+       (tool-files seed))
+     (nixpkgs-changed String)
+     (fingerprint
+       seed
+       (lock-source
+         seed
+         (str "nixpkgs-2" (if (= seed 0) "" seed))
+         (str "darwin-1" (if (= seed 0) "" seed))
+         (str "north-1" (if (= seed 0) "" seed)))
+       (transaction/nixos-mode)
+       (tool-files seed))
+     (darwin-initial String)
+     (fingerprint
+       seed
+       (lock-source
+         seed
+         (str "nixpkgs-1" (if (= seed 0) "" seed))
+         (str "darwin-1" (if (= seed 0) "" seed))
+         (str "north-1" (if (= seed 0) "" seed)))
+       (transaction/darwin-mode)
+       (tool-files seed))
+     (darwin-changed String)
+     (fingerprint
+       seed
+       (lock-source
+         seed
+         (str "nixpkgs-1" (if (= seed 0) "" seed))
+         (str "darwin-2" (if (= seed 0) "" seed))
+         (str "north-1" (if (= seed 0) "" seed)))
+       (transaction/darwin-mode)
+       (tool-files seed))]
+    (and
+      (= 64 (count initial))
+      (= initial irrelevant)
+      (not= initial nixpkgs-changed)
+      (not= darwin-initial darwin-changed))))
 
-(defn case-fingerprint-tool-authority [] Bool
-  (let [(lock String) (lock-source "nixpkgs-1" "darwin-1" "north-1")]
+(defn case-fingerprint-tool-authority [seed Int] Bool
+  (let [
+     (lock String)
+     (lock-source
+       seed
+       (str "nixpkgs-1" (if (= seed 0) "" seed))
+       (str "darwin-1" (if (= seed 0) "" seed))
+       (str "north-1" (if (= seed 0) "" seed)))]
     (not=
-      (fingerprint lock (transaction/nixos-mode) tool-files)
-      (fingerprint lock (transaction/nixos-mode) changed-tool-files))))
+      (fingerprint seed lock (transaction/nixos-mode) (tool-files seed))
+      (fingerprint seed lock (transaction/nixos-mode) (changed-tool-files seed)))))
 
-(defn case-fingerprint-refusals [] Bool
+(defn case-fingerprint-refusals [seed Int] Bool
   (and
-    (match (transaction/schema-input-fingerprint
-             "{}" (transaction/nixos-mode) tool-files)
-      [(FingerprintRejected message)
-       true]
+    (match (transaction/schema-input-fingerprint "{}" (transaction/nixos-mode) (tool-files seed))
+      [(FingerprintRejected message) true]
       [(FingerprintReady value) false])
     (match (transaction/schema-input-fingerprint
-             (str/replace
-               (lock-source "nixpkgs-1" "darwin-1" "north-1")
-               "\"home-manager\":[\"nixpkgs\",\"home-manager\"],"
-               "")
-             (transaction/nixos-mode) tool-files)
+       (str/replace
+         (lock-source
+           seed
+           (str "nixpkgs-1" (if (= seed 0) "" seed))
+           (str "darwin-1" (if (= seed 0) "" seed))
+           (str "north-1" (if (= seed 0) "" seed)))
+         "\"home-manager\":[\"nixpkgs\",\"home-manager\"],"
+         "")
+       (transaction/nixos-mode)
+       (tool-files seed))
       [(FingerprintRejected message) true]
       [(FingerprintReady value) false])))
 
-(defn case-schema-and-policy-validation [] Bool
+(defn case-schema-and-policy-validation [seed Int] Bool
   (and
-    (instance? transaction/JsonPolicyValid
-      (transaction/json-array-nonempty "[{\"name\":\"x\"}]"))
-    (instance? transaction/JsonPolicyRejected
-      (transaction/json-array-nonempty "[]"))
-    (instance? transaction/JsonPolicyRejected
-      (transaction/json-array-nonempty "[{"))
-    (instance? transaction/JsonPolicyValid
-      (transaction/json-object-policy "{}"))
-    (instance? transaction/JsonPolicyRejected
-      (transaction/json-object-policy "[]"))))
+    (instance? transaction/JsonPolicyValid (transaction/json-array-nonempty "[{\"name\":\"x\"}]"))
+    (instance? transaction/JsonPolicyRejected (transaction/json-array-nonempty "[]"))
+    (instance? transaction/JsonPolicyRejected (transaction/json-array-nonempty "[{"))
+    (instance? transaction/JsonPolicyValid (transaction/json-object-policy "{}"))
+    (instance? transaction/JsonPolicyRejected (transaction/json-object-policy "[]"))))
 
-(defn current-nixos-cache [] transaction/NixosCacheSnapshot
+(defn current-nixos-cache [seed Int] transaction/NixosCacheSnapshot
   (transaction/->NixosCacheSnapshot
     "[{\"name\":\"x\"}]"
     "[{\"name\":\"home.x\"}]"
-    "fingerprint\n"
+    (str "fingerprint" (if (= seed 0) "" seed) "\n")
     "{\"freeformKeyPrefixes\":[]}\n"
     "{\"freeformKeyPrefixes\":[]}\n"))
 
-(defn case-cache-authority [] Bool
+(defn case-cache-authority [seed Int] Bool
   (and
-    (instance? transaction/CacheCurrent
+    (instance?
+      transaction/CacheCurrent
       (transaction/nixos-cache-assessment
-        (current-nixos-cache) "fingerprint"))
+        (current-nixos-cache seed)
+        (str "fingerprint" (if (= seed 0) "" seed))))
     (match (transaction/nixos-cache-assessment
-             (transaction/->NixosCacheSnapshot
-               "[{\"name\":\"x\"}]" nil "fingerprint\n" "{}" "{}")
-             "fingerprint")
-      [(CacheCurrent fingerprint) false]
-      [(CacheStale reason)
-       true])
-    (match (transaction/nixos-cache-assessment
-             (transaction/->NixosCacheSnapshot
-               "[{" "[]" "fingerprint\n" "{}" "{}")
-             "fingerprint")
+       (transaction/->NixosCacheSnapshot
+         "[{\"name\":\"x\"}]"
+         nil
+         (str "fingerprint" (if (= seed 0) "" seed) "\n")
+         "{}"
+         "{}")
+       (str "fingerprint" (if (= seed 0) "" seed)))
       [(CacheCurrent fingerprint) false]
       [(CacheStale reason) true])
     (match (transaction/nixos-cache-assessment
-             (transaction/->NixosCacheSnapshot
-               "[{\"name\":\"x\"}]" "[{\"name\":\"home.x\"}]"
-               "old\n" "{}" "{}")
-             "fingerprint")
+       (transaction/->NixosCacheSnapshot
+         "[{"
+         "[]"
+         (str "fingerprint" (if (= seed 0) "" seed) "\n")
+         "{}"
+         "{}")
+       (str "fingerprint" (if (= seed 0) "" seed)))
       [(CacheCurrent fingerprint) false]
-      [(CacheStale reason)
-       true])))
+      [(CacheStale reason) true])
+    (match (transaction/nixos-cache-assessment
+       (transaction/->NixosCacheSnapshot
+         "[{\"name\":\"x\"}]"
+         "[{\"name\":\"home.x\"}]"
+         "old\n"
+         "{}"
+         "{}")
+       (str "fingerprint" (if (= seed 0) "" seed)))
+      [(CacheCurrent fingerprint) false]
+      [(CacheStale reason) true])))
 
-(defn case-exact-input-selection [] Bool
-  (let [(discovered (Vec String))
-        ["z.bnix" "tests/fixtures/bad.bnix" "flake.bnix"
-         ".direnv/hidden.bnix" "modules/a/default.bnix"
-         "hardware-configuration.nix" "modules/a/default.nix"]]
+(defn case-exact-input-selection [seed Int] Bool
+  (let [
+     (discovered (Vec String))
+     [
+       (str "z" seed ".bnix")
+       "tests/fixtures/bad.bnix"
+       "flake.bnix"
+       ".direnv/hidden.bnix"
+       (str "modules/a/" (if (= seed 0) "" seed) "default.bnix")
+       "hardware-configuration.nix"
+       (str "modules/a/" (if (= seed 0) "" seed) "default.nix")]]
     (and
-      (= (transaction/select-bnix-inputs discovered [])
-         ["flake.bnix" "modules/a/default.bnix" "z.bnix"])
-      (= (transaction/select-bnix-inputs discovered ["z.bnix"])
-         ["z.bnix"])
-      (= (transaction/filter-sorted-nix discovered)
-         ["modules/a/default.nix"]))))
+      (=
+        (transaction/select-bnix-inputs discovered [])
+        [
+          "flake.bnix"
+          (str "modules/a/" (if (= seed 0) "" seed) "default.bnix")
+          (str "z" seed ".bnix")])
+      (=
+        (transaction/select-bnix-inputs discovered [(str "z" seed ".bnix")])
+        [(str "z" seed ".bnix")])
+      (=
+        (transaction/filter-sorted-nix discovered)
+        [(str "modules/a/" (if (= seed 0) "" seed) "default.nix")]))))
 
-(defn case-argv-grammar [] Bool
+(defn case-argv-grammar [seed Int] Bool
   (and
-    (match (transaction/parse-schema-transaction-argv
-             ["schema" "extract"])
-      [(ExtractSchema mode host)
-       (and (instance? transaction/NixosSchema mode) (= host "whiterabbit"))]
+    (match (transaction/parse-schema-transaction-argv ["schema" "extract"])
+      [
+        (ExtractSchema mode host)
+        (and (instance? transaction/NixosSchema mode) (= host "whiterabbit"))]
+      [(ValidateSchema inputs) false]
+      [(InvalidSchemaTransaction argv) false])
+    (match (transaction/parse-schema-transaction-argv ["schema" "extract" "--darwin" "mac"])
+      [(ExtractSchema mode host) (and (instance? transaction/DarwinSchema mode) (= host "mac"))]
       [(ValidateSchema inputs) false]
       [(InvalidSchemaTransaction argv) false])
     (match (transaction/parse-schema-transaction-argv
-             ["schema" "extract" "--darwin" "mac"])
-      [(ExtractSchema mode host)
-       (and (instance? transaction/DarwinSchema mode) (= host "mac"))]
-      [(ValidateSchema inputs) false]
-      [(InvalidSchemaTransaction argv) false])
-    (match (transaction/parse-schema-transaction-argv
-             ["repo" "validate" "a.bnix" "b.bnix"])
-      [(ValidateSchema inputs) (= inputs ["a.bnix" "b.bnix"])]
+       ["repo" "validate" (str "a" seed ".bnix") (str "b" seed ".bnix")])
+      [(ValidateSchema inputs) (= inputs [(str "a" seed ".bnix") (str "b" seed ".bnix")])]
       [(ExtractSchema mode host) false]
       [(InvalidSchemaTransaction argv) false])
-    (match (transaction/parse-schema-transaction-argv
-             ["repo" "validate" "all"])
+    (match (transaction/parse-schema-transaction-argv ["repo" "validate" "all"])
       [(ValidateSchema inputs) (empty? inputs)]
       [(ExtractSchema mode host) false]
       [(InvalidSchemaTransaction argv) false])
-    (instance? transaction/InvalidSchemaTransaction
+    (instance?
+      transaction/InvalidSchemaTransaction
       (transaction/parse-schema-transaction-argv ["schema" "extract" "x" "y"]))
-    (instance? transaction/InvalidSchemaTransaction
+    (instance?
+      transaction/InvalidSchemaTransaction
       (transaction/parse-schema-transaction-argv ["schema" "extract" "--darwin"]))))
 
-(defn cases [] (Vec TestResult)
-  [(->TestResult "sha256-and-canonical-json"
-     (case-sha256-and-canonical-json))
-   (->TestResult "fingerprint-input-authority"
-     (case-fingerprint-input-authority))
-   (->TestResult "fingerprint-tool-authority"
-     (case-fingerprint-tool-authority))
-   (->TestResult "fingerprint-refusals" (case-fingerprint-refusals))
-   (->TestResult "schema-and-policy-validation"
-     (case-schema-and-policy-validation))
-   (->TestResult "cache-authority" (case-cache-authority))
-   (->TestResult "exact-input-selection" (case-exact-input-selection))
-   (->TestResult "argv-grammar" (case-argv-grammar))])
+(defn rfc6234-section8-5-sha256-abc-reference? [] Bool
+  (=
+    (sha256-bytes (utf8-encode "abc"))
+    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"))
 
 (js/export
-  (defn run [args (Vec String)] Int
-  (let [(results (Vec TestResult)) (cases)]
-    (loop [(index Int) 0
-           (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [(result TestResult) (nth results index)]
-          (do
-            (println
-              (str (if (testresult-passed result) "PASS " "FAIL ")
-                (testresult-name result)))
-            (recur (+ index 1)
-              (if (testresult-passed result)
-                failures
-                (+ failures 1))))))))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (if (not (rfc6234-section8-5-sha256-abc-reference?))
+        1
+        (loop [index Int 0 seed Int 0]
+          (if (>= index samples)
+            0
+            (if (and
+               (case-sha256-and-canonical-json seed)
+               (case-fingerprint-input-authority seed)
+               (case-fingerprint-tool-authority seed)
+               (case-fingerprint-refusals seed)
+               (case-schema-and-policy-validation seed)
+               (case-cache-authority seed)
+               (case-exact-input-selection seed)
+               (case-argv-grammar seed))
+              (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+              (do (println (str "FAIL firn.schema-transaction-test property seed=" seed)) 1))))))))

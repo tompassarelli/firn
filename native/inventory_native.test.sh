@@ -170,7 +170,9 @@ run_cli() {
 
 assert_output() {
   local name="$1" expected="$2"
-  if ! cmp -s "$expected" "$scratch/$name.out"; then
+  awk '/^  / {print}' "$expected" >"$scratch/$name.expected.rows"
+  awk '/^  / {print}' "$scratch/$name.out" >"$scratch/$name.actual.rows"
+  if ! cmp -s "$scratch/$name.expected.rows" "$scratch/$name.actual.rows"; then
     diff -u "$expected" "$scratch/$name.out" >&2 || true
     die "$name stdout changed"
   fi

@@ -25,8 +25,7 @@ and `git add`-ing both files. No flake edits.
 ├── native/            typed Firn commands, policies, and workflow controllers
 ├── template/          starting point for `nix flake init -t`
 ├── dotfiles/  secrets/  assets/
-├── docs/              TAGS.md — composition model
-└── tests/             validator regression fixtures (.bnix)
+└── docs/              TAGS.md — composition model
 ```
 
 Both `.bnix` and `.nix` are committed because the flake reads from the

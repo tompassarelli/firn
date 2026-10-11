@@ -106,9 +106,10 @@
                    (r/resolution-active (r/resolve catalog (c/hostdocument-tags parsed))))))])))]))
 
 (js/export
-  (defn run-tests [] Int
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0) 1
     (loop [index Int 0 seed Int 73421]
-      (if (>= index 48) 0
+      (if (>= index samples) 0
         (let [host r/HostTags (p/host seed) text String (source host)
               catalog (Vec r/ModuleTags) (p/modules seed)]
           (match (c/host-document-from-source "fixture" text (r/hosttags-allowed host))
@@ -128,4 +129,4 @@
                            (recur (+ op 1))
                            (do (println (str "FAIL mutation seed=" seed " op=" op)) false)))))]
                (if passed (recur (+ index 1) (p/next-seed seed))
-                 (do (println (str "FAIL mutation seed=" seed " case=" index)) 1)))]))))))
+                 (do (println (str "FAIL mutation seed=" seed " case=" index)) 1)))])))))))

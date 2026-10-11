@@ -71,7 +71,7 @@ printf '%s\n' '{"name":"beagle","type":"module"}' \
 cat >"$scratch/authoring-test" <<EOF
 #!/usr/bin/env bash
 exec env FIRN_AUTHORING_TEST_MODULE='$pure_js' bun -e \
-  'const m = await import(process.env.FIRN_AUTHORING_TEST_MODULE); process.exitCode = m["run-tests"]();'
+  'const m = await import(process.env.FIRN_AUTHORING_TEST_MODULE); process.exitCode = m["run-properties"](process.env.CI ? 512 : 128);'
 EOF
 cat >"$scratch/authoring-native" <<EOF
 #!/usr/bin/env bash

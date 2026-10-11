@@ -21,6 +21,7 @@ Read `native/nix/README.md` for the focused Clause module check.
 
 ## Checks
 
+Tests follow `north:socrates/skills/testing/SKILL.md`; see `docs/verification.md`.
 After .bnix edits, run `firn repo build` then `firn repo validate`.
 For agent policy, run `~/code/north/main/socrates/scripts/agent-config-check.sh`.
 For activation, run `~/code/north/main/socrates/scripts/agent-config-check.sh --local`.

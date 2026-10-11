@@ -1,23 +1,13 @@
 #lang beagle/js
-(ns activity.focus-test
-  (:require [activity.core :as a]
-            [activity.driver :as d]))
+(ns activity.focus-test (:require [activity.core :as a] [activity.driver :as d]))
 
-(defn workspace
-  [id Int
-   idx Int
-   name (U String Nil)
-   window (U Int Nil)] a/Workspace
+(defn workspace [seed Int id Int idx Int name (U String Nil) window (U Int Nil)] a/Workspace
   (a/->Workspace id idx name "DP-1" false false false window))
 
-(defn focused-workspace
-  [id Int
-   idx Int
-   name (U String Nil)] a/Workspace
+(defn focused-workspace [seed Int id Int idx Int name (U String Nil)] a/Workspace
   (a/->Workspace id idx name "DP-1" true true false nil))
 
-(defn membership-activity
-  [state a/ActivityState workspace-id Int] (U String Nil)
+(defn membership-activity [seed Int state a/ActivityState workspace-id Int] (U String Nil)
   (let [members (Vec a/Membership) (a/activitystate-members state)]
     (loop [(index Int) 0]
       (if (>= index (count members))
@@ -27,71 +17,139 @@
             (a/membership-activity entry)
             (recur (+ index 1))))))))
 
-(defn persistent-activity-sequence? [] Bool
-  (let [defs (Vec a/ActivityDef) [(a/->ActivityDef "home" "home" [] [])
-         (a/->ActivityDef "gjoa" "gjoa" [] [])
-         (a/->ActivityDef "acme" "acme" [] [])]
-        base a/ActivityState (a/->ActivityState defs "home" [] [] [] "home" "home" [])
-        start-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10) (workspace 2 2 nil nil)]
-        start a/ActivityState (a/apply-workspaces base start-workspaces)
-        gjoa-plan d/CommandPlan (d/plan-command start start-workspaces (a/->Goto "gjoa"))
-        gjoa-steps (Vec d/PlannedStep) (d/commandplan-steps gjoa-plan)
-        gjoa-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
-         (focused-workspace 2 2 "gjoa")
-         (workspace 3 3 nil nil)]
-        gjoa-state a/ActivityState (a/apply-workspaces (d/commandplan-state gjoa-plan) gjoa-workspaces)
-        acme-plan d/CommandPlan (d/plan-command gjoa-state gjoa-workspaces (a/->Goto "acme"))
-        acme-steps (Vec d/PlannedStep) (d/commandplan-steps acme-plan)
-        all-workspaces (Vec a/Workspace) [(workspace 1 1 "notes" 10)
-         (workspace 2 2 "gjoa" nil)
-         (focused-workspace 3 3 "acme")
-         (workspace 4 4 nil nil)]
-        all-state a/ActivityState (a/apply-workspaces (d/commandplan-state acme-plan) all-workspaces)
-        back-plan d/CommandPlan (d/plan-command all-state all-workspaces (a/->Goto "gjoa"))
-        back-steps (Vec d/PlannedStep) (d/commandplan-steps back-plan)
-        restarted a/ActivityState (a/apply-workspaces
-          (a/->ActivityState defs "home" [] [] [] "home" "home" [])
-          all-workspaces)
-        restart-plan d/CommandPlan (d/plan-command restarted all-workspaces (a/->Goto "gjoa"))
-        restart-steps (Vec d/PlannedStep) (d/commandplan-steps restart-plan)]
+(defn persistent-activity-sequence? [seed Int] Bool
+  (let [
+     defs
+     (Vec a/ActivityDef)
+     [
+       (a/->ActivityDef
+         (str "home" (if (= seed 0) "" seed))
+         (str "home" (if (= seed 0) "" seed))
+         []
+         [])
+       (a/->ActivityDef
+         (str "gjoa" (if (= seed 0) "" seed))
+         (str "gjoa" (if (= seed 0) "" seed))
+         []
+         [])
+       (a/->ActivityDef
+         (str "acme" (if (= seed 0) "" seed))
+         (str "acme" (if (= seed 0) "" seed))
+         []
+         [])]
+     base
+     a/ActivityState
+     (a/->ActivityState
+       defs
+       (str "home" (if (= seed 0) "" seed))
+       []
+       []
+       []
+       (str "home" (if (= seed 0) "" seed))
+       (str "home" (if (= seed 0) "" seed))
+       [])
+     start-workspaces
+     (Vec a/Workspace)
+     [(workspace seed 1 1 (str "notes" (if (= seed 0) "" seed)) 10) (workspace seed 2 2 nil nil)]
+     start
+     a/ActivityState
+     (a/apply-workspaces base start-workspaces)
+     gjoa-plan
+     d/CommandPlan
+     (d/plan-command start start-workspaces (a/->Goto (str "gjoa" (if (= seed 0) "" seed))))
+     gjoa-steps
+     (Vec d/PlannedStep)
+     (d/commandplan-steps gjoa-plan)
+     gjoa-workspaces
+     (Vec a/Workspace)
+     [
+       (workspace seed 1 1 (str "notes" (if (= seed 0) "" seed)) 10)
+       (focused-workspace seed 2 2 (str "gjoa" (if (= seed 0) "" seed)))
+       (workspace seed 3 3 nil nil)]
+     gjoa-state
+     a/ActivityState
+     (a/apply-workspaces (d/commandplan-state gjoa-plan) gjoa-workspaces)
+     acme-plan
+     d/CommandPlan
+     (d/plan-command gjoa-state gjoa-workspaces (a/->Goto (str "acme" (if (= seed 0) "" seed))))
+     acme-steps
+     (Vec d/PlannedStep)
+     (d/commandplan-steps acme-plan)
+     all-workspaces
+     (Vec a/Workspace)
+     [
+       (workspace seed 1 1 (str "notes" (if (= seed 0) "" seed)) 10)
+       (workspace seed 2 2 (str "gjoa" (if (= seed 0) "" seed)) nil)
+       (focused-workspace seed 3 3 (str "acme" (if (= seed 0) "" seed)))
+       (workspace seed 4 4 nil nil)]
+     all-state
+     a/ActivityState
+     (a/apply-workspaces (d/commandplan-state acme-plan) all-workspaces)
+     back-plan
+     d/CommandPlan
+     (d/plan-command all-state all-workspaces (a/->Goto (str "gjoa" (if (= seed 0) "" seed))))
+     back-steps
+     (Vec d/PlannedStep)
+     (d/commandplan-steps back-plan)
+     restarted
+     a/ActivityState
+     (a/apply-workspaces
+       (a/->ActivityState
+         defs
+         (str "home" (if (= seed 0) "" seed))
+         []
+         []
+         []
+         (str "home" (if (= seed 0) "" seed))
+         (str "home" (if (= seed 0) "" seed))
+         [])
+       all-workspaces)
+     restart-plan
+     d/CommandPlan
+     (d/plan-command restarted all-workspaces (a/->Goto (str "gjoa" (if (= seed 0) "" seed))))
+     restart-steps
+     (Vec d/PlannedStep)
+     (d/commandplan-steps restart-plan)]
     (and
       (d/commandplan-settled gjoa-plan)
       (match (nth gjoa-steps 0)
-        [(NameWorkspaceStep reference name)
-         (and (= reference "2") (= name "gjoa"))]
+        [
+          (NameWorkspaceStep reference name)
+          (and (= reference "2") (= name (str "gjoa" (if (= seed 0) "" seed))))]
         [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
         [(ReorderStep reference id target-index) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false])
-      (= (membership-activity gjoa-state 2) "gjoa")
-      (nil? (membership-activity gjoa-state 3))
+      (= (membership-activity seed gjoa-state 2) (str "gjoa" (if (= seed 0) "" seed)))
+      (nil? (membership-activity seed gjoa-state 3))
       (d/commandplan-settled acme-plan)
       (match (nth acme-steps 0)
-        [(NameWorkspaceStep reference name)
-         (and (= reference "3") (= name "acme"))]
+        [
+          (NameWorkspaceStep reference name)
+          (and (= reference "3") (= name (str "acme" (if (= seed 0) "" seed))))]
         [(FocusStep reference) false]
         [(MoveColumnStep reference) false]
         [(ReorderStep reference id target-index) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false])
-      (= (membership-activity all-state 1) "home")
-      (= (membership-activity all-state 2) "gjoa")
-      (= (membership-activity all-state 3) "acme")
-      (nil? (membership-activity all-state 4))
+      (= (membership-activity seed all-state 1) (str "home" (if (= seed 0) "" seed)))
+      (= (membership-activity seed all-state 2) (str "gjoa" (if (= seed 0) "" seed)))
+      (= (membership-activity seed all-state 3) (str "acme" (if (= seed 0) "" seed)))
+      (nil? (membership-activity seed all-state 4))
       (match (nth back-steps 0)
-        [(FocusStep reference) (= reference "gjoa")]
+        [(FocusStep reference) (= reference (str "gjoa" (if (= seed 0) "" seed)))]
         [(MoveColumnStep reference) false]
         [(NameWorkspaceStep reference name) false]
         [(ReorderStep reference id target-index) false]
         [(SnapshotStep snapshot) false]
         [(PersistStep assignments) false])
-      (= (membership-activity restarted 1) "home")
-      (= (membership-activity restarted 2) "gjoa")
-      (= (membership-activity restarted 3) "acme")
-      (nil? (membership-activity restarted 4))
+      (= (membership-activity seed restarted 1) (str "home" (if (= seed 0) "" seed)))
+      (= (membership-activity seed restarted 2) (str "gjoa" (if (= seed 0) "" seed)))
+      (= (membership-activity seed restarted 3) (str "acme" (if (= seed 0) "" seed)))
+      (nil? (membership-activity seed restarted 4))
       (match (nth restart-steps 0)
-        [(FocusStep reference) (= reference "gjoa")]
+        [(FocusStep reference) (= reference (str "gjoa" (if (= seed 0) "" seed)))]
         [(MoveColumnStep reference) false]
         [(NameWorkspaceStep reference name) false]
         [(ReorderStep reference id target-index) false]
@@ -99,10 +157,12 @@
         [(PersistStep assignments) false]))))
 
 (js/export
-  (defn run [args (Vec String)] Int
-    (let [persistent-passed Bool (persistent-activity-sequence?)]
-      (do
-        (println (if persistent-passed
-          "PASS persistent-activity-sequence"
-          "FAIL persistent-activity-sequence"))
-        (if persistent-passed 0 1)))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (loop [index Int 0 seed Int 0]
+        (if (>= index samples)
+          0
+          (if (and (persistent-activity-sequence? seed))
+            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+            (do (println (str "FAIL activity.focus-test property seed=" seed)) 1)))))))

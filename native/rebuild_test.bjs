@@ -142,13 +142,14 @@
       (not (r/exact-store-path? "/nix/store/one\n/nix/store/two")))))
 
 (js/export
-  (defn run-tests [] Int
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0) 1
     (loop [index Int 0 seed Int 73421]
-      (if (>= index 16) 0
+      (if (>= index samples) 0
         (if (and (input-rules? seed)
               (loop [variant Int 0]
                 (if (>= variant 5) true
                   (if (generated-workflow? (+ seed variant) variant) (recur (+ variant 1))
                     (do (println (str "FAIL rebuild seed=" seed " variant=" variant)) false)))))
           (recur (+ index 1) (mod (* seed 48271) 2147483647))
-          (do (println (str "FAIL rebuild order/prefix seed=" seed " case=" index)) 1))))))
+          (do (println (str "FAIL rebuild order/prefix seed=" seed " case=" index)) 1)))))))

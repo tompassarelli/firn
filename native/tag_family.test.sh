@@ -110,7 +110,7 @@ printf 'tag-family: checking seeded algebra and mutation properties (seed 73421)
 timeout --foreground 30 bun --eval '
   const resolve = await import(process.argv[1]);
   const mutation = await import(process.argv[2]);
-  process.exitCode = resolve["run-tests"]() + mutation["run-tests"]();
+  process.exitCode = resolve["run-properties"](process.env.CI ? 512 : 128) + mutation["run-properties"](process.env.CI ? 512 : 128);
 ' "$scratch/build/firn/tag-resolve-property-test.js" \
   "$scratch/build/firn/tag-mutation-property-test.js" \
   || die "seeded tag properties failed"

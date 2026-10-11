@@ -1,5 +1,10 @@
 # Verification
 
+Automated tests follow `north:socrates/skills/testing/SKILL.md`: keep only its
+five kinds with a unique mutant kill; delete scaffolding. Run affected tests
+once locally and suites, sweeps and properties on CI or the farm on every push.
+Never retry flakes to green, weaken expectations or use wall time as a budget.
+
 There's a tiered loop — pick the right rung for the change.
 
 **Rung 1 — fast (~5s, default for most edits):**
@@ -11,7 +16,7 @@ firn repo validate    # schema-driven path + type check
 
 `firn repo validate` catches unknown option paths, type mismatches (bool/str/int/listOf/nullOr/enum/attrsOf-leaf), enum violations with did-you-mean — at file:line:col precision on the value. Almost every typo/wrong-type bug surfaces here in seconds. This is the right verification for module/tag/host edits where the change is "set X to Y" or "enable Z".
 
-**Rung 2 — drift check (when refactoring beagle/nix itself, or sanity-checking that hand-edited `.nix` matches what beagle would emit):**
+**Rung 2 — drift check (when refactoring source or checking generated output):**
 
 ```bash
 firn repo diff             # re-emit every .bnix and unified-diff vs committed .nix
@@ -40,4 +45,16 @@ run `firn repo upgrade now` in its owned worktree when the requested outcome
 includes advancing inputs, then must inspect and commit the exact result before
 rebuilding.
 
-Only verify whiterabbit.
+Verify whiterabbit and nexus.
+
+The schema transaction suite keeps the SHA-256 `abc` vector from
+[RFC 6234, section 8.5](https://www.rfc-editor.org/rfc/rfc6234.html#section-8.5)
+as its external reference, separately from generated schema properties.
+
+Pure-core properties use fixed seeds: 128 generated inputs locally and 512
+when `CI` is set (rebuild uses 16 and 64). The shell collectors supply that
+budget to the pure runner. Prewarm's integration runner checks 128 generated
+keys locally and 512 in CI. A zero property budget fails.
+
+`modules/nexus-checks/default.test.sh` exercises generated health inputs and
+alert decisions through the Nexus service's sourceable rule helpers.

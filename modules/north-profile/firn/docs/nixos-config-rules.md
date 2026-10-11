@@ -90,6 +90,9 @@ owner source.
 
 ## CI validation
 
+Tests follow `north:socrates/skills/testing/SKILL.md`; Firn's local check routes
+are in `nixos-config:docs/verification.md`.
+
 **The agent config check lives in North** —
 `north:socrates/scripts/agent-config-check.sh` checks the shared instructions, skills,
 and hooks plus the Codex adapter. Run

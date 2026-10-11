@@ -1,74 +1,103 @@
 #lang beagle/js
-(ns firn.inventory-test
-  (:require [firn.inventory :as i]
-            [firn.tag-resolve :as r]))
+(ns firn.inventory-test (:require [firn.inventory :as i] [firn.tag-resolve :as r]))
 
-(defrecord TestResult [(name String) (passed Bool)])
-
-(def alpha-source String
+(defn alpha-source [seed Int] String
   (str
     "#lang beagle/nix\n\n"
     "(ns configuration)\n\n"
     "(nix/module [config lib pkgs ...]\n"
-    "  {:myConfig.modules.alpha.enable true\n"
-    "   :myConfig.modules.beta\n"
+    (str "  {:myConfig.modules.alpha" (if (= seed 0) "" seed) ".enable true\n")
+    (str "   :myConfig.modules.beta" (if (= seed 0) "" seed) "\n")
     "    {:enable false\n"
     "     :port 44}\n"
-    "   :myConfig.modules.gamma.someOption \"configured\"\n"
+    (str "   :myConfig.modules.gamma" (if (= seed 0) "" seed) ".someOption \"configured\"\n")
     "   :sops.secrets {\"opaque\" {:enable true}}\n"
     "   :imports [(p \"./_generated-enables.nix\")]})\n"))
 
-(def zeta-source String
+(defn zeta-source [seed Int] String
   (str
     "#lang beagle/nix\n\n"
     "(ns configuration)\n\n"
     "(nix/module [config lib pkgs ...]\n"
-    "  {:myConfig.modules.beta.enable true})\n"))
+    (str "  {:myConfig.modules.beta" (if (= seed 0) "" seed) ".enable true})\n")))
 
-(defn make-module [(name String) (tags (Vec String))] r/ModuleTags
+(defn make-module [seed Int name String tags (Vec String)] r/ModuleTags
   (r/->ModuleTags name tags [] []))
 
-(defn host-tags [(name String) (tag String)] r/HostTags
+(defn host-tags [seed Int name String tag String] r/HostTags
   (r/->HostTags name [(r/->EnabledTag tag [] [])] [] "linux" false []))
 
-(defn parsed-config [(host String) (source String)] i/HostConfig
+(defn parsed-config [seed Int host String source String] i/HostConfig
   (match (i/host-config-from-source host source)
     [(HostConfigParsed value) value]
     [(HostConfigRejected message offset) (i/->HostConfig host [] [])]))
 
-(defn repository [] i/InventoryRepository
+(defn repository [seed Int] i/InventoryRepository
   (i/->InventoryRepository
-    [(make-module "orphan" [])
-     (make-module "gamma" ["desktop"])
-     (make-module "alpha" [])
-     (make-module "beta" ["terminal"])]
-    [(i/->InventoryHost
-       (host-tags "zeta-host" "desktop")
-       (parsed-config "zeta-host" zeta-source))
-     (i/->InventoryHost
-       (host-tags "alpha-host" "terminal")
-       (parsed-config "alpha-host" alpha-source))]))
+    [
+      (make-module seed (str "orphan" (if (= seed 0) "" seed)) [])
+      (make-module
+        seed
+        (str "gamma" (if (= seed 0) "" seed))
+        [(str "desktop" (if (= seed 0) "" seed))])
+      (make-module seed (str "alpha" (if (= seed 0) "" seed)) [])
+      (make-module
+        seed
+        (str "beta" (if (= seed 0) "" seed))
+        [(str "terminal" (if (= seed 0) "" seed))])]
+    [
+      (i/->InventoryHost
+        (host-tags
+          seed
+          (str "zeta" (if (= seed 0) "" seed) "-host")
+          (str "desktop" (if (= seed 0) "" seed)))
+        (parsed-config seed (str "zeta" (if (= seed 0) "" seed) "-host") (zeta-source seed)))
+      (i/->InventoryHost
+        (host-tags
+          seed
+          (str "alpha" (if (= seed 0) "" seed) "-host")
+          (str "terminal" (if (= seed 0) "" seed)))
+        (parsed-config seed (str "alpha" (if (= seed 0) "" seed) "-host") (alpha-source seed)))]))
 
-(defn case-canonical-paths-and-states [] Bool
-  (match (i/host-config-from-source "alpha-host" alpha-source)
+(defn case-canonical-paths-and-states [seed Int] Bool
+  (match (i/host-config-from-source (str "alpha" (if (= seed 0) "" seed) "-host") (alpha-source seed))
     [(HostConfigRejected message offset) false]
-    [(HostConfigParsed config)
-     (and
-       (= (i/hostconfig-references config) ["alpha" "beta" "gamma"])
-       (= (i/state-paths config true) ["myConfig.modules.alpha"])
-       (= (i/state-paths config false) ["myConfig.modules.beta"]))]))
+    [
+      (HostConfigParsed config)
+      (and
+        (=
+          (i/hostconfig-references config)
+          [
+            (str "alpha" (if (= seed 0) "" seed))
+            (str "beta" (if (= seed 0) "" seed))
+            (str "gamma" (if (= seed 0) "" seed))])
+        (= (i/state-paths config true) [(str "myConfig.modules.alpha" (if (= seed 0) "" seed))])
+        (= (i/state-paths config false) [(str "myConfig.modules.beta" (if (= seed 0) "" seed))]))]))
 
-(defn case-live-closure [] Bool
-  (let [(repo i/InventoryRepository) (repository)]
+(defn case-live-closure [seed Int] Bool
+  (let [(repo i/InventoryRepository) (repository seed)]
     (and
-      (= (i/live-modules repo) ["alpha" "beta" "gamma"])
-      (= (i/unused-modules repo) ["orphan"])
-      (= (i/direct-hosts repo "beta") ["alpha-host" "zeta-host"])
-      (= (i/tag-hosts repo "beta") ["alpha-host"])
-      (= (i/direct-hosts repo "gamma") ["alpha-host"])
-      (= (i/tag-hosts repo "gamma") ["zeta-host"]))))
+      (=
+        (i/live-modules repo)
+        [
+          (str "alpha" (if (= seed 0) "" seed))
+          (str "beta" (if (= seed 0) "" seed))
+          (str "gamma" (if (= seed 0) "" seed))])
+      (= (i/unused-modules repo) [(str "orphan" (if (= seed 0) "" seed))])
+      (=
+        (i/direct-hosts repo (str "beta" (if (= seed 0) "" seed)))
+        [(str "alpha" (if (= seed 0) "" seed) "-host") (str "zeta" (if (= seed 0) "" seed) "-host")])
+      (=
+        (i/tag-hosts repo (str "beta" (if (= seed 0) "" seed)))
+        [(str "alpha" (if (= seed 0) "" seed) "-host")])
+      (=
+        (i/direct-hosts repo (str "gamma" (if (= seed 0) "" seed)))
+        [(str "alpha" (if (= seed 0) "" seed) "-host")])
+      (=
+        (i/tag-hosts repo (str "gamma" (if (= seed 0) "" seed)))
+        [(str "zeta" (if (= seed 0) "" seed) "-host")]))))
 
-(defn module-list-all-action? [(action i/InventoryAction)] Bool
+(defn module-list-all-action? [seed Int action i/InventoryAction] Bool
   (match action
     [(ModuleListAll token) true]
     [(ModuleListUsed token) false]
@@ -78,7 +107,7 @@
     [(HostList token) false]
     [(HostStatus host) false]))
 
-(defn module-status-host [(action i/InventoryAction)] String
+(defn module-status-host [seed Int action i/InventoryAction] String
   (match action
     [(ModuleListAll token) ""]
     [(ModuleListUsed token) ""]
@@ -88,7 +117,7 @@
     [(HostList token) ""]
     [(HostStatus host) ""]))
 
-(defn host-status-host [(action i/InventoryAction)] String
+(defn host-status-host [seed Int action i/InventoryAction] String
   (match action
     [(ModuleListAll token) ""]
     [(ModuleListUsed token) ""]
@@ -98,35 +127,41 @@
     [(HostList token) ""]
     [(HostStatus host) host]))
 
-(defn case-argv-grammar [] Bool
+(defn case-argv-grammar [seed Int] Bool
   (and
-    (match (i/parse-inventory-argv ["module" "list"] "alpha-host")
-      [(ParsedInventory action)
-       (module-list-all-action? action)]
+    (match (i/parse-inventory-argv ["module" "list"] (str "alpha" (if (= seed 0) "" seed) "-host"))
+      [(ParsedInventory action) (module-list-all-action? seed action)]
       [(InvalidInventoryArgv argv) false])
-    (match (i/parse-inventory-argv ["module" "status" "all"] "alpha-host")
-      [(ParsedInventory action)
-       (= (module-status-host action) "alpha-host")]
+    (match (i/parse-inventory-argv
+       ["module" "status" "all"]
+       (str "alpha" (if (= seed 0) "" seed) "-host"))
+      [
+        (ParsedInventory action)
+        (= (module-status-host seed action) (str "alpha" (if (= seed 0) "" seed) "-host"))]
       [(InvalidInventoryArgv argv) false])
-    (match (i/parse-inventory-argv ["host" "status" "zeta-host"] "alpha-host")
-      [(ParsedInventory action)
-       (= (host-status-host action) "zeta-host")]
+    (match (i/parse-inventory-argv
+       ["host" "status" (str "zeta" (if (= seed 0) "" seed) "-host")]
+       (str "alpha" (if (= seed 0) "" seed) "-host"))
+      [
+        (ParsedInventory action)
+        (= (host-status-host seed action) (str "zeta" (if (= seed 0) "" seed) "-host"))]
       [(InvalidInventoryArgv argv) false])
-    (match (i/parse-inventory-argv ["module" "list" "stale"] "alpha-host")
+    (match (i/parse-inventory-argv
+       ["module" "list" "stale"]
+       (str "alpha" (if (= seed 0) "" seed) "-host"))
       [(ParsedInventory action) false]
       [(InvalidInventoryArgv argv) true])))
 
-(def tests (Vec TestResult)
-  [(->TestResult "canonical-paths-and-states" (case-canonical-paths-and-states))
-   (->TestResult "live-closure" (case-live-closure))
-   (->TestResult "argv-grammar" (case-argv-grammar))])
-
 (js/export
- (defn test [] Int
-  (loop [(index Int) 0]
-    (if (>= index (count tests))
-      0
-      (let [(test TestResult) (nth tests index)]
-        (if (testresult-passed test)
-          (recur (+ index 1))
-          1))))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (loop [index Int 0 seed Int 0]
+        (if (>= index samples)
+          0
+          (if (and
+             (case-canonical-paths-and-states seed)
+             (case-live-closure seed)
+             (case-argv-grammar seed))
+            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+            (do (println (str "FAIL firn.inventory-test property seed=" seed)) 1)))))))

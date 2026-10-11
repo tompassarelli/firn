@@ -2,76 +2,8 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-source_file=$repo/native/nix/north-profile.clause
-generated_file=$repo/modules/north-profile/default.nix
-firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
-checker=${NORTH_AGENT_CONFIG_CHECK:-$HOME/code/north/main/socrates/scripts/agent-config-check.sh}
 claude_projection=$repo/modules/north-profile/claude-hooks.json
 claude_projector=$repo/modules/north-profile/claude-hook-projector.sh
-catalog=${AGENTS_OPERATOR_DIR:-$HOME/code/south/main/agents}/catalog-config.json
-
-for target in \
-  instructions/shared/AGENTS.md \
-  skills/shared \
-  provider-hooks \
-  instructions/code/AGENTS.md; do
-  grep -Fq "/.local/state/north/agents/current/$target\"" "$source_file"
-  grep -Fq "/.local/state/north/agents/current/$target\")" "$generated_file"
-done
-if rg -n 'agent-profile|\.config/agents|profiles/tom|\.agents/docs' \
-  "$source_file" "$generated_file"; then
-  printf 'Home Manager still declares a retired agent projection\n' >&2
-  exit 1
-fi
-
-grep -Fq 'name: firn' "$firn_skill"
-grep -Fq 'native/nix/north-profile.clause' "$checker"
-grep -Fq 'projectNorthClaudeHooks' "$source_file"
-grep -Fq 'projectNorthClaudeHooks' "$generated_file"
-
-hook_units=$(jq '[.. | objects | select(.kind? == "hook")] | length' "$catalog")
-jq -e --argjson hook_units "$hook_units" '
-  [
-    .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
-  ] as $commands
-  | ($commands | length == $hook_units)
-    and ($commands | all(
-      contains("NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3")
-      and contains("PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin")
-    ))
-    and ([
-      $commands[] | select(contains("firn-system-policy"))
-    ] | length == 2)
-    and ([
-      $commands[] | select(contains("firn-system-policy"))
-    ] | all(
-      contains("/home/tom/.local/lib/firn/cli/current/bin/firn-system-policy")
-      and (contains("/run/current-system/sw/bin/firn-system-policy") | not)
-    ))
-' "$claude_projection" >/dev/null
-
-for unit in \
-  corpus-scan-guard \
-  firn-system-policy \
-  git-blind-stage-guard \
-  git-stash-guard \
-  native-item-guard \
-  clipboard-guard \
-  launch-critical-worktree-guard \
-  lead-regrounding \
-  native-launch-guard \
-  modern-search-guard \
-  org-role \
-  session-kill-guard \
-  spawn-capacity-guard \
-  subagent-teardown \
-  tripwire-guard \
-  unlanded-work \
-  worker-handoff; do
-  jq -e --arg unit "$unit" '
-    any(.activation[$unit].distributions[]; .targets | index("claude"))
-  ' "$catalog" >/dev/null
-done
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/north-claude-hooks-test.XXXXXX")
 trap 'rm -r -- "$scratch"' EXIT

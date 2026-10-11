@@ -1,5 +1,4 @@
 CHECKS="logins units updates disk backup"
-TITLE_SUFFIX=""
 
 urgency_of() {
   case "$1" in logins*|lynis) echo urgent ;; *) echo normal ;; esac
@@ -117,8 +116,8 @@ apply() {
   [ -f "$state/$check.state" ] && read -r prev notified <"$state/$check.state"
   read -r action status stamp <<<"$(decide "$prev" "$notified" "$result" "$now")"
   case "$action" in
-    alert) nexus-alert "$(urgency_of "$check")" "${result#fail: }" "$(title_of "$check" "$result")$TITLE_SUFFIX" ;;
-    recover) [ "${check%%-*}" = logins ] || nexus-alert normal "$check is healthy again." "Nexus: $check recovered$TITLE_SUFFIX" ;;
+    alert) nexus-alert "$(urgency_of "$check")" "${result#fail: }" "$(title_of "$check" "$result")" ;;
+    recover) [ "${check%%-*}" = logins ] || nexus-alert normal "$check is healthy again." "Nexus: $check recovered" ;;
   esac
   echo "$status $stamp" >"$state/$check.state"
 }
@@ -179,34 +178,11 @@ run_lynis() {
   [ "$result" = ok ] || nexus-alert urgent "${result#fail: }" "Nexus: lynis failing"
 }
 
-selftest() {
-  local state now check result
-  state=$(mktemp -d)
-  now=$(date +%s)
-  TITLE_SUFFIX=" (self-test, no action needed)"
-  local peers="10.77.0.2=laptop 10.77.0.3=phone"
-  for check in logins-console logins-key logins-outside units updates disk backup lynis; do
-    case "$check" in
-      logins-console) result=$(check_logins "" "7 1000 tom seat0 737 user tty1 no -" "$peers" "SHA256:known" "") ;;
-      logins-key) result=$(check_logins "Accepted publickey for tom from 10.77.0.2 port 4242 ssh2: ED25519 SHA256:selftest" "" "$peers" "SHA256:known" "") ;;
-      logins-outside) result=$(check_logins "Accepted publickey for tom from 192.0.2.7 port 4242 ssh2: ED25519 SHA256:known" "" "$peers" "SHA256:known" "") ;;
-      units) result=$(check_units "selftest-broken.service loaded failed failed Self-test" "") ;;
-      updates) result=$(check_updates "26.05.20200101.0000000" /a /a "$now" "$now") ;;
-      disk) result=$(check_disk " 93%") ;;
-      backup) result=$(check_backup $(( now - 30 * 3600 )) "$now") ;;
-      lynis) result=$(check_lynis 80 "AUTH-9999" 75 "AUTH-9999 SSH-0001") ;;
-    esac
-    echo "$check: $result"
-    [ "$result" != ok ] || { echo "self-test: $check did not fail on its fixture" >&2; exit 1; }
-    apply "$state" "$check" "$result" "$now"
-  done
-  rm -rf "$state"
-}
-
-state=${STATE_DIRECTORY:-/var/lib/nexus-checks}
-case "${1:-run}" in
-  run) run_checks "$state" ;;
-  --lynis) run_lynis "$state" ;;
-  --selftest) selftest ;;
-  *) echo "usage: nexus-checks [run|--lynis|--selftest]" >&2; exit 2 ;;
-esac
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  state=${STATE_DIRECTORY:-/var/lib/nexus-checks}
+  case "${1:-run}" in
+    run) run_checks "$state" ;;
+    --lynis) run_lynis "$state" ;;
+    *) echo "usage: nexus-checks [run|--lynis]" >&2; exit 2 ;;
+  esac
+fi

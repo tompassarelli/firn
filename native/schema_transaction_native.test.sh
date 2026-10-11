@@ -70,7 +70,7 @@ printf '%s\n' '{"type":"module"}' \
 printf 'schema-transaction-native: focused pure policy fixtures\n' >&2
 FIRN_SCHEMA_TEST_MODULE="$scratch/out/firn/schema-transaction-test.js" \
 timeout --foreground 30 bun --eval \
-  'const module = await import(process.env.FIRN_SCHEMA_TEST_MODULE); process.exitCode = module.run([]);' \
+  'const module = await import(process.env.FIRN_SCHEMA_TEST_MODULE); process.exitCode = module["run-properties"](process.env.CI ? 512 : 128);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || {
     sed -n '1,200p' "$scratch/pure.out" >&2

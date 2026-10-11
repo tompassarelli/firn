@@ -69,9 +69,7 @@ build_family \
   "$datum" "$json" "$tag_resolve" "$tag_inputs" "$tag_driver" \
   "$tag_family" \
   "$flake_input" "$flake_driver" "$flake_family" \
-  "$repo/native/flake_input_test.bjs" \
-  "$repo/native/flake_input_driver_test.bjs" \
-  "$inventory" "$inventory_family" "$repo/native/inventory_test.bjs" \
+  "$inventory" "$inventory_family" \
   "$responsibility_projection" "$responsibility_test" \
   "$core" "$repo/native/repo_build_test.bjs" \
   "$repo/native/repo_build_family.bjs"

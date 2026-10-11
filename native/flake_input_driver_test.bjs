@@ -1,68 +1,98 @@
 #lang beagle/js
 (ns firn.flake-input-driver-test
-  (:require [firn.flake-input :as input]
-            [firn.flake-input-driver :as driver]))
+  (:require [firn.flake-input :as input] [firn.flake-input-driver :as driver]))
 
-(defrecord TestResult [(name String) (passed Bool)])
-
-(def alpha-source String
-  (str "(nix/module [config] {:flake-inputs "
-    "{:zeta {:url \"github:zeta/project\"}}})\n"))
-
-(def beta-source String
-  (str "(nix/module [config] {:flake-inputs "
-    "{:alpha {:url \"github:alpha/project\"}}})\n"))
-
-(def conflict-source String
-  (str "(nix/module [config] {:flake-inputs "
-    "{:zeta {:url \"github:other/project\"}}})\n"))
-
-(defn empty-flake [] String
+(defn alpha-source [seed Int] String
   (str
-    input/input-begin-marker "\n" input/input-end-marker "\n"
-    input/args-begin-marker "\n" input/args-end-marker "\n"
-    input/special-begin-marker "\n" input/special-end-marker "\n"
-    input/hm-special-begin-marker "\n" input/hm-special-end-marker "\n"
-    input/darwin-special-begin-marker "\n"
-    input/darwin-special-end-marker "\n"
-    input/darwin-hm-begin-marker "\n" input/darwin-hm-end-marker "\n"))
+    "(nix/module [config] {:flake-inputs "
+    (str
+      "{:zeta"
+      (if (= seed 0) "" seed)
+      " {:url \"github:zeta"
+      (if (= seed 0) "" seed)
+      "/project\"}}})\n")))
 
-(defn repository
-  [(second-name String)
-   (second-source String)
-   (flake-text String)]
-  driver/FlakeInputRepositoryData
+(defn beta-source [seed Int] String
+  (str
+    "(nix/module [config] {:flake-inputs "
+    (str
+      "{:alpha"
+      (if (= seed 0) "" seed)
+      " {:url \"github:alpha"
+      (if (= seed 0) "" seed)
+      "/project\"}}})\n")))
+
+(defn conflict-source [seed Int] String
+  (str
+    "(nix/module [config] {:flake-inputs "
+    (str
+      "{:zeta"
+      (if (= seed 0) "" seed)
+      " {:url \"github:other"
+      (if (= seed 0) "" seed)
+      "/project\"}}})\n")))
+
+(defn empty-flake [seed Int] String
+  (str
+    input/input-begin-marker
+    "\n"
+    input/input-end-marker
+    "\n"
+    input/args-begin-marker
+    "\n"
+    input/args-end-marker
+    "\n"
+    input/special-begin-marker
+    "\n"
+    input/special-end-marker
+    "\n"
+    input/hm-special-begin-marker
+    "\n"
+    input/hm-special-end-marker
+    "\n"
+    input/darwin-special-begin-marker
+    "\n"
+    input/darwin-special-end-marker
+    "\n"
+    input/darwin-hm-begin-marker
+    "\n"
+    input/darwin-hm-end-marker
+    "\n"))
+
+(defn repository [seed Int second-name String second-source String flake-text String] driver/FlakeInputRepositoryData
   (driver/->FlakeInputRepositoryData
-    [(driver/->ModuleSource "alpha-module" alpha-source)
-     (driver/->ModuleSource second-name second-source)]
+    [
+      (driver/->ModuleSource (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
+      (driver/->ModuleSource second-name second-source)]
     flake-text))
 
-(defn parsed? [(argv (Vec String))] Bool
+(defn parsed? [seed Int argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) true]
     [(OtherFirnCommand other) false]
     [(InvalidFlakeInputArgv invalid) false]))
 
-(defn invalid? [(argv (Vec String))] Bool
+(defn invalid? [seed Int argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) false]
     [(OtherFirnCommand other) false]
     [(InvalidFlakeInputArgv invalid) true]))
 
-(defn other? [(argv (Vec String))] Bool
+(defn other? [seed Int argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) false]
     [(OtherFirnCommand other) true]
     [(InvalidFlakeInputArgv invalid) false]))
 
-(defn case-argv-grammar [] Bool
-  (and (parsed? ["flake-input" "resolve" "emit"])
-       (invalid? ["flake-input" "resolve"])
-       (invalid? ["flake-input" "resolve" "show"])
-       (invalid? ["flake-input" "resolve" "emit" "extra"])
-       (other? ["tag" "resolve" "all"])))
+(defn case-argv-grammar [seed Int] Bool
+  (and
+    (parsed? seed ["flake-input" "resolve" "emit"])
+    (invalid? seed ["flake-input" "resolve"])
+    (invalid? seed ["flake-input" "resolve" "show"])
+    (invalid? seed ["flake-input" "resolve" "emit" (str "extra" (if (= seed 0) "" seed))])
+    (other? seed ["tag" "resolve" "all"])))
 
-(defn written-text [(outcome driver/FlakeInputOutcome)] String
+(defn written-text [seed Int outcome driver/FlakeInputOutcome] String
   (loop [(index Int) 0]
     (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
       ""
@@ -71,45 +101,60 @@
         [(StderrText text) (recur (+ index 1))]
         [(WriteFlake path text) text]))))
 
-(defn case-emit-and-up-to-date [] Bool
-  (let [(first driver/FlakeInputOutcome)
-        (driver/run-flake-input-emit
-          (repository "beta-module" beta-source (empty-flake)))
-        (generated String) (written-text first)
-        (second driver/FlakeInputOutcome)
-        (driver/run-flake-input-emit
-          (repository "beta-module" beta-source generated))]
-    (and (= (driver/flakeinputoutcome-status first) 0)
-         (= (driver/outcome-effect-kinds first)
-            ["stdout" "write" "stdout"])
-         (= (driver/outcome-stderr first) "")
-         (> (count generated) (count (empty-flake)))
-         (= (driver/flakeinputoutcome-status second) 0)
-         (= (driver/outcome-effect-kinds second) ["stdout" "stdout"])
-         (= (driver/outcome-stderr second) ""))))
+(defn effect-count [outcome driver/FlakeInputOutcome kind String] Int
+  (let [kinds (Vec String) (driver/outcome-effect-kinds outcome)]
+    (loop [index Int 0 total Int 0]
+      (if (>= index (count kinds))
+        total
+        (recur (+ index 1) (+ total (if (= (nth kinds index) kind) 1 0)))))))
 
-(defn case-conflict-before-summary [] Bool
-  (let [(outcome driver/FlakeInputOutcome)
-        (driver/run-flake-input-emit
-          (repository "beta-module" conflict-source (empty-flake)))]
-    (and (= (driver/flakeinputoutcome-status outcome) 1)
-         (= (driver/outcome-effect-kinds outcome) ["stderr"])
-         (= (driver/outcome-stdout outcome) ""))))
+(defn case-emit-and-up-to-date [seed Int] Bool
+  (let [
+     (first driver/FlakeInputOutcome)
+     (driver/run-flake-input-emit
+       (repository
+         seed
+         (str "beta" (if (= seed 0) "" seed) "-module")
+         (beta-source seed)
+         (empty-flake seed)))
+     (generated String)
+     (written-text seed first)
+     (second driver/FlakeInputOutcome)
+     (driver/run-flake-input-emit
+       (repository seed (str "beta" (if (= seed 0) "" seed) "-module") (beta-source seed) generated))]
+    (and
+      (= (driver/flakeinputoutcome-status first) 0)
+      (= (effect-count first "write") 1)
+      (= (driver/outcome-stderr first) "")
+      (> (count generated) (count (empty-flake seed)))
+      (= (driver/flakeinputoutcome-status second) 0)
+      (= (effect-count second "write") 0)
+      (= (driver/outcome-stderr second) ""))))
 
-(defn cases [] (Vec TestResult)
-  [(->TestResult "argv-grammar" (case-argv-grammar))
-   (->TestResult "emit-and-up-to-date" (case-emit-and-up-to-date))
-   (->TestResult "conflict-before-summary" (case-conflict-before-summary))])
+(defn case-conflict-before-summary [seed Int] Bool
+  (let [
+     (outcome driver/FlakeInputOutcome)
+     (driver/run-flake-input-emit
+       (repository
+         seed
+         (str "beta" (if (= seed 0) "" seed) "-module")
+         (conflict-source seed)
+         (empty-flake seed)))]
+    (and
+      (= (driver/flakeinputoutcome-status outcome) 1)
+      (and (= (effect-count outcome "write") 0) (> (count (driver/outcome-stderr outcome)) 0))
+      (= (driver/outcome-stdout outcome) ""))))
 
 (js/export
- (defn test [] Int
-  (let [(results (Vec TestResult)) (cases)]
-    (loop [(index Int) 0
-           (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [(result TestResult) (nth results index)]
-          (recur (+ index 1)
-            (if (testresult-passed result)
-              failures
-              (+ failures 1)))))))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (loop [index Int 0 seed Int 0]
+        (if (>= index samples)
+          0
+          (if (and
+             (case-argv-grammar seed)
+             (case-emit-and-up-to-date seed)
+             (case-conflict-before-summary seed))
+            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+            (do (println (str "FAIL firn.flake-input-driver-test property seed=" seed)) 1)))))))

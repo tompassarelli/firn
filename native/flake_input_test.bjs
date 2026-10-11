@@ -1,112 +1,163 @@
 #lang beagle/js
-(ns firn.flake-input-test
-  (:require [firn.flake-input :as input]))
+(ns firn.flake-input-test (:require [firn.flake-input :as input]))
 
-(defrecord TestResult [(name String) (passed Bool)])
-
-(def alpha-source String
+(defn alpha-source [seed Int] String
   (str
     "#lang beagle/nix\n"
     "(ns default)\n"
     "(nix/module [config lib pkgs ...]\n"
-    "  (let [name \"alpha\"]\n"
+    (str "  (let [name \"alpha" (if (= seed 0) "" seed) "\"]\n")
     "    {:flake-inputs\n"
-    "      {:zeta {:url \"github:zeta/project\"\n"
+    (str
+      "      {:zeta"
+      (if (= seed 0) "" seed)
+      " {:url \"github:zeta"
+      (if (= seed 0) "" seed)
+      "/project\"\n")
     "              :inputs.nixpkgs.follows \"nixpkgs\"}\n"
-    "       :alpha {:url \"github:alpha/project\"}}}))\n"))
+    (str
+      "       :alpha"
+      (if (= seed 0) "" seed)
+      " {:url \"github:alpha"
+      (if (= seed 0) "" seed)
+      "/project\"}}}))\n")))
 
-(def same-zeta-source String
+(defn same-zeta-source [seed Int] String
   (str
     "(nix/module [config]\n"
     "  {:flake-inputs\n"
-    "    {:zeta {:url \"github:zeta/project\" :ignored \"later\"}}})\n"))
+    (str
+      "    {:zeta"
+      (if (= seed 0) "" seed)
+      " {:url \"github:zeta"
+      (if (= seed 0) "" seed)
+      "/project\" :ignored \"later"
+      (if (= seed 0) "" seed)
+      "\"}}})\n")))
 
-(defn parsed-inputs
-  [(module-name String) (source String)] (Vec input/FlakeInput)
+(defn parsed-inputs [seed Int module-name String source String] (Vec input/FlakeInput)
   (match (input/module-inputs-from-source module-name source)
     [(ModuleInputsParsed inputs) inputs]
     [(ModuleInputsRejected message offset) []]))
 
-(defn case-parse-and-render [] Bool
-  (let [(inputs (Vec input/FlakeInput))
-        (parsed-inputs "alpha-module" alpha-source)
-        (names (Vec String)) (input/sorted-input-names inputs)]
-    (and (= names ["alpha" "zeta"])
-         (= (input/format-input-decl (input/find-input inputs "alpha"))
-            "   :alpha {:url \"github:alpha/project\"}")
-         (= (input/format-input-decl (input/find-input inputs "zeta"))
-            (str "   :zeta {:inputs.nixpkgs.follows \"nixpkgs\" "
-              ":url \"github:zeta/project\"}")))))
+(defn case-parse-and-render [seed Int] Bool
+  (let [
+     (inputs (Vec input/FlakeInput))
+     (parsed-inputs seed (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
+     (names (Vec String))
+     (input/sorted-input-names inputs)]
+    (and
+      (= names [(str "alpha" (if (= seed 0) "" seed)) (str "zeta" (if (= seed 0) "" seed))])
+      (=
+        (input/format-input-decl (input/find-input inputs (str "alpha" (if (= seed 0) "" seed))))
+        (str
+          "   :alpha"
+          (if (= seed 0) "" seed)
+          " {:url \"github:alpha"
+          (if (= seed 0) "" seed)
+          "/project\"}"))
+      (=
+        (input/format-input-decl (input/find-input inputs (str "zeta" (if (= seed 0) "" seed))))
+        (str
+          (str "   :zeta" (if (= seed 0) "" seed) " {:inputs.nixpkgs.follows \"nixpkgs\" ")
+          (str ":url \"github:zeta" (if (= seed 0) "" seed) "/project\"}"))))))
 
-(defn case-duplicate-url-keeps-first [] Bool
-  (let [(collected input/CollectedInputs)
-        (input/collect
-          [(parsed-inputs "alpha-module" alpha-source)
-           (parsed-inputs "later-module" same-zeta-source)])
-        (zeta input/FlakeInput)
-        (input/find-input (input/collectedinputs-inputs collected) "zeta")]
-    (and (= (input/collectedinputs-errors collected) [])
-         (= (input/flakeinput-source-module zeta) "alpha-module"))))
+(defn case-duplicate-url-keeps-first [seed Int] Bool
+  (let [
+     (collected input/CollectedInputs)
+     (input/collect
+       [
+         (parsed-inputs seed (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
+         (parsed-inputs
+           seed
+           (str "later" (if (= seed 0) "" seed) "-module")
+           (same-zeta-source seed))])
+     (zeta input/FlakeInput)
+     (input/find-input
+       (input/collectedinputs-inputs collected)
+       (str "zeta" (if (= seed 0) "" seed)))]
+    (and
+      (= (input/collectedinputs-errors collected) [])
+      (= (input/flakeinput-source-module zeta) (str "alpha" (if (= seed 0) "" seed) "-module")))))
 
-(defn marker-source [] String
+(defn marker-source [seed Int] String
   (str
-    "prefix " input/input-begin-marker "\n"
-    "   :old {:url \"old\"}\n"
-    "   " input/input-end-marker " suffix\n"
-    "args " input/args-begin-marker "\n"
-    "     old\n"
-    "     " input/args-end-marker "\n"
-    "special " input/special-begin-marker "\n"
-    "                    :old old\n"
-    "  " input/special-end-marker "\n"
-    "hm " input/hm-special-begin-marker "\n"
-    " old\n"
-    "    " input/hm-special-end-marker "\n"
-    "darwin " input/darwin-special-begin-marker "\n"
-    " old\n"
-    "      " input/darwin-special-end-marker "\n"
-    "darwin-hm " input/darwin-hm-begin-marker "\n"
-    " old\n"
-    "        " input/darwin-hm-end-marker "\n"))
+    "prefix "
+    input/input-begin-marker
+    "\n"
+    (str "   :old" (if (= seed 0) "" seed) " {:url \"old" (if (= seed 0) "" seed) "\"}\n")
+    "   "
+    input/input-end-marker
+    " suffix\n"
+    "args "
+    input/args-begin-marker
+    "\n"
+    (str "     old" (if (= seed 0) "" seed) "\n")
+    "     "
+    input/args-end-marker
+    "\n"
+    "special "
+    input/special-begin-marker
+    "\n"
+    (str "                    :old" (if (= seed 0) "" seed) " old" (if (= seed 0) "" seed) "\n")
+    "  "
+    input/special-end-marker
+    "\n"
+    "hm "
+    input/hm-special-begin-marker
+    "\n"
+    (str " old" (if (= seed 0) "" seed) "\n")
+    "    "
+    input/hm-special-end-marker
+    "\n"
+    "darwin "
+    input/darwin-special-begin-marker
+    "\n"
+    (str " old" (if (= seed 0) "" seed) "\n")
+    "      "
+    input/darwin-special-end-marker
+    "\n"
+    "darwin-hm "
+    input/darwin-hm-begin-marker
+    "\n"
+    (str " old" (if (= seed 0) "" seed) "\n")
+    "        "
+    input/darwin-hm-end-marker
+    "\n"))
 
-(defn case-six-marker-splice-and-idempotence [] Bool
-  (let [(inputs (Vec input/FlakeInput))
-        (parsed-inputs "alpha-module" alpha-source)
-        (first input/SpliceResult)
-        (input/splice-flake-inputs (marker-source) inputs)]
+(defn case-six-marker-splice-and-idempotence [seed Int] Bool
+  (let [
+     (inputs (Vec input/FlakeInput))
+     (parsed-inputs seed (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
+     (first input/SpliceResult)
+     (input/splice-flake-inputs (marker-source seed) inputs)]
     (match first
       [(SpliceRejected message) false]
       [(SpliceUnchanged text) false]
-      [(SpliceChanged text)
-       (match (input/splice-flake-inputs text inputs)
-              [(SpliceRejected message) false]
-              [(SpliceChanged changed) false]
-              [(SpliceUnchanged unchanged) (= unchanged text)])])))
+      [
+        (SpliceChanged text)
+        (match (input/splice-flake-inputs text inputs)
+          [(SpliceRejected message) false]
+          [(SpliceChanged changed) false]
+          [(SpliceUnchanged unchanged) (= unchanged text)])])))
 
-(defn case-missing-marker-rejected [] Bool
+(defn case-missing-marker-rejected [seed Int] Bool
   (match (input/splice-flake-inputs "no markers\n" [])
-    [(SpliceRejected message)
-     true]
+    [(SpliceRejected message) true]
     [(SpliceChanged text) false]
     [(SpliceUnchanged text) false]))
 
-(defn cases [] (Vec TestResult)
-  [(->TestResult "parse-and-render" (case-parse-and-render))
-   (->TestResult "duplicate-url-keeps-first" (case-duplicate-url-keeps-first))
-   (->TestResult
-     "six-marker-splice-and-idempotence"
-     (case-six-marker-splice-and-idempotence))
-   (->TestResult "missing-marker-rejected" (case-missing-marker-rejected))])
-
 (js/export
- (defn test [] Int
-  (let [(results (Vec TestResult)) (cases)]
-    (loop [(index Int) 0
-           (failures Int) 0]
-      (if (>= index (count results))
-        failures
-        (let [(result TestResult) (nth results index)]
-          (recur (+ index 1)
-            (if (testresult-passed result)
-              failures
-              (+ failures 1)))))))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (loop [index Int 0 seed Int 0]
+        (if (>= index samples)
+          0
+          (if (and
+             (case-parse-and-render seed)
+             (case-duplicate-url-keeps-first seed)
+             (case-six-marker-splice-and-idempotence seed)
+             (case-missing-marker-rejected seed))
+            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+            (do (println (str "FAIL firn.flake-input-test property seed=" seed)) 1)))))))

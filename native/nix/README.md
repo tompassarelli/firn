@@ -1,5 +1,9 @@
 # Clause modules
 
+These compiler-to-Nix integration checks follow
+`north:socrates/skills/testing/SKILL.md`. The resolver runs the comparison once;
+do not run the comparison again as part of the same local check.
+
 `nixos-config:native/nix/btop.clause` and `nixos-config:native/nix/jq.clause`
 are the original small comparison using one shared declaration source,
 `nixos-config:native/nix/nixpkgs.clause`. Their generated enable options and

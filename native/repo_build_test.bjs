@@ -1,44 +1,45 @@
 #lang beagle/js
-(ns firn.repo-build-test
-  (:require [firn.repo-build :as build]))
+(ns firn.repo-build-test (:require [firn.repo-build :as build]))
 
-(defn expect
-  [condition Bool
-   message String] Int
-  (if condition
-    0
-    1))
+(defn expect [seed Int condition Bool message String] Int (if condition 0 1))
 
-(defn test-path-contract [] Int
+(defn test-path-contract [seed Int] Int
   (expect
+    seed
     (and
       (build/source-path? "flake.bnix")
-      (build/source-path? "modules/alpha/default.bnix")
+      (build/source-path? (str "modules/alpha" (if (= seed 0) "" seed) "/default.bnix"))
       (not (build/source-path? "scripts/fixture.bnix"))
       (not (build/source-path? "tests/fixture.bnix"))
       (not (build/source-path? "docs/fixtures/example.bnix"))
-      (not (build/source-path? "hosts/alpha/enabled-tags.bnix"))
-      (not (build/source-path? "hosts/alpha/responsibilities.bnix"))
+      (not (build/source-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.bnix")))
+      (not
+        (build/source-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/responsibilities.bnix")))
       (not (build/source-path? "result-old/module.bnix"))
       (not (build/source-path? ".direnv/cache/module.bnix"))
-      (build/obsolete-output-path? "hosts/alpha/enabled-tags.nix")
-      (= (build/output-relative "modules/alpha/default.bnix")
-         "modules/alpha/default.nix"))
+      (build/obsolete-output-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.nix"))
+      (=
+        (build/output-relative (str "modules/alpha" (if (= seed 0) "" seed) "/default.bnix"))
+        (str "modules/alpha" (if (= seed 0) "" seed) "/default.nix")))
     "source inventory path contract"))
 
-(defn test-command-contract [] Int
+(defn test-command-contract [seed Int] Int
   (expect
+    seed
     (and
-      (instance? build/ParsedRepoBuild
-        (build/parse-repo-build-argv ["repo" "build"]))
-      (instance? build/ParsedRepoBuild
-        (build/parse-repo-build-argv ["repo" "build" "all"]))
-      (instance? build/InvalidRepoBuildArgv
-        (build/parse-repo-build-argv ["repo" "build" "host"]))
-      (instance? build/OtherRepoBuildCommand
-        (build/parse-repo-build-argv ["repo" "validate"])))
+      (instance? build/ParsedRepoBuild (build/parse-repo-build-argv ["repo" "build"]))
+      (instance? build/ParsedRepoBuild (build/parse-repo-build-argv ["repo" "build" "all"]))
+      (instance? build/InvalidRepoBuildArgv (build/parse-repo-build-argv ["repo" "build" "host"]))
+      (instance? build/OtherRepoBuildCommand (build/parse-repo-build-argv ["repo" "validate"])))
     "repo build argv contract"))
 
 (js/export
- (defn test [] Int
-  (+ (test-path-contract) (test-command-contract))))
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0)
+      1
+      (loop [index Int 0 seed Int 0]
+        (if (>= index samples)
+          0
+          (if (and (= (test-path-contract seed) 0) (= (test-command-contract seed) 0))
+            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
+            (do (println (str "FAIL firn.repo-build-test property seed=" seed)) 1)))))))

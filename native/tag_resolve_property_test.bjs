@@ -94,12 +94,13 @@
           (+ warnings (missing-count (r/enabledtag-minuses entry) defaults)))))))
 
 (js/export
-  (defn run-tests [] Int
+  (defn run-properties [samples Int] Int
+    (if (<= samples 0) 1
     (loop [index Int 0 seed Int 73421]
-      (if (>= index 128) 0
+      (if (>= index samples) 0
         (let [catalog (Vec r/ModuleTags) (modules seed) config r/HostTags (host seed)
               result r/Resolution (r/resolve catalog config)]
           (if (and (= (model catalog config) (r/resolution-active result))
                    (diagnostics? catalog config result))
             (recur (+ index 1) (next-seed seed))
-            (do (println (str "FAIL tag algebra seed=" seed " case=" index)) 1)))))))
+            (do (println (str "FAIL tag algebra seed=" seed " case=" index)) 1))))))))

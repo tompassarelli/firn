@@ -102,7 +102,7 @@ printf '%s\n' '{"type":"module"}' \
 printf 'activity-native: post-reorder focus behavior\n' >&2
 FIRN_ACTIVITY_TEST_MODULE="$modules/activity/focus-test.js" \
 timeout --foreground 30 "$bun" --eval \
-  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m.run([]);' \
+  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m["run-properties"](process.env.CI ? 512 : 128);' \
   >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
   || die "post-reorder focus behavior failed"
 [[ ! -s "$scratch/focus-test.err" ]] \

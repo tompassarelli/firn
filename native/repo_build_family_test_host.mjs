@@ -4,9 +4,6 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { readModuleMetadataSource } from './clause_source_host.mjs';
 
 const build = await import(new URL('./firn/repo-build-test.js', import.meta.url));
-const flake = await import(new URL('./firn/flake-input-test.js', import.meta.url));
-const flakeDriver = await import(new URL('./firn/flake-input-driver-test.js', import.meta.url));
-const inventory = await import(new URL('./firn/inventory-test.js', import.meta.url));
 const responsibility = await import(
   new URL('./firn/responsibility-projection-test.js', import.meta.url)
 );
@@ -55,10 +52,7 @@ const bridge = Object.freeze({
 
 const repo = process.argv[2];
 const results = [
-  build.test(),
-  flake.test(),
-  flakeDriver.test(),
-  inventory.test(),
+  build["run-properties"](process.env.CI ? 512 : 128),
   responsibility.test(bridge, [repo]),
 ];
 process.exitCode = results.every((status) => status === 0) ? 0 : 1;
