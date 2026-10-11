@@ -52,11 +52,35 @@
           WantedBy = [ "default.target" ];
         };
       };
+      systemd.user.services.agents-flow-stall = lib.mkIf cfg.watches {
+        Unit = {
+          Description = "Report stalled repository landings";
+        };
+        Service = {
+          Type = "oneshot";
+          Environment = [ path ];
+          ExecStart = "${homeDir}/.local/share/north/bin/agents flow --stall-alert";
+        };
+      };
+      systemd.user.timers.agents-flow-stall = lib.mkIf cfg.watches {
+        Unit = {
+          Description = "Check repository landing progress every five minutes";
+        };
+        Timer = {
+          OnCalendar = "*-*-* *:00/5:00";
+          Persistent = true;
+        };
+        Install = {
+          WantedBy = [ "timers.target" ];
+        };
+      };
     });
   };
 }) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
     pkgs.bun
     pkgs.gh
+    pkgs.git
+    pkgs.python3
     pkgs.tmux
     pkgs.websocat
     pkgs.jq
