@@ -21,8 +21,7 @@
   (defrecord TagResolveHostData
   [tags r/HostTags
    tag-source-present Bool
-   generated-present Bool
-   generated-text String]))
+   active (Vec String)]))
 
 (js/export
   (defrecord TagResolveRepositoryData
@@ -38,9 +37,7 @@
   (defunion TagResolveEffect
   (StdoutText [text String])
   (StderrText [text String])
-  (WriteGenerated
-    [path String
-     text String])))
+  (BuildGenerated [path String])))
 
 (js/export
   (defrecord TagResolveOutcome
@@ -231,31 +228,32 @@
 
 (js/export
   (defn generated-path [host String] String
-  (str "hosts/" host "/_generated-enables.bnix")))
+  (str "hosts/" host "/_generated-enables.gal")))
 
 (js/export
-  (defn emit-success-effects
-  [data TagResolveHostData
-   resolution r/Resolution] (Vec TagResolveEffect)
-  (let [host String (r/resolution-host resolution)
-        path String (generated-path host)
-        text String (r/emit-host-enables-bnix resolution)
-        count-active Int (count (r/resolution-active resolution))]
-    (if (and (tagresolvehostdata-generated-present data)
-             (= (tagresolvehostdata-generated-text data) text))
-      [(->StdoutText
-         (str "tag-resolve: " path " is up to date (" count-active
-           " modules)\n"))]
-      [(->WriteGenerated path text)
-       (->StdoutText
-         (str "tag-resolve: wrote " path " (" count-active " modules)\n"))]))))
+  (defn emit-success-effects [resolution r/Resolution] (Vec TagResolveEffect)
+  (let [path String (generated-path (r/resolution-host resolution))]
+    [(->BuildGenerated path)
+     (->StdoutText
+       (str "tag-resolve: built " path " ("
+         (count (r/resolution-active resolution)) " modules)\n"))])))
+
+(js/export
+  (defn with-active
+  [resolution r/Resolution
+   active (Vec String)] r/Resolution
+  (r/->Resolution (r/resolution-host resolution) active
+    (r/resolution-per-tag resolution) (r/resolution-overrides resolution)
+    (r/resolution-errors resolution) (r/resolution-warnings resolution))))
 
 (js/export
   (defn resolve-one
   [modules (Vec r/ModuleTags)
    data TagResolveHostData
    emit Bool] TagResolveOutcome
-  (let [resolution r/Resolution (r/resolve modules (tagresolvehostdata-tags data))]
+  (let [resolution r/Resolution (with-active
+          (r/resolve modules (tagresolvehostdata-tags data))
+          (tagresolvehostdata-active data))]
     (if (> (count (r/resolution-errors resolution)) 0)
       (->TagResolveOutcome 1 (error-effects (r/resolution-errors resolution)))
       (->TagResolveOutcome
@@ -263,7 +261,7 @@
         (into
           (warning-effects (r/resolution-warnings resolution))
           (if emit
-            (emit-success-effects data resolution)
+            (emit-success-effects resolution)
             [(->StdoutText (render-pretty-resolution resolution))])))))))
 
 (js/export
@@ -329,7 +327,7 @@
         (match effect
           [(StdoutText text) (recur (+ index 1) (str result text))]
           [(StderrText text) (recur (+ index 1) result)]
-          [(WriteGenerated path text) (recur (+ index 1) result)]))))))
+          [(BuildGenerated path) (recur (+ index 1) result)]))))))
 
 (js/export
   (defn outcome-stderr [outcome TagResolveOutcome] String
@@ -341,7 +339,7 @@
         (match effect
           [(StdoutText text) (recur (+ index 1) result)]
           [(StderrText text) (recur (+ index 1) (str result text))]
-          [(WriteGenerated path text) (recur (+ index 1) result)]))))))
+          [(BuildGenerated path) (recur (+ index 1) result)]))))))
 
 (js/export
   (defn outcome-effect-kinds [outcome TagResolveOutcome] (Vec String)
@@ -355,4 +353,4 @@
             (match effect
               [(StdoutText text) "stdout"]
               [(StderrText text) "stderr"]
-              [(WriteGenerated path text) "write"]))))))))
+              [(BuildGenerated path) "build"]))))))))
