@@ -3,6 +3,13 @@ use firn/tags
 smashcraft-controller is a Module
 smashcraft-controller is tagged desktop
 
+# Tom's Xbox controller in Warcraft III: the always-on wc3-controller service
+# (github.com/tompassarelli/wc3-controller) with Smashcraft's map plug-in
+# (smashcraft:controller/README.md). ExecStart runs direct out-of-store
+# launchers that `bun wisp controller` and `bun wisp play` point at the pinned
+# service and the current plug-in, so the projects stay out of the system
+# closure; without the service the unit is skipped, and without the plug-in
+# the service plays every map with its Any map profile.
 nix module
   arguments: config, lib, ...
   config when config.myConfig.modules.smashcraft-controller.enable

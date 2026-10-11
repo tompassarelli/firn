@@ -6,6 +6,11 @@ nix module
   option myConfig.modules.users.username: Text
     default: "user"
     description: "Primary system username (instance binds the real one)"
+  # --- identity surface ---
+  # One home for the per-user facts that were scattered across modules
+  # (git email/name, ~/code paths). Defaults preserve current behavior;
+  # the INSTANCE (each host) overrides these — a fork sets them once here
+  # instead of editing git/, auto-upgrade/, timezone/, agent-coord/.
   option myConfig.modules.users.email: Text
     default: ""
     description: "Primary git/commit email"

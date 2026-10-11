@@ -3,6 +3,12 @@ use firn/tags
 rebuild-nopasswd is a Module
 rebuild-nopasswd is tagged cli-tools
 
+# Owner-decided 2026-07-09: on this single-user box, the rebuild password is
+# a speed bump, not a boundary. Tom owns the flake and can become root at the
+# next legitimate activation. Activation sudo-execs per-generation store paths
+# (nh and ng internals), which cannot be scoped statically, so sudo is blanket
+# passwordless. Discipline stays in Firn's green build/validate gates and
+# committed inputs. There is no rebuild broker or coordination layer.
 nix module
   arguments: config, lib, ...
   config when config.myConfig.modules.rebuild-nopasswd.enable

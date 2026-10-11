@@ -2,6 +2,8 @@ use firn/tags
 
 keyring-headless is a Module
 
+# A server has no login prompt to unlock a keyring, so a lingering user
+# service starts the Secret Service already unlocked from a sops password.
 nix module
   arguments: config, lib, pkgs, ...
   let cfg = config.myConfig.modules.keyring-headless

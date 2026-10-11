@@ -3,6 +3,7 @@ use firn/tags
 element-desktop is a Module
 element-desktop is tagged communication
 
+# Electron cannot detect gnome-keyring under niri; without this flag Element stops at "System unsupported".
 nix module
   arguments: config, lib, pkgs, ...
   config when config.myConfig.modules.element-desktop.enable

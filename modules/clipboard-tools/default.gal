@@ -6,6 +6,8 @@ clipboard-tools is tagged desktop
 nix module
   arguments: config, lib, pkgs, ...
   config when config.myConfig.modules.clipboard-tools.enable
+    # A Wayland selection dies with its source client; wl-clip-persist reowns it.
+    # No xclip/xsel: xwayland-satellite's X clipboard goes stale without a focused X window, and Claude Code tries xclip before wl-paste.
     "environment"
       "systemPackages": [pkgs.wl-clip-persist, pkgs.xlsclients]
     "home-manager"

@@ -2,6 +2,12 @@ use firn/tags
 
 tmp-retention is a Module
 
+# The mM: age check uses mtime for files and directories; ordinary reads must
+# not refresh retention. systemd's first path rule wins in basename order:
+# 00-nixos.conf precedes the vendor tmp.conf, whose duplicate-path notice
+# confirms this override. Seven days covers a lane paused over a weekend
+# while bounding scratch inode retention. /var/tmp retains its thirty-day
+# reboot-surviving contract.
 nix module
   arguments: config, lib, ...
   config when config.myConfig.modules.tmp-retention.enable
