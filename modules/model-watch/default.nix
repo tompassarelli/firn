@@ -32,6 +32,33 @@
           WantedBy = [ "timers.target" ];
         };
       };
+      systemd.user.services.cross-project-scan = {
+        Unit = {
+          Description = "Daily cross-project overlap scan for Plato";
+          OnFailure = [ "update-notify@%n.service" ];
+        };
+        Service = {
+          Type = "oneshot";
+          Nice = 10;
+          TimeoutStartSec = "20min";
+          Environment = [
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin"
+          ];
+          ExecStart = jobRun "cross-project-scan" "${homeDir}/.local/share/north/bin/cross-project-scan";
+        };
+      };
+      systemd.user.timers.cross-project-scan = {
+        Unit = {
+          Description = "Daily cross-project overlap scan for Plato";
+        };
+        Timer = {
+          OnCalendar = [ "07:30" ];
+          Persistent = true;
+        };
+        Install = {
+          WantedBy = [ "timers.target" ];
+        };
+      };
     });
   };
 }) "Twice-daily ranked public watch digest")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
