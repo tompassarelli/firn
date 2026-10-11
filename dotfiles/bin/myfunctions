@@ -15,7 +15,7 @@ for f in "$bindir"/*; do
 done
 
 echo ""
-echo "Aliases (from modules/bash/default.bnix):"
+echo "Aliases (from modules/bash/default.gal):"
 cat <<'EOF'
   du            dust
   ls            eza
