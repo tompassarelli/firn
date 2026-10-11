@@ -2,10 +2,9 @@
 (ns firn.tag-commands-family
   (:require [firn.tag-resolve :as r]
             [firn.tag-resolve-family :as repository]
+            [firn.tag-resolve-driver :as resolve-driver]
             [firn.tag-commands :as commands]
             [firn.tag-commands-driver :as driver]))
-
-(def max-source-bytes Int 16777216)
 
 (js/export
   (defunion HostDocumentLoadResult
@@ -25,62 +24,16 @@
   [(label String) (operation String) (relative String) (errno Int)] String
   (str label ": " operation " '" relative "': errno " errno "\n"))
 
-(defn parse-message [(relative String) (message String) (offset Int)] String
-  (str "firn: invalid host tag source '" relative "' at offset " offset
-    ": " message "\n"))
-
-(defn finish-host-document
-  [(host String)
-   (relative String)
-   (source String)
-   (allowed (Vec String))]
-  HostDocumentLoadResult
-  (match (commands/host-document-from-source host source allowed)
-    [(HostDocumentRejected message offset)
-     (->HostDocumentLoadRejected (parse-message relative message offset))]
-    [(HostDocumentParsed document) (->HostDocumentLoaded document)]))
-
-(defn parse-host-document
-  [(bridge Any)
-   (root String)
-   (host String)
-   (relative String)
-   (source String)]
-  HostDocumentLoadResult
-  (match (commands/host-document-from-source host source [])
-    [(HostDocumentRejected message offset)
-     (->HostDocumentLoadRejected (parse-message relative message offset))]
-    [(HostDocumentParsed preliminary)
-     (if (= "darwin"
-            (r/hosttags-platform
-              (commands/hostdocument-tags preliminary)))
-       (match (repository/load-darwin-allowlist bridge root)
-         [(AllowlistRejected message) (->HostDocumentLoadRejected message)]
-         [(AllowlistLoaded allowed)
-          (finish-host-document host relative source allowed)])
-       (->HostDocumentLoaded preliminary))]))
-
 (defn load-host-document
   [(bridge Any) (root String) (host String)] HostDocumentLoadResult
-  (let [(relative String) (str "hosts/" host "/enabled-tags.bnix")
-        (absolute String) (path root relative)
-        (kind-result Any) (.pathKind bridge absolute)
-        (kind-errno Int) (.status bridge kind-result)]
-    (if (not (= kind-errno 0))
-      (if (= kind-errno 2)
-         (->HostDocumentMissing host)
-         (->HostDocumentLoadRejected
-           (errno-message "firn" "cannot inspect" relative kind-errno)))
-      (let [(kind Int) (.value bridge kind-result)]
-       (if (not (or (= kind 1) (= kind 3)))
-         (->HostDocumentMissing host)
-         (let [(read-result Any) (.readText bridge absolute max-source-bytes)
-               (read-errno Int) (.status bridge read-result)]
-           (if (not (= read-errno 0))
-            (->HostDocumentLoadRejected
-              (errno-message "firn" "cannot read" relative read-errno))
-            (let [(source String) (.value bridge read-result)]
-              (parse-host-document bridge root host relative source)))))))))
+  (match (repository/load-host bridge root host)
+    [(HostRejected message) (->HostDocumentLoadRejected message)]
+    [(HostLoaded data)
+     (if (resolve-driver/tagresolvehostdata-tag-source-present data)
+       (->HostDocumentLoaded
+         (commands/->HostDocument (resolve-driver/tagresolvehostdata-tags data)
+           (resolve-driver/tagresolvehostdata-active data)))
+       (->HostDocumentMissing host))]))
 
 (defn load-action-hosts
   [(bridge Any)
@@ -150,7 +103,14 @@
            (execute-effects bridge root outcome (+ index 1)))]
       [(CommandWrite relative text make-parents label)
        (execute-write bridge root outcome index relative text make-parents
-         label)])))
+         label)]
+      [(CommandEditFacts relative remove add label)
+       (let [(result Any) (.editHostFacts bridge (path root relative) remove add)]
+         (if (= (.status bridge result) 0)
+           (execute-effects bridge root outcome (+ index 1))
+           (emit-io-error bridge
+             (str label ": cannot edit '" relative "': "
+               (.moduleFactsMessage bridge result) "\n"))))])))
 
 (defn run-with-modules
   [(bridge Any)

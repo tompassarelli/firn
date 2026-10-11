@@ -53,6 +53,11 @@
     [path String
      text String
      make-parents Bool
+     label String])
+  (CommandEditFacts
+    [path String
+     remove (Vec String)
+     add (Vec String)
      label String])))
 
 (js/export
@@ -222,25 +227,25 @@
 (js/export
   (defn missing-status-outcome [host String] TagCommandOutcome
   (stderr-outcome 1
-    (str "firn tag status: no such file hosts/" host
-      "/enabled-tags.bnix\n"))))
+    (str "firn tag status: host '" host "' is not declared (no '" host
+      " is a Host' fact)\n"))))
 
 (js/export
   (defn missing-mutation-outcome [host String] TagCommandOutcome
   (stderr-outcome 1
-    (str "firn: no such file hosts/" host "/enabled-tags.bnix\n"
-      "  (create the host directory and an empty enabled-tags.bnix first)\n"))))
+    (str "firn: host '" host "' is not declared (no '" host " is a Host' fact)\n"
+      "  (declare it in " (c/host-facts-path host) " first)\n"))))
 
 (js/export
   (defn mutation-outcome
   [host String
    mutation c/TagMutation] TagCommandOutcome
-  (let [relative String (str "hosts/" host "/enabled-tags.bnix")]
+  (let [relative String (c/host-facts-path host)]
     (if (c/tagmutation-changed mutation)
       (->TagCommandOutcome 0
-        [(->CommandWrite relative
-           (c/format-enabled-tags-bnix (c/tagmutation-document mutation))
-           false
+        [(->CommandEditFacts relative
+           (c/tagmutation-remove mutation)
+           (c/tagmutation-add mutation)
            "firn")
          (->CommandStdout (str "updated " relative "\n"))])
       (stdout-outcome (str "no change to " relative "\n"))))))
@@ -281,15 +286,15 @@
     (str
       "firn module enable: no module-level force-on in tag-driven hosts.\n"
       "\n"
-      "  " module " is not currently blacklisted in :disabled, so there is\n"
+      "  " module " has no '" host " disables " module "' fact, so there is\n"
       "  nothing to un-blacklist. To activate it on this host:\n"
       "\n"
       "    - opt in via a tag:    firn tag opt-in <tag>+" module "\n"
-      "      (where <tag> is one the module lists in :tags-opt-in)\n"
-      "    - or enable a tag the module already lists in :tags:\n"
+      "      (where the module can opt into <tag>)\n"
+      "    - or enable a tag the module is tagged with:\n"
       "                            firn tag enable <tag>\n"
-      "    - or, only as a last resort, add :tags " host "-only to the module\n"
-      "      and enable that tag here.\n"))))
+      "    - or turn it on in hosts/" host "/configuration.gal:\n"
+      "                            " host " turns on " module "\n"))))
 
 (js/export
   (defn run-index
@@ -352,14 +357,14 @@
                  (malformed-tag-module-outcome invalid)]
                 [(TagModuleParsed tag module)
                  (mutation-outcome host
-                   (c/add-tag-edit document tag (str "+" module)))])]
+                   (c/add-tag-edit document tag module true))])]
              [(TagOptOut ignored leaf)
               (match (c/split-tag-module leaf)
                 [(TagModuleRejected invalid)
                  (malformed-tag-module-outcome invalid)]
                 [(TagModuleParsed tag module)
                  (mutation-outcome host
-                   (c/add-tag-edit document tag (str "-" module)))])]
+                   (c/add-tag-edit document tag module false))])]
              [(ModuleDisable ignored module)
               (mutation-outcome host (c/disable-module document module))]
              [(ModuleEnable ignored module)
@@ -413,6 +418,8 @@
         [(CommandStdout text) (recur (+ index 1) (str result text))]
         [(CommandStderr text) (recur (+ index 1) result)]
         [(CommandWrite path text make-parents label)
+         (recur (+ index 1) result)]
+        [(CommandEditFacts path remove add label)
          (recur (+ index 1) result)])))))
 
 (js/export
@@ -425,6 +432,8 @@
         [(CommandStdout text) (recur (+ index 1) result)]
         [(CommandStderr text) (recur (+ index 1) (str result text))]
         [(CommandWrite path text make-parents label)
+         (recur (+ index 1) result)]
+        [(CommandEditFacts path remove add label)
          (recur (+ index 1) result)])))))
 
 (js/export
@@ -439,4 +448,6 @@
         [(CommandStderr text)
          (recur (+ index 1) (conj result "stderr"))]
         [(CommandWrite path text make-parents label)
-         (recur (+ index 1) (conj result "write"))])))))
+         (recur (+ index 1) (conj result "write"))]
+        [(CommandEditFacts path remove add label)
+         (recur (+ index 1) (conj result "edit"))])))))

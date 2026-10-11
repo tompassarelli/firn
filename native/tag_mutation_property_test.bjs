@@ -10,30 +10,24 @@
     (if (>= index (count values)) result
       (recur (+ index 1) (if (= value (nth values index)) result (conj result (nth values index)))))))
 
-(defn join [values (Vec String)] String
-  (loop [index Int 0 result String ""]
-    (if (>= index (count values)) result
-      (recur (+ index 1) (str result (if (= index 0) "" " ") (nth values index))))))
+(defn facts [host r/HostTags] (Vec String)
+  (let [name String (r/hosttags-host host)]
+    (sort
+      (loop [index Int 0 result (Vec String) []]
+        (if (>= index (count (r/hosttags-enabled host)))
+          (loop [d Int 0 out (Vec String) result]
+            (if (>= d (count (r/hosttags-disabled host))) out
+              (recur (+ d 1) (conj out (c/disables-fact name (nth (r/hosttags-disabled host) d))))))
+          (let [entry r/EnabledTag (nth (r/hosttags-enabled host) index)]
+            (recur (+ index 1)
+              (into (conj result (c/enables-fact name (r/enabledtag-tag entry)))
+                (c/edit-facts name entry)))))))))
 
-(defn prefixed [prefix String values (Vec String)] (Vec String)
+(defn minus [left (Vec String) right (Vec String)] (Vec String)
   (loop [index Int 0 result (Vec String) []]
-    (if (>= index (count values)) result
-      (recur (+ index 1) (conj result (str prefix (nth values index)))))))
-
-(defn source [host r/HostTags] String
-  (str "#lang beagle/nix\n\n(ns enabled-tags)\n\n{:platform " (r/hosttags-platform host)
-    "\n :enabled\n  ["
-    (loop [index Int 0 result String ""]
-      (if (>= index (count (r/hosttags-enabled host))) result
-        (let [entry r/EnabledTag (nth (r/hosttags-enabled host) index)
-              edits (Vec String) (if (= (mod index 2) 0)
-                (into (prefixed "-" (r/enabledtag-minuses entry)) (prefixed "+" (r/enabledtag-pluses entry)))
-                (into (prefixed "+" (r/enabledtag-pluses entry)) (prefixed "-" (r/enabledtag-minuses entry))))]
-          (recur (+ index 1) (str result (if (= index 0) "" "\n   ")
-            (if (= (count edits) 0) (r/enabledtag-tag entry)
-              (str "[" (r/enabledtag-tag entry) " " (join edits) "]")))))))
-    "]" (if (= (count (r/hosttags-disabled host)) 0) "\n}\n"
-      (str "\n :disabled [" (join (r/hosttags-disabled host)) "]\n}\n"))))
+    (if (>= index (count left)) result
+      (recur (+ index 1)
+        (if (p/member? right (nth left index)) result (conj result (nth left index)))))))
 
 (defn command-argv [op Int tag String module String] (Vec String)
   (cond (= op 0) ["tag" "enable" tag]
@@ -69,64 +63,60 @@
             :else (r/hosttags-disabled host))
       (r/hosttags-platform host) (r/hosttags-restrict-allowed host) (r/hosttags-allowed host))))
 
-(defn written-source [outcome d/TagCommandOutcome original String] String
-  (loop [index Int 0 text String original]
-    (if (>= index (count (d/tagcommandoutcome-effects outcome))) text
+(defn edits [outcome d/TagCommandOutcome] (Vec (Vec String))
+  (loop [index Int 0 result (Vec (Vec String)) [[] []]]
+    (if (>= index (count (d/tagcommandoutcome-effects outcome))) result
       (match (nth (d/tagcommandoutcome-effects outcome) index)
-        [(CommandWrite path value parents label) (recur (+ index 1) value)]
-        [(CommandStdout value) (recur (+ index 1) text)]
-        [(CommandStderr value) (recur (+ index 1) text)]))))
+        [(CommandEditFacts path remove add label)
+         (recur (+ index 1) [(sort (into (nth result 0) remove)) (sort (into (nth result 1) add))])]
+        [(CommandWrite path value parents label) (recur (+ index 1) result)]
+        [(CommandStdout value) (recur (+ index 1) result)]
+        [(CommandStderr value) (recur (+ index 1) result)]))))
 
 (defn no-write? [outcome d/TagCommandOutcome] Bool
-  (not (p/member? (d/outcome-effect-kinds outcome) "write")))
+  (and (not (p/member? (d/outcome-effect-kinds outcome) "write"))
+       (not (p/member? (d/outcome-effect-kinds outcome) "edit"))))
 
-(defn check-op [catalog (Vec r/ModuleTags) host r/HostTags document c/HostDocument text String op Int tag String module String] Bool
+(defn check-op [catalog (Vec r/ModuleTags) host r/HostTags document c/HostDocument op Int tag String module String] Bool
   (match (d/parse-tag-command-argv (command-argv op tag module) "fixture")
     [(OtherTagCommand argv) false]
     [(InvalidTagCommand argv) false]
     [(ParsedTagCommand command)
-     (let [repository d/TagCommandRepository (d/->TagCommandRepository catalog [document])
-        outcome d/TagCommandOutcome (d/run-tag-command repository command)
-        after String (written-source outcome text)
-        expected r/HostTags (changed-host host op tag module)
-        refused Bool (and (= op 5) (not (p/member? (r/hosttags-disabled host) module)))]
-    (and (= (d/tagcommandoutcome-status outcome) (if refused 1 0))
-      (or (not refused) (and (no-write? outcome) (= after text)))
-      (match (c/host-document-from-source "fixture" after (r/hosttags-allowed host))
-        [(HostDocumentRejected message offset) false]
-        [(HostDocumentParsed parsed)
-         (let [second d/TagCommandOutcome
-               (d/run-tag-command (d/->TagCommandRepository catalog [parsed]) command)]
-           (and (= (r/hosttags-enabled expected) (r/hosttags-enabled (c/hostdocument-tags parsed)))
-                (= (r/hosttags-disabled expected) (r/hosttags-disabled (c/hostdocument-tags parsed)))
-                (= after (c/format-enabled-tags-bnix parsed))
-                (= after (written-source second after)) (no-write? second)
-                (= (d/tagcommandoutcome-status second) (if (= op 5) 1 0))
-                (= (p/model catalog expected)
-                   (r/resolution-active (r/resolve catalog (c/hostdocument-tags parsed))))))])))]))
+     (let [outcome d/TagCommandOutcome (d/run-tag-command (d/->TagCommandRepository catalog [document]) command)
+           expected r/HostTags (changed-host host op tag module)
+           before (Vec String) (facts host)
+           after (Vec String) (facts expected)
+           refused Bool (and (= op 5) (not (p/member? (r/hosttags-disabled host) module)))
+           second d/TagCommandOutcome
+           (d/run-tag-command
+             (d/->TagCommandRepository catalog [(c/->HostDocument expected [])]) command)]
+       (and (= (d/tagcommandoutcome-status outcome) (if refused 1 0))
+            (or (not refused) (no-write? outcome))
+            (= (edits outcome) [(minus before after) (minus after before)])
+            (no-write? second)
+            (= (d/tagcommandoutcome-status second) (if (= op 5) 1 0))
+            (= (p/model catalog expected)
+               (r/resolution-active (r/resolve catalog expected)))))]))
 
 (js/export
   (defn run-properties [samples Int] Int
     (if (<= samples 0) 1
     (loop [index Int 0 seed Int 73421]
       (if (>= index samples) 0
-        (let [host r/HostTags (p/host seed) text String (source host)
-              catalog (Vec r/ModuleTags) (p/modules seed)]
-          (match (c/host-document-from-source "fixture" text (r/hosttags-allowed host))
-            [(HostDocumentRejected message offset)
-             (do (println (str "FAIL mutation parse seed=" seed " " message)) 1)]
-            [(HostDocumentParsed document)
-             (let [repository d/TagCommandRepository (d/->TagCommandRepository catalog [document])
-                   malformed d/TagCommandOutcome (d/run-tag-command repository (d/->TagOptIn "fixture" "desktop-epsilon"))
-                   missing d/TagCommandOutcome (d/run-tag-command repository (d/->TagEnable "missing" "desktop"))
-                   passed Bool (and (= text (c/format-enabled-tags-bnix document))
-                     (= (d/tagcommandoutcome-status malformed) 1) (no-write? malformed)
-                     (= (d/tagcommandoutcome-status missing) 1) (no-write? missing)
-                     (loop [op Int 0]
-                       (if (>= op 6) true
-                         (if (check-op catalog host document text op
-                               (nth p/tags (mod seed 3)) (nth p/names (mod seed 5)))
-                           (recur (+ op 1))
-                           (do (println (str "FAIL mutation seed=" seed " op=" op)) false)))))]
-               (if passed (recur (+ index 1) (p/next-seed seed))
-                 (do (println (str "FAIL mutation seed=" seed " case=" index)) 1)))])))))))
+        (let [host r/HostTags (p/host seed)
+              catalog (Vec r/ModuleTags) (p/modules seed)
+              document c/HostDocument (c/->HostDocument host [])
+              repository d/TagCommandRepository (d/->TagCommandRepository catalog [document])
+              malformed d/TagCommandOutcome (d/run-tag-command repository (d/->TagOptIn "fixture" "desktop-epsilon"))
+              missing d/TagCommandOutcome (d/run-tag-command repository (d/->TagEnable "missing" "desktop"))
+              passed Bool (and
+                (= (d/tagcommandoutcome-status malformed) 1) (no-write? malformed)
+                (= (d/tagcommandoutcome-status missing) 1) (no-write? missing)
+                (loop [op Int 0]
+                  (if (>= op 6) true
+                    (if (check-op catalog host document op
+                          (nth p/tags (mod seed 3)) (nth p/names (mod seed 5)))
+                      (recur (+ op 1))
+                      (do (println (str "FAIL mutation seed=" seed " op=" op)) false)))))]
+          (if passed (recur (+ index 1) (p/next-seed seed))
+            (do (println (str "FAIL mutation seed=" seed " case=" index)) 1))))))))

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 
 const questions = {
   tags: 'all ?m, ?t where ?m is tagged ?t',
@@ -110,6 +110,65 @@ export function runFlakeBuild(root) {
   return run.exitCode ?? 1;
 }
 
+function factAnchor(lines, fact) {
+  const [host, verb, ...rest] = fact.split(' ');
+  const last = (test) => lines.findLastIndex((line) => test(line.trim().split(/\s+/)));
+  const ofHost = (words) => words[0] === host;
+  const tagLine = (words) => ofHost(words) && ['enables', 'adds', 'drops'].includes(words[1]);
+  let index = -1;
+  if (verb === 'adds' || verb === 'drops') {
+    const tag = rest.at(-1);
+    index = last((w) => ofHost(w) && ((w[1] === 'enables' && w[2] === tag)
+      || ((w[1] === 'adds' || w[1] === 'drops') && w.at(-1) === tag)));
+  } else if (verb === 'disables') {
+    index = last((w) => ofHost(w) && w[1] === 'disables');
+  }
+  if (index < 0 && verb !== 'disables') index = last(tagLine);
+  if (index < 0) index = last(ofHost);
+  return index < 0 ? lines.length : index + 1;
+}
+
+export function editFactLines(source, remove, add) {
+  const trailing = source.endsWith('\n');
+  const lines = source.length === 0 ? [] : (trailing ? source.slice(0, -1) : source).split('\n');
+  for (const fact of remove) {
+    const index = lines.findIndex((line) => line.trim() === fact);
+    if (index < 0) return { status: 1, value: null, message: `fact '${fact}' is not stated in this file` };
+    lines.splice(index, 1);
+  }
+  for (const fact of add) lines.splice(factAnchor(lines, fact), 0, fact);
+  return { status: 0, value: lines.length === 0 ? '' : `${lines.join('\n')}\n`, message: '' };
+}
+
+let temporaryId = 0;
+
+export function editHostFacts(path, remove, add) {
+  let source;
+  try {
+    source = readFileSync(path, 'utf8');
+  } catch (error) {
+    return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
+  }
+  const edited = editFactLines(source, remove, add);
+  if (edited.status !== 0) return Object.freeze(edited);
+  const temporary = join(dirname(path), `.${basename(path)}.firn-${process.pid}-${temporaryId++}`);
+  let descriptor = null;
+  try {
+    descriptor = openSync(temporary, 'wx', 0o644);
+    writeFileSync(descriptor, edited.value, 'utf8');
+    closeSync(descriptor);
+    descriptor = null;
+    renameSync(temporary, path);
+    return Object.freeze({ status: 0, value: null, message: '' });
+  } catch (error) {
+    if (descriptor !== null) {
+      try { closeSync(descriptor); } catch {}
+    }
+    try { unlinkSync(temporary); } catch {}
+    return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
+  }
+}
+
 const empty = Object.freeze({ tags: [], optIn: [], overrides: new Map() });
 const facts = (modules, name) => modules.get(name) ?? empty;
 
@@ -129,6 +188,7 @@ export const moduleFactsBridge = Object.freeze({
   moduleFactsMessage(result) { return result.message; },
   readHostFacts,
   buildGenerated,
+  editHostFacts,
   hostDeclared(hosts, name) { return hosts.has(name); },
   hostPlatform(hosts, name) { return hostFacts(hosts, name).platform; },
   hostEnabledTags(hosts, name) { return [...hostFacts(hosts, name).enables].sort(); },

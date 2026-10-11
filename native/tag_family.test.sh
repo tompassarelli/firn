@@ -39,6 +39,8 @@ die() {
 [[ -x "$beagle/bin/beagle-build-all" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 command -v bun >/dev/null 2>&1 || die "Bun is unavailable"
+command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
+  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
 
 build_family() {
   local output="$scratch/build"
@@ -152,18 +154,19 @@ delta can opt into desktop
 epsilon is tagged creative
 epsilon can opt into desktop
 gamma is tagged terminal
+linux is a Platform
+linux allows every module
 EOF
-  cat >"$root/hosts/$host/enabled-tags.bnix" <<'EOF'
-#lang beagle/nix
+  cat >"$root/hosts/$host/_generated-enables.gal" <<EOF
+use firn/tags
 
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]
-   terminal]
- :disabled [gamma]
-}
+$host is a Host
+$host runs linux
+$host enables desktop
+$host drops beta from desktop
+$host adds delta to desktop
+$host enables terminal
+$host disables gamma
 EOF
 }
 
@@ -201,44 +204,75 @@ assert_empty "$scratch/index-repo.err" "tag index repo stderr"
 assert_same "$scratch/index-stdout.out" \
   "$inventory_root/.beagle-cache/tags.jsonl" "tag index persisted output"
 
-printf 'tag-family: checking atomic mutation, idempotence, and re-resolution\n' >&2
-mutation_root="$scratch/mutation-repo"
-host_file="$mutation_root/hosts/fixture/enabled-tags.bnix"
-make_fixture "$mutation_root"
-cp "$host_file" "$scratch/mutation.before.bnix"
-run_native "$scratch/mutation.first" "$mutation_root" fixture tag enable creative
-assert_status "$scratch/mutation.first" 0 "first mutation"
-assert_empty "$scratch/mutation.first.err" "mutation stderr"
-cmp -s "$scratch/mutation.before.bnix" "$host_file" \
-  && die "mutation reported an update without changing bytes"
-cp "$host_file" "$scratch/mutation.after.bnix"
-run_native "$scratch/mutation.second" "$mutation_root" fixture tag enable creative
-assert_status "$scratch/mutation.second" 0 "idempotent mutation"
-assert_empty "$scratch/mutation.second.err" "idempotent stderr"
-assert_same "$scratch/mutation.after.bnix" "$host_file" "idempotent bytes"
-run_native "$scratch/mutation.status" "$mutation_root" fixture tag status fixture
-assert_status "$scratch/mutation.status" 0 "resolver after mutation"
-rg -q '^  epsilon$' "$scratch/mutation.status.out" || die "new tag did not resolve through the host loader"
-assert_empty "$scratch/mutation.status.err" "resolver after mutation stderr"
+printf 'tag-family: checking fact mutations, idempotence, and re-resolution\n' >&2
+resolved() {
+  sed -n '/^Resolved active modules/,$p' "$1.out" | tail -n +2 \
+    | tr -d ' ' | paste -sd' '
+}
+
+mutate() {
+  local name="$1" expect="$2"
+  shift 2
+  local root="$scratch/mutation-$name"
+  local facts="$root/hosts/fixture/_generated-enables.gal"
+  make_fixture "$root"
+  cp "$facts" "$scratch/$name.before.gal"
+  run_native "$scratch/$name.first" "$root" fixture "$@"
+  assert_status "$scratch/$name.first" 0 "$name first call"
+  assert_empty "$scratch/$name.first.err" "$name first stderr"
+  cmp -s "$scratch/$name.before.gal" "$facts" \
+    && die "$name reported an update without changing bytes"
+  cp "$facts" "$scratch/$name.after.gal"
+  run_native "$scratch/$name.first-status" "$root" fixture tag status fixture
+  assert_status "$scratch/$name.first-status" 0 "$name status after first call"
+  run_native "$scratch/$name.second" "$root" fixture "$@"
+  if [[ "$name" == module-enable ]]; then
+    assert_status "$scratch/$name.second" 1 "$name repeated refusal"
+    assert_empty "$scratch/$name.second.out" "$name repeated stdout"
+  else
+    assert_status "$scratch/$name.second" 0 "$name repeated call"
+    assert_empty "$scratch/$name.second.err" "$name repeated stderr"
+    rg -q '^no change to ' "$scratch/$name.second.out" \
+      || die "$name repeated call changed facts"
+  fi
+  assert_same "$scratch/$name.after.gal" "$facts" "$name repeated bytes"
+  run_native "$scratch/$name.second-status" "$root" fixture tag status fixture
+  assert_status "$scratch/$name.second-status" 0 "$name status after repeated call"
+  resolved "$scratch/$name.first-status" >"$scratch/$name.first.set"
+  resolved "$scratch/$name.second-status" >"$scratch/$name.second.set"
+  assert_same "$scratch/$name.first.set" "$scratch/$name.second.set" \
+    "$name resolved set"
+  [[ "$(<"$scratch/$name.first.set")" == "$expect" ]] \
+    || die "$name resolved '$(<"$scratch/$name.first.set")', expected '$expect'"
+  printf 'tag-family: %s resolves %s after first and repeated calls\n' \
+    "$name" "$expect" >&2
+}
+
+mutate tag-enable "alpha delta epsilon" tag enable creative
+mutate tag-disable "alpha" tag disable desktop
+mutate tag-opt-in "alpha delta epsilon" tag opt-in desktop+epsilon
+mutate tag-opt-out "alpha delta" tag opt-out desktop+alpha
+mutate module-disable "delta" module disable alpha
+mutate module-enable "alpha delta gamma" module enable gamma
 
 printf 'tag-family: checking refusal paths\n' >&2
 refusal_root="$scratch/refusal-repo"
 make_fixture "$refusal_root"
-cp "$refusal_root/hosts/fixture/enabled-tags.bnix" \
-  "$scratch/refusal.before.bnix"
+cp "$refusal_root/hosts/fixture/_generated-enables.gal" \
+  "$scratch/refusal.before.gal"
 run_native "$scratch/module-refusal" "$refusal_root" fixture module enable beta
 assert_status "$scratch/module-refusal" 1 "module enable refusal"
 assert_empty "$scratch/module-refusal.out" "module enable refusal stdout"
-assert_same "$scratch/refusal.before.bnix" \
-  "$refusal_root/hosts/fixture/enabled-tags.bnix" \
+assert_same "$scratch/refusal.before.gal" \
+  "$refusal_root/hosts/fixture/_generated-enables.gal" \
   "module enable refusal source"
 
 run_native "$scratch/malformed" "$refusal_root" fixture \
   tag opt-in desktop-epsilon
 assert_status "$scratch/malformed" 1 "malformed tag opt-in"
 assert_empty "$scratch/malformed.out" "malformed tag opt-in stdout"
-assert_same "$scratch/refusal.before.bnix" \
-  "$refusal_root/hosts/fixture/enabled-tags.bnix" \
+assert_same "$scratch/refusal.before.gal" \
+  "$refusal_root/hosts/fixture/_generated-enables.gal" \
   "malformed tag opt-in source"
 
 run_native "$scratch/malformed-missing" "$refusal_root" missing \
