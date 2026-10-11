@@ -18,7 +18,7 @@ export type Decision = { kind: "none" | "report" | "confirm" | "revert"; reason:
 export function decide(s: Situation): Decision {
   const job = [...s.original].sort((a, b) => a.id - b.id).find(j => j.conclusion === "failure" && j.steps.some(t => t.conclusion === "failure"));
   const step = job?.steps.find(t => t.conclusion === "failure");
-  if (!job || !step) return { kind: s.conclusion === "success" ? "none" : "report", reason: "No failing test step was recorded" };
+  if (!job || !step) return { kind: s.conclusion === "failure" ? "report" : "none", reason: "No failing test step was recorded" };
   const name = `${job.name}: ${step.name}`;
   const report = (reason: string): Decision => ({ kind: "report", reason, step: name });
   if (!s.onMain) return report("The failing commit is no longer on main; report only");

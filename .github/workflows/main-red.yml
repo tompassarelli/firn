@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sheriff:
-    if: github.event.workflow_run.event == 'push'
+    if: github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion != 'cancelled'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

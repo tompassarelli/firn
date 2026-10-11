@@ -5,6 +5,7 @@ test("GitHub workflow-run confirmation protocol (REST actions/workflow-jobs, kin
   const job = { id: 7, name: "test", conclusion: "failure", steps: [{ name: "Test", number: 2, conclusion: "failure" }] };
   const recorded: Situation = { attempt: 1, conclusion: "failure", original: [job], confirmed: [], previous: { sha: "parent", conclusion: "success" }, commits: [{ sha: "culprit", parents: ["parent"], message: "land", files: ["src/main.rs"] }], onMain: true, head: "culprit" };
   expect(decide(recorded).kind).toBe("confirm");
+  expect(decide({ ...recorded, conclusion: "cancelled", original: [{ ...job, conclusion: "cancelled", steps: [] }] }).kind).toBe("none");
   const confirmation = { ...recorded, attempt: 2, confirmed: [job] };
   expect(decide(confirmation)).toMatchObject({ kind: "revert", shas: ["culprit"] });
   expect(decide({ ...confirmation, previous: { sha: "unrelated", conclusion: "success" } }).kind).toBe("report");
