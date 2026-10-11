@@ -7,11 +7,17 @@
         homeDir config.myConfig.modules.users.homeDir
         wgAddress "10.77.0.1"
         wgInterface "wg-nexus"
-        creds " -p wa -k nexus-creds"]
+        creds " -p wa -k nexus-creds"
+        upgradeFlake config.myConfig.modules.nexus-hardening.upgradeFlake]
     {:tags [server]
 
      :options.myConfig.modules.nexus-hardening.enable
       (lib.mkEnableOption "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection")
+
+     :options.myConfig.modules.nexus-hardening.upgradeFlake
+      (lib.mkOption
+        {:type lib.types.str
+         :description "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus"})
 
      :config
       (lib.mkIf config.myConfig.modules.nexus-hardening.enable
@@ -50,13 +56,13 @@
               "")
 
          :system.autoUpgrade
-          {:flake (lib.mkForce "github:tompassarelli/firn#nexus")
-           :flags (lib.mkForce ["--refresh" "--flake github:tompassarelli/firn#nexus"])
+          {:flake (lib.mkForce upgradeFlake)
+           :flags (lib.mkForce ["--refresh" (s "--flake " upgradeFlake)])
            :dates (lib.mkForce "19:30")
            :allowReboot (lib.mkForce true)
            :rebootWindow {:lower "20:00" :upper "21:00"}}
          :systemd.services.nexus-upgrade
-          {:description "Run the NixOS auto-upgrade from firn main now"
+          {:description "Run the NixOS auto-upgrade from the upgrade flake now"
            :serviceConfig {:Type "oneshot"
                            :ExecStart (s pkgs.systemd "/bin/systemctl start nixos-upgrade.service")}}
 

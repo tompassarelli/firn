@@ -1,6 +1,6 @@
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs flakeRoot ...]
+(nix/module [config lib pkgs ...]
   (let [cfg config.myConfig.modules.wg-nexus
         hubPublicKey "Dvmfg8eA5NBuadrl3CoEW1ZstHMxD7CT9r3l6HlMQx4="
         laptopPublicKey "ynrELQcn+uM+tllUWa/o5IpPbjHKPPJAStI3gq23EhI="
@@ -29,6 +29,14 @@
       (lib.mkOption
         {:type (lib.types.enum ["hub" "client"])
          :description "hub listens on UDP 51820 with the laptop and phone as peers; client is the laptop dialing the hub"})
+     :options.myConfig.modules.wg-nexus.sopsFile
+      (lib.mkOption
+        {:type lib.types.path
+         :description "hub: sops file holding the wireguard-nexus private key"})
+     :options.myConfig.modules.wg-nexus.hostPublicKeyFile
+      (lib.mkOption
+        {:type lib.types.path
+         :description "client: file holding the hub's SSH host ed25519 public key, pinned as known host nexus"})
      :options.myConfig.modules.wg-nexus.phonePublicKey
       (lib.mkOption
         {:type (lib.types.nullOr lib.types.str)
@@ -37,7 +45,7 @@
      :config (lib.mkIf cfg.enable (lib.mkMerge [
        {:environment.systemPackages [pkgs.wireguard-tools]}
        (lib.mkIf (== cfg.role "hub")
-         {:sops.secrets.wireguard-nexus {:sopsFile (s flakeRoot "/secrets/nexus/wireguard.yaml")}
+         {:sops.secrets.wireguard-nexus {:sopsFile cfg.sopsFile}
           :systemd.services.nexus-peers
            {:description "Write the wg-nexus peers' latest handshakes and online-since times to /run/nexus/peers.json"
             :after ["wireguard-wg-nexus.service"]
@@ -82,6 +90,6 @@
                "")
           :programs.ssh.knownHosts.nexus
            {:hostNames ["nexus" "10.77.0.1"]
-            :publicKeyFile (s flakeRoot "/secrets/nexus/ssh_host_ed25519_key.pub")}
+            :publicKeyFile cfg.hostPublicKeyFile}
           :networking.firewall.extraCommands
            "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP"})]))}))

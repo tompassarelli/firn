@@ -1,7 +1,11 @@
-{ config, lib, pkgs, flakeRoot, ... }:
+{ config, lib, pkgs, ... }:
 
 ((username: ((port: ((listen: ((baseUrl: ((sopsFile: ((ph: ((envTemplate: ((nexusAlert: ((onFailureDropin: ((notifyResetDropin: {
   options.myConfig.modules.nexus-alerts.enable = lib.mkEnableOption "nexus push alerts: ntfy on wg-nexus, nexus-alert CLI, OnFailure notify for every service";
+  options.myConfig.modules.nexus-alerts.sopsFile = lib.mkOption {
+    type = lib.types.path;
+    description = "sops file holding the ntfy publisher and phone tokens and hashes";
+  };
   config = lib.mkIf config.myConfig.modules.nexus-alerts.enable {
     sops.secrets.ntfy-publisher-token = {
       sopsFile = sopsFile;
@@ -105,4 +109,4 @@
       curl -fsS -H @<(printf 'Authorization: Bearer %s\nPriority: %s\nTitle: %s\n' "$token" "$prio" "$title"; [ -z "$click" ] || printf 'Click: %s\n' "$click") \
         --data-binary "$2" "${baseUrl}/$1" | jq -r .id
     '';
-  }))) (builtins.getAttr "ntfy-auth.env" config.sops.templates))) config.sops.placeholder)) "${flakeRoot}/secrets/nexus/ntfy.yaml")) "http://${listen}")) "10.77.0.1:${builtins.toString port}")) 2586)) config.myConfig.modules.users.username)
+  }))) (builtins.getAttr "ntfy-auth.env" config.sops.templates))) config.sops.placeholder)) config.myConfig.modules.nexus-alerts.sopsFile)) "http://${listen}")) "10.77.0.1:${builtins.toString port}")) 2586)) config.myConfig.modules.users.username)

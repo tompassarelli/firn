@@ -14,7 +14,7 @@
     ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFJ2c3khPX8NgkazmQdEI1kU9IrEZuE8m2/2OIquQbgh tom@nexus"]
    :myConfig.modules.users.passwordHashSopsFile (p "../../secrets/nexus/console.yaml")
    :myConfig.modules.nix-settings.enable true
-   :myConfig.modules.wg-nexus {:enable true :role "hub" :phonePublicKey "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE="}
+   :myConfig.modules.wg-nexus {:enable true :role "hub" :sopsFile (p "../../secrets/nexus/wireguard.yaml") :phonePublicKey "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE="}
    :myConfig.modules.checkout-sync.enable true
    :myConfig.modules.nexus-backup
     {:enable true
@@ -36,5 +36,7 @@
    :myConfig.modules.sqlite.enable true
    :myConfig.modules.uv.enable true
    :myConfig.modules.keyring-headless {:enable true :sopsFile (p "../../secrets/nexus/keyring.yaml")}
-   :myConfig.modules.github-pat {:enable true :sopsFile (p "../../secrets/nexus/github.yaml")}
+   :myConfig.modules.github-pat {:enable true :nixAccessToken true :sopsFile (p "../../secrets/nexus/github.yaml")}
+   :myConfig.modules.nexus-alerts.sopsFile (p "../../secrets/nexus/ntfy.yaml")
+   :myConfig.modules.nexus-hardening.upgradeFlake "github:tompassarelli/south#nexus"
    :imports [(p "./_generated-enables.nix")]})

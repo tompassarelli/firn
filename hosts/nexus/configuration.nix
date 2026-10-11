@@ -16,6 +16,7 @@
   myConfig.modules.wg-nexus = {
     enable = true;
     role = "hub";
+    sopsFile = ../../secrets/nexus/wireguard.yaml;
     phonePublicKey = "GAYntdrDGzgH0IBgfoTkJ2Y1A0hnsUkqxt1DdTJ5HkE=";
   };
   myConfig.modules.checkout-sync.enable = true;
@@ -48,7 +49,10 @@
   };
   myConfig.modules.github-pat = {
     enable = true;
+    nixAccessToken = true;
     sopsFile = ../../secrets/nexus/github.yaml;
   };
+  myConfig.modules.nexus-alerts.sopsFile = ../../secrets/nexus/ntfy.yaml;
+  myConfig.modules.nexus-hardening.upgradeFlake = "github:tompassarelli/south#nexus";
   imports = [ ./_generated-enables.nix ];
 }

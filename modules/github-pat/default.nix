@@ -11,12 +11,23 @@
     default = [ "tompassarelli/firn" "tompassarelli/north" "tompassarelli/south" ];
     description = "lower-case OWNER/REPO names that use the read-only nexus-apply token";
   };
+  options.myConfig.modules.github-pat.nixAccessToken = lib.mkEnableOption "the read-only nexus-apply token as nix's github.com access token, so root nix can fetch private flakes";
   config = lib.mkIf cfg.enable {
     sops.secrets.nexus-apply = {
       sopsFile = cfg.sopsFile;
       owner = username;
       mode = "0400";
     };
+    sops.templates.nix-access-tokens = lib.mkIf cfg.nixAccessToken {
+      content = ''
+        access-tokens = github.com=${config.sops.placeholder.nexus-apply}
+      '';
+      owner = "root";
+      mode = "0400";
+    };
+    nix.extraOptions = lib.mkIf cfg.nixAccessToken ''
+      !include ${config.sops.templates.nix-access-tokens.path}
+    '';
     sops.secrets.nexus-work = {
       sopsFile = cfg.sopsFile;
       owner = username;

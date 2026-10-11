@@ -2,13 +2,30 @@
 set -euo pipefail
 
 [[ "${1:-}" == host && "${2:-}" == deploy ]] && shift 2
-host="${1:?usage: firn host deploy <host>}"
+host="${1:?usage: firn host deploy <host>  (run from a checkout of the repo the host upgrades from, or set FIRN_DEPLOY_REPO)}"
 case "$host" in
   nexus) unit=nexus-upgrade.service ;;
   *) printf 'firn host deploy: no remote upgrade unit for host: %s\n' "$host" >&2; exit 2 ;;
 esac
 
-repo="${FIRN_REPO:-$PWD}"
+# shellcheck disable=SC2016
+flake="$(ssh "$host" 'grep -ohE "github:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[A-Za-z0-9_.-]+" $(systemctl show -P ExecStart nixos-upgrade.service | grep -oE "/nix/store/[^ ;]+") | sort -u')"
+slug="${flake#github:}"
+slug="${slug%%#*}"
+if [[ -z "$slug" || "$flake" == *$'\n'* ]]; then
+  printf 'firn host deploy: cannot read the upgrade flake of %s (got: %s)\n' "$host" "$flake" >&2
+  exit 1
+fi
+
+repo="${FIRN_DEPLOY_REPO:-$PWD}"
+origin="$(git -C "$repo" remote get-url origin 2>/dev/null || true)"
+origin_slug="$(printf '%s' "$origin" | sed -E 's#^.*github\.com[/:]##; s#\.git$##')"
+if [[ "${origin_slug,,}" != "${slug,,}" ]]; then
+  printf 'firn host deploy: %s upgrades from %s, but %s has origin %s; run from a %s checkout or set FIRN_DEPLOY_REPO\n' \
+    "$host" "$flake" "$repo" "${origin:-none}" "$slug" >&2
+  exit 1
+fi
+
 git -C "$repo" fetch --quiet origin main
 head="$(git -C "$repo" rev-parse HEAD)"
 main="$(git -C "$repo" rev-parse origin/main)"
@@ -25,7 +42,7 @@ reached() {
 }
 
 for attempt in 1 2; do
-  printf 'starting %s on %s for %s (attempt %s)\n' "$unit" "$host" "$main" "$attempt"
+  printf 'starting %s on %s for %s %s (attempt %s)\n' "$unit" "$host" "$flake" "$main" "$attempt"
   ssh "$host" systemctl start "$unit"
   revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
   reached && break

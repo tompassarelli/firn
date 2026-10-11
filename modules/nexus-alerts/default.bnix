@@ -2,12 +2,12 @@
 
 (ns default)
 
-(nix/module [config lib pkgs flakeRoot ...]
+(nix/module [config lib pkgs ...]
   (let [username config.myConfig.modules.users.username
         port 2586
         listen (s "10.77.0.1:" (builtins.toString port))
         baseUrl (s "http://" listen)
-        sopsFile (s flakeRoot "/secrets/nexus/ntfy.yaml")
+        sopsFile config.myConfig.modules.nexus-alerts.sopsFile
         ph config.sops.placeholder
         envTemplate (builtins.getAttr "ntfy-auth.env" config.sops.templates)
         nexusAlert
@@ -33,6 +33,11 @@
 
      :options.myConfig.modules.nexus-alerts.enable
       (lib.mkEnableOption "nexus push alerts: ntfy on wg-nexus, nexus-alert CLI, OnFailure notify for every service")
+
+     :options.myConfig.modules.nexus-alerts.sopsFile
+      (lib.mkOption
+        {:type lib.types.path
+         :description "sops file holding the ntfy publisher and phone tokens and hashes"})
 
      :config
       (lib.mkIf config.myConfig.modules.nexus-alerts.enable

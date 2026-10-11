@@ -1,7 +1,11 @@
 { config, lib, pkgs, ... }:
 
-((username: ((homeDir: ((wgAddress: ((wgInterface: ((creds: {
+((username: ((homeDir: ((wgAddress: ((wgInterface: ((creds: ((upgradeFlake: {
   options.myConfig.modules.nexus-hardening.enable = lib.mkEnableOption "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection";
+  options.myConfig.modules.nexus-hardening.upgradeFlake = lib.mkOption {
+    type = lib.types.str;
+    description = "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus";
+  };
   config = lib.mkIf config.myConfig.modules.nexus-hardening.enable {
     myConfig.modules.ssh.enable = true;
     myConfig.modules.polkit.enable = true;
@@ -49,8 +53,8 @@
 
     '';
     system.autoUpgrade = {
-      flake = lib.mkForce "github:tompassarelli/firn#nexus";
-      flags = lib.mkForce [ "--refresh" "--flake github:tompassarelli/firn#nexus" ];
+      flake = lib.mkForce upgradeFlake;
+      flags = lib.mkForce [ "--refresh" "--flake ${upgradeFlake}" ];
       dates = lib.mkForce "19:30";
       allowReboot = lib.mkForce true;
       rebootWindow = {
@@ -59,7 +63,7 @@
       };
     };
     systemd.services.nexus-upgrade = {
-      description = "Run the NixOS auto-upgrade from firn main now";
+      description = "Run the NixOS auto-upgrade from the upgrade flake now";
       serviceConfig = {
         Type = "oneshot";
         ExecStart = "${pkgs.systemd}/bin/systemctl start nixos-upgrade.service";
@@ -125,4 +129,4 @@
     ];
     services.earlyoom.enable = true;
   };
-}) " -p wa -k nexus-creds")) "wg-nexus")) "10.77.0.1")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}) config.myConfig.modules.nexus-hardening.upgradeFlake)) " -p wa -k nexus-creds")) "wg-nexus")) "10.77.0.1")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)

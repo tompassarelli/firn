@@ -1,10 +1,18 @@
-{ config, lib, pkgs, flakeRoot, ... }:
+{ config, lib, pkgs, ... }:
 
 ((cfg: ((hubPublicKey: ((laptopPublicKey: ((template: ((peerNames: ((peersHelper: {
   options.myConfig.modules.wg-nexus.enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3";
   options.myConfig.modules.wg-nexus.role = lib.mkOption {
     type = lib.types.enum [ "hub" "client" ];
     description = "hub listens on UDP 51820 with the laptop and phone as peers; client is the laptop dialing the hub";
+  };
+  options.myConfig.modules.wg-nexus.sopsFile = lib.mkOption {
+    type = lib.types.path;
+    description = "hub: sops file holding the wireguard-nexus private key";
+  };
+  options.myConfig.modules.wg-nexus.hostPublicKeyFile = lib.mkOption {
+    type = lib.types.path;
+    description = "client: file holding the hub's SSH host ed25519 public key, pinned as known host nexus";
   };
   options.myConfig.modules.wg-nexus.phonePublicKey = lib.mkOption {
     type = lib.types.nullOr lib.types.str;
@@ -16,7 +24,7 @@
       environment.systemPackages = [ pkgs.wireguard-tools ];
     }
     (lib.mkIf (cfg.role == "hub") {
-      sops.secrets.wireguard-nexus.sopsFile = "${flakeRoot}/secrets/nexus/wireguard.yaml";
+      sops.secrets.wireguard-nexus.sopsFile = cfg.sopsFile;
       systemd.services.nexus-peers = {
         description = "Write the wg-nexus peers' latest handshakes and online-since times to /run/nexus/peers.json";
         after = [ "wireguard-wg-nexus.service" ];
@@ -83,7 +91,7 @@
       '';
       programs.ssh.knownHosts.nexus = {
         hostNames = [ "nexus" "10.77.0.1" ];
-        publicKeyFile = "${flakeRoot}/secrets/nexus/ssh_host_ed25519_key.pub";
+        publicKeyFile = cfg.hostPublicKeyFile;
       };
       networking.firewall.extraCommands = "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP";
     })
