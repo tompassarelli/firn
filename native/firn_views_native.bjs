@@ -445,21 +445,25 @@
 
 (defn render-platform
   [action views/ViewsAction
-   verdicts (Vec views/PlatformVerdict)] Int
-  (match action
-    [(PlatformList selection)
-     (emit-result (views/render-platform-list selection verdicts))]
-    [(PlatformShow module)
-     (emit-result (views/render-platform-show module verdicts))]
-    [(PlatformSafelist token)
-     (emit-result (views/render-platform-safelist verdicts))]
-    [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
-    [(SchemaExplain input)
-     (emit-error "firn views: invalid platform action\n")]
-    [(SchemaExtract host)
-     (emit-error "firn views: invalid platform action\n")]
-    [(HostGeneration host)
-     (emit-error "firn views: invalid platform action\n")]))
+   modules (Vec String)
+   everywhere (Vec views/PlatformRow)
+   supported (Vec views/PlatformRow)] Int
+  (let [verdicts (Vec views/PlatformVerdict)
+        (views/platform-matrix modules (append-rows everywhere supported))]
+    (match action
+      [(PlatformList selection)
+       (emit-result (views/render-platform-list selection verdicts))]
+      [(PlatformShow module)
+       (emit-result (views/render-platform-show module verdicts))]
+      [(PlatformSafelist token)
+       (emit-result (views/render-platform-safelist everywhere supported))]
+      [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
+      [(SchemaExplain input)
+       (emit-error "firn views: invalid platform action\n")]
+      [(SchemaExtract host)
+       (emit-error "firn views: invalid platform action\n")]
+      [(HostGeneration host)
+       (emit-error "firn views: invalid platform action\n")])))
 
 (defn run-platform
   [root String
@@ -475,9 +479,7 @@
           (match (query-rows root galileo "all ?m, ?p where ?m supports ?p")
             [(QueryRowsRejected message) (emit-error message)]
             [(QueryRows supported)
-             (render-platform action
-               (views/platform-matrix modules
-                 (append-rows everywhere supported)))])])])))
+             (render-platform action modules everywhere supported)])])])))
 
 (defn run-schema-explain
   [root String

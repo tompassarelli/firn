@@ -931,19 +931,50 @@
               (blocker-lines (platformverdict-blockers verdict)))))
         "")))))
 
+(defn row-platforms [rows (Vec PlatformRow)] (Vec String)
+  (loop [remaining (Vec PlatformRow) rows
+         platforms (Vec String) []]
+    (if (= (count remaining) 0)
+      (sort platforms)
+      (recur (rest remaining)
+        (append-unique platforms (platformrow-platform (first remaining)))))))
+
+(defn platform-modules
+  [rows (Vec PlatformRow)
+   platform String] (Vec String)
+  (loop [remaining (Vec PlatformRow) rows
+         modules (Vec String) []]
+    (if (= (count remaining) 0)
+      (sort modules)
+      (recur (rest remaining)
+        (if (= platform (platformrow-platform (first remaining)))
+          (append-unique modules (platformrow-module (first remaining)))
+          modules)))))
+
+(defn roll-call
+  [names (Vec String)
+   predicate String] String
+  (cond
+    (= (count names) 0) ""
+    (= (count names) 1) (str (first names) " " predicate "\n")
+    :else (str "[" (join-with names ", ") "] " predicate "\n")))
+
 (js/export
-  (defn render-platform-safelist [verdicts (Vec PlatformVerdict)] CommandResult
-  (let [both (Vec String) (modules-with verdicts :both)
-        darwin-only (Vec String) (modules-with verdicts :darwin-only)
-        compatible (Vec String) (combine-unique both darwin-only)]
+  (defn render-platform-safelist
+  [everywhere (Vec PlatformRow)
+   supported (Vec PlatformRow)] CommandResult
+  (let [open (Vec String) (row-platforms everywhere)]
     (->CommandResult 0
-      (loop [remaining (Vec String) compatible
-             text String (str ";; darwin-compatible modules (native Firn).\n"
-               ";; " (count compatible) " entries.\n(lst")]
+      (loop [remaining (Vec String) (row-platforms supported)
+             text String ""]
         (if (= (count remaining) 0)
-          (str text ")\n")
+          text
           (recur (rest remaining)
-            (str text "\n     \"" (first remaining) "\""))))
+            (if (string-member? open (first remaining))
+              text
+              (str text
+                (roll-call (platform-modules supported (first remaining))
+                  (str "supports " (first remaining))))))))
       ""))))
 
 (defn allowed-path-character? [character String] Bool
