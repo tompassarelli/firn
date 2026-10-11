@@ -142,12 +142,6 @@ repo_build_sources=(
   "$firn_repo/native/repo_build_family.bjs"
 )
 repo_build_bridge="$firn_repo/native/repo_build_host.mjs"
-schema_sources=(
-  "$native_json"
-  "$firn_repo/native/schema_transaction.bjs"
-  "$firn_repo/native/schema_transaction_native.bjs"
-)
-schema_bridge="$firn_repo/native/schema_transaction_host.mjs"
 repo_workflow_sources=(
   "$native_json"
   "$firn_repo/native/repo_quality.bjs"
@@ -181,8 +175,6 @@ case "$scope" in
       "${dispatcher_sources[@]}"
       "${repo_build_sources[@]}"
       "$repo_build_bridge"
-      "${schema_sources[@]}"
-      "$schema_bridge"
     )
     ;;
   full)
@@ -201,8 +193,6 @@ case "$scope" in
       "$views_bridge"
       "${repo_build_sources[@]}"
       "$repo_build_bridge"
-      "${schema_sources[@]}"
-      "$schema_bridge"
       "${repo_workflow_sources[@]}"
       "$repo_workflow_bridge"
       "${rebuild_sources[@]}"
@@ -447,8 +437,6 @@ case "$scope" in
   repo)
     materialize_js repo-build firn-repo-build firn/repo-build-family.js \
       FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
-    materialize_js schema firn-schema firn/schema-transaction-native.js \
-      FIRN_SCHEMA_MODULE "$schema_bridge" "${schema_sources[@]}"
     ;;
   full)
     materialize_js tag firn-tag firn/tag-family.js \
@@ -463,8 +451,6 @@ case "$scope" in
       FIRN_VIEWS_MODULE "$views_bridge" "${views_sources[@]}"
     materialize_js repo-build firn-repo-build firn/repo-build-family.js \
       FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
-    materialize_js schema firn-schema firn/schema-transaction-native.js \
-      FIRN_SCHEMA_MODULE "$schema_bridge" "${schema_sources[@]}"
     materialize_js repo-workflow firn-repo-workflow firn/repo-workflows-runtime.js \
       FIRN_REPO_WORKFLOW_MODULE "$repo_workflow_bridge" "${repo_workflow_sources[@]}"
     materialize_js rebuild firn-rebuild firn/rebuild-family.js \
