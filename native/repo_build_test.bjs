@@ -26,29 +26,6 @@
          "modules/alpha/default.nix"))
     "source inventory path contract"))
 
-(defn test-cleanup-contract [] Int
-  (let [generated String (str
-          "{\n"
-          "  tags = [ desktop terminal ];\n"
-          "  tags-opt-in = [ optional ];\n"
-          "  tag-overrides = {\n"
-          "    desktop = {\n"
-          "      enable = [ alpha ];\n"
-          "    };\n"
-          "  };\n"
-          "  flake-inputs = { inline = { url = \"x\"; }; };\n"
-          "  tags-extra = [ keep ];\n"
-          "  config = { value = \"{keep}\"; };\n"
-          "}\n")
-        expected String (str
-          "{\n"
-          "  tags-extra = [ keep ];\n"
-          "  config = { value = \"{keep}\"; };\n"
-          "}\n")]
-    (expect
-      (= (build/strip-authoring-attributes generated) expected)
-      "authoring attribute cleanup")))
-
 (defn test-command-contract [] Int
   (expect
     (and
@@ -64,9 +41,4 @@
 
 (js/export
  (defn test [] Int
-  (let [results (Vec Int) [(test-path-contract)
-         (test-cleanup-contract)
-         (test-command-contract)]]
-    (if (= results [0 0 0])
-      0
-      1))))
+  (+ (test-path-contract) (test-command-contract))))

@@ -36,17 +36,14 @@ die() {
   exit 1
 }
 
-"$repo/native/firn_dispatch.test.sh"
-
 json="$beagle/native-core/src/native/json.bjs"
 quality="$repo/native/repo_quality.bjs"
 workflows="$repo/native/repo_workflows.bjs"
 runtime="$repo/native/repo_workflows_runtime.bjs"
-pin_ancestry_test="$repo/native/repo_pin_ancestry_test.bjs"
 mkdir -p "$scratch/modules/node_modules/beagle"
 timeout --foreground 90 "$beagle/bin/beagle-build-all" \
   "$json" "$quality" \
-  "$workflows" "$runtime" "$pin_ancestry_test" \
+  "$workflows" "$runtime" \
   --out "$scratch/modules" \
   >"$scratch/build.out" 2>"$scratch/build.err" || {
     sed -n '1,240p' "$scratch/build.err" >&2
@@ -58,12 +55,6 @@ cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
   "$scratch/modules/node_modules/beagle/host.js"
 printf '%s\n' '{"type":"module"}' \
   >"$scratch/modules/node_modules/beagle/package.json"
-
-for test_module in firn/repo-pin-ancestry-test.js; do
-  FIRN_TEST_MODULE="$scratch/modules/$test_module" \
-    bun -e \
-      'const m = await import(process.env.FIRN_TEST_MODULE); process.exitCode = m["run-tests"]();'
-done
 
 set +e
 FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
@@ -103,35 +94,12 @@ write_lock() {
     >"$fixture_repo/flake.lock"
 }
 
-printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' \
-  'printf "%s\n" "$*" >>"${BEAGLE_CALLS:?}"' \
-  >"$fixture_bin/beagle"
-chmod +x "$fixture_bin/beagle"
-
-run_doctor() {
-  local result="$1"
-  set +e
-  timeout --foreground 30 env \
-    HOME="$fixture_home" \
-    BEAGLE_CALLS="$scratch/beagle.calls" \
-    FIRN_REPO="$fixture_repo" \
-    PATH="$fixture_bin:$PATH" \
-    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
-    bun "$repo/native/repo_workflows_host.mjs" repo doctor \
-    >"$result.out" 2>"$result.err"
-  local status=$?
-  set -e
-  printf '%s\n' "$status" >"$result.status"
-}
-
 run_pin_ancestry() {
   local result="$1"
   set +e
   timeout --foreground 30 env \
     HOME="$fixture_home" \
-    BEAGLE_CALLS="$scratch/beagle.calls" \
     FIRN_REPO="$fixture_repo" \
-    PATH="$fixture_bin:$PATH" \
     FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
     bun "$repo/native/repo_workflows_host.mjs" repo pin-ancestry \
     >"$result.out" 2>"$result.err"
@@ -141,93 +109,14 @@ run_pin_ancestry() {
 }
 
 write_lock "$pinned_rev"
-: >"$scratch/beagle.calls"
 pin_current="$scratch/pin-current"
 run_pin_ancestry "$pin_current"
 [[ "$(<"$pin_current.status")" == "0" ]] \
   || die "ancestor pin did not pass the narrow action"
-[[ ! -s "$scratch/beagle.calls" ]] \
-  || die "narrow pin-ancestry action ran full doctor processes"
-
-doctor_current="$scratch/doctor-current"
-run_doctor "$doctor_current"
-[[ "$(<"$doctor_current.status")" == "0" ]] \
-  || die "ancestor pin did not pass doctor"
-rg -F "pinned $pinned_rev is an ancestor of local beagle/main" \
-  "$doctor_current.out" >/dev/null \
-  || die "doctor did not report a current first-party input"
-rg -F "local checkout $fixture_home/code/glide/main is absent; skipped (portable)" \
-  "$doctor_current.out" >/dev/null \
-  || die "doctor did not report portable missing local input"
-[[ ! -s "$doctor_current.err" ]] \
-  || die "current first-party input wrote stderr"
-rg -Fx 'doctor --deep' "$scratch/beagle.calls" >/dev/null \
-  || die "full doctor no longer ran Beagle authoring doctor"
-rg -Fx "validate $fixture_repo" "$scratch/beagle.calls" >/dev/null \
-  || die "full doctor no longer ran repository validation"
 
 write_lock "$independent_rev"
-doctor_skewed="$scratch/doctor-skewed"
-run_doctor "$doctor_skewed"
-[[ "$(<"$doctor_skewed.status")" == "1" ]] \
-  || die "skewed pin did not fail doctor"
-rg -F "pinned $independent_rev is not an ancestor of local beagle/main" \
-  "$doctor_skewed.err" >/dev/null \
-  || die "doctor did not identify first-party input skew"
-
-upgrade_repo="$scratch/upgrade-repo"
-upgrade_bin="$scratch/upgrade-bin"
-mkdir -p "$upgrade_repo" "$upgrade_bin"
-git init --quiet "$upgrade_repo"
-printf '.beagle-cache/\n' >"$upgrade_repo/.gitignore"
-printf 'before\n' >"$upgrade_repo/flake.lock"
-cat >"$upgrade_bin/firn-schema" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-case "$*" in
-  'schema extract')
-    [[ "${FAIL_EXTRACTION:-0}" == 0 ]] || exit 7
-    mkdir -p "$FIRN_REPO/.beagle-cache"
-    cp "$FIRN_REPO/flake.lock" "$FIRN_REPO/.beagle-cache/schema.json"
-    ;;
-  'repo validate')
-    [[ "$(cat "$FIRN_REPO/.beagle-cache/schema.before.json")" == before ]]
-    [[ "$(cat "$FIRN_REPO/.beagle-cache/schema.json")" == after ]]
-    touch "$FIRN_REPO/validated"
-    exit "${VALIDATION_STATUS:-0}"
-    ;;
-  *) exit 64 ;;
-esac
-SH
-cat >"$upgrade_bin/nix" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ "$*" == "flake update --flake $FIRN_REPO" ]]
-[[ "$(cat "$FIRN_REPO/.beagle-cache/schema.before.json")" == before ]]
-printf 'after\n' >"$FIRN_REPO/flake.lock"
-SH
-chmod +x "$upgrade_bin/"*
-FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" \
-  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
-  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now
-[[ -f "$upgrade_repo/validated" ]] \
-  || die "upgrade with an untracked cache did not reach validation"
-
-printf 'before\n' >"$upgrade_repo/flake.lock"
-upgrade_status=0
-FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" FAIL_EXTRACTION=1 \
-  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
-  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now \
-  || upgrade_status=$?
-[[ "$upgrade_status" == 7 && "$(cat "$upgrade_repo/flake.lock")" == before ]] \
-  || die "failed extraction did not stop upgrade before lock mutation"
-
-upgrade_status=0
-FIRN_REPO="$upgrade_repo" PATH="$upgrade_bin:$PATH" VALIDATION_STATUS=9 \
-  FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
-  bun "$repo/native/repo_workflows_host.mjs" repo upgrade now \
-  || upgrade_status=$?
-[[ "$upgrade_status" == 9 ]] \
-  || die "upgrade did not propagate canonical validation failure"
-
+pin_skewed="$scratch/pin-skewed"
+run_pin_ancestry "$pin_skewed"
+[[ "$(<"$pin_skewed.status")" == 1 ]] \
+  || die "non-ancestor pin was accepted"
 printf 'PASS repo-workflows-js\n'

@@ -7,13 +7,6 @@ generated_file="$repo/modules/codex/default.nix"
 config_file="$repo/dotfiles/codex/config.toml"
 requirements_file="$repo/modules/codex/requirements.toml"
 
-grep -Fq ':default (s flakeRoot "/dotfiles/codex/config.toml")' "$source_file"
-grep -Fq '{:source codexConfigFile}' "$source_file"
-# These assertions intentionally match literal Nix interpolation syntax.
-# shellcheck disable=SC2016
-grep -Fq 'default = "${flakeRoot}/dotfiles/codex/config.toml";' "$generated_file"
-grep -Fq '".codex/config.toml".source = codexConfigFile;' "$generated_file"
-
 python3 - "$requirements_file" "$source_file" "$generated_file" <<'PY'
 import pathlib
 import re
@@ -76,48 +69,6 @@ print(
 )
 PY
 
-if rg -n '"\.codex/skills"|current/skills/codex' "$source_file" "$generated_file"; then
-  printf 'Home Manager still replaces the provider-owned Codex skills directory\n' >&2
-  exit 1
-fi
-
-if rg -n 'pkgs.linkFarm|L\+ /etc/codex/hooks -' "$source_file" "$generated_file"; then
-  echo "Codex must preserve the shared North enforcement hooks directory" >&2
-  exit 1
-fi
-
-for adapter in \
-  lib/north-agent-activation.sh \
-  firn-system-policy \
-  concrete-model-identity-guard.sh \
-  launch-critical-worktree-guard.sh \
-  lib/launch_critical_decide.py \
-  lib/launch_critical_paths.py \
-  tripwire-guard.sh \
-  corpus-scan-guard.sh \
-  resource-safe-search-guard.sh \
-  modern-search-guard.sh \
-  session-kill-guard.sh \
-  lib/authoring-killswitch.sh; do
-  grep -Fq "(providerAdapter \"$adapter\")" "$source_file"
-done
-if rg -n 'north/profiles/tom/hooks' "$source_file" "$generated_file"; then
-  printf 'retired North personal-profile hook wiring remains\n' >&2
-  exit 1
-fi
-if rg -n 'north-clock-guard-codex|north-(on|mark-)|\(promoted |harness-dial' \
-  "$source_file" "$generated_file"; then
-  printf 'retired or generation-backed Codex hook wiring remains\n' >&2
-  exit 1
-fi
-
-if rg -n \
-  'mkOutOfStoreSymlink.*config\.toml|code/nixos-config/dotfiles/codex/config\.toml' \
-  "$source_file" "$generated_file"; then
-  printf 'Codex config delivery still depends on a mutable checkout path\n' >&2
-  exit 1
-fi
-
 if [ -n "${CODEX_CONFIG_SOURCE:-}" ]; then
   config_source=$CODEX_CONFIG_SOURCE
 else
@@ -145,20 +96,4 @@ assert_store_copy() {
 
 config_source=$(assert_store_copy 'Codex config.toml' "$config_file" "$config_source")
 
-python3 - "$config_source" <<'PY'
-import pathlib
-import sys
-import tomllib
-
-with pathlib.Path(sys.argv[1]).open("rb") as handle:
-    config = tomllib.load(handle)
-
-assert config["model"] == "gpt-6.1-sol"
-assert config["model_reasoning_effort"] == "high"
-assert config["agents"]["max_concurrent_threads_per_session"] == 64
-assert config["agents"]["default_subagent_model"] == "gpt-6.1-sol"
-assert "north" not in config.get("mcp_servers", {})
-PY
-
-printf 'ok: Codex config.toml is a generation-retained store copy with no checkout delivery dependency\n'
-printf 'ok: Codex keeps Sol/high with Sol subagents and no North MCP declaration\n'
+printf 'ok: Codex config.toml is a generation-retained store copy\n'

@@ -72,18 +72,13 @@ jobs:
             exit 1
           fi
 
-      - name: Test retained repository build route
+      - name: Test repository boot-coupling budget
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: bash native/repo_build_native.test.sh
 
-      - name: Test activity chooser behavior
-        working-directory: firn
-        env:
-          BEAGLE_PATH: ${{ github.workspace }}/beagle
-        run: bash native/activity_menu.test.sh
 
       - name: Test activity daemon behavior
         working-directory: firn

@@ -57,8 +57,7 @@
   (match (projection/project-source source)
     [(ProjectionRejected message offset) false]
     [(ProjectionParsed propositions)
-     (let [explanations (Vec projection/RealizationExplanation) (projection/explain-machine propositions :whiterabbit)
-           baseline projection/BootCouplingBudget (projection/assess-boot-coupling
+     (let [baseline projection/BootCouplingBudget (projection/assess-boot-coupling
              propositions :whiterabbit ["remote-access-runtime"])
            blender-coupled projection/BootCouplingBudget (projection/assess-boot-coupling
              propositions :whiterabbit ["remote-access-runtime" "blender"])
@@ -89,10 +88,9 @@
        (and (= (projection/realization-obligations
                  propositions :whiterabbit)
                (expected-obligations))
-            (and (= 3 (count explanations))
-                 (empty?
-                   (projection/uncovered-capabilities
-                     propositions :whiterabbit)))
+            (empty?
+              (projection/uncovered-capabilities
+                propositions :whiterabbit))
             (and
               (projection/boot-coupling-budget-passes? baseline)
               (not

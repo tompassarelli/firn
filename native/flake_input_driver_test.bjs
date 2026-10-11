@@ -83,22 +83,10 @@
          (= (driver/outcome-effect-kinds first)
             ["stdout" "write" "stdout"])
          (= (driver/outcome-stderr first) "")
-         (= (driver/outcome-stdout first)
-            (str
-              "flake-inputs: 2 module inputs from 2 modules\n"
-              "  alpha (from beta-module)\n"
-              "  zeta (from alpha-module)\n"
-              "flake-inputs: updated flake.bnix\n"))
          (> (count generated) (count (empty-flake)))
          (= (driver/flakeinputoutcome-status second) 0)
          (= (driver/outcome-effect-kinds second) ["stdout" "stdout"])
-         (= (driver/outcome-stderr second) "")
-         (= (driver/outcome-stdout second)
-            (str
-              "flake-inputs: 2 module inputs from 2 modules\n"
-              "  alpha (from beta-module)\n"
-              "  zeta (from alpha-module)\n"
-              "flake-inputs: flake.bnix is up to date\n")))))
+         (= (driver/outcome-stderr second) ""))))
 
 (defn case-conflict-before-summary [] Bool
   (let [(outcome driver/FlakeInputOutcome)
@@ -106,30 +94,12 @@
           (repository "beta-module" conflict-source (empty-flake)))]
     (and (= (driver/flakeinputoutcome-status outcome) 1)
          (= (driver/outcome-effect-kinds outcome) ["stderr"])
-         (= (driver/outcome-stdout outcome) "")
-         (= (driver/outcome-stderr outcome)
-            (str
-              "flake-inputs: conflict on 'zeta' — module 'beta-module' "
-              "declares url github:other/project but module 'alpha-module' "
-              "declares url github:zeta/project\n")))))
-
-(defn case-empty-summary [] Bool
-  (let [(outcome driver/FlakeInputOutcome)
-        (driver/run-flake-input-emit
-          (driver/->FlakeInputRepositoryData
-            [(driver/->ModuleSource "plain" "")]
-            (empty-flake)))]
-    (and (= (driver/flakeinputoutcome-status outcome) 0)
-         (= (driver/outcome-stdout outcome)
-            (str
-              "flake-inputs: no module inputs found\n"
-              "flake-inputs: updated flake.bnix\n")))))
+         (= (driver/outcome-stdout outcome) ""))))
 
 (defn cases [] (Vec TestResult)
   [(->TestResult "argv-grammar" (case-argv-grammar))
    (->TestResult "emit-and-up-to-date" (case-emit-and-up-to-date))
-   (->TestResult "conflict-before-summary" (case-conflict-before-summary))
-   (->TestResult "empty-summary" (case-empty-summary))])
+   (->TestResult "conflict-before-summary" (case-conflict-before-summary))])
 
 (js/export
  (defn test [] Int

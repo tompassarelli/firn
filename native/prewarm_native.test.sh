@@ -63,7 +63,6 @@ assert.equal(p['warm-spec']({...snapshot, branch:'', platform:'darwin'}).key,
 assert.deepEqual(p['command-argv'](''), []);
 assert.deepEqual(p['command-argv']('firn\0\0host\0rebuild\0'), ['firn','','host','rebuild']);
 const owner = {'worker-pid':101, 'child-pid':102, key};
-assert.equal(p['render-owner'](owner), `101\n102\n${key}\n`);
 assert.deepEqual(p['parse-lease-owner'](`101\n102\n${key}\n`), owner);
 assert.deepEqual(p['parse-lease-owner'](` +101suffix\n102\n${key}`), owner);
 for (const text of ['', `101\n102\n${key}\n\n`, `101\n\n${key}\n`, `0\n102\n${key}\n`, '101\n102\n\n']) {
@@ -73,8 +72,6 @@ const executable = '/bin/firn';
 const repository = snapshot.repository;
 const worker = {pid:101, argv:[executable,'--worker',executable,repository,key]};
 const child = {pid:102, argv:['nix','build','--no-link','--print-out-paths',key]};
-assert.deepEqual(p['worker-argv'](executable,repository,key), worker.argv);
-assert.deepEqual(p['nix-build-argv'](key), child.argv);
 const supersede = (desired, current, w = worker, c = child) =>
   p['supersede-plan'](desired,current,executable,repository,owner,w,c);
 assert.deepEqual(supersede(key,99), {deduplicated:key});

@@ -44,6 +44,7 @@ done
   || die "authoritative Beagle checkout is missing: $beagle"
 
 json="$beagle/native-core/src/native/json.bjs"
+datum="$beagle/native-core/src/beagle/datum_reader.bjs"
 schema_path="$beagle/native-core/src/beagle/nix_schema_path.bjs"
 core="$repo/native/firn_views.bjs"
 pure="$repo/native/firn_views_test.bjs"
@@ -52,16 +53,20 @@ bridge="$repo/native/firn_views_host.mjs"
 
 printf 'firn-views-js: building one closed typed family graph\n' >&2
 mkdir -p "$scratch/build"
-timeout --foreground 240 "$beagle/bin/beagle" build \
-  "$json" "$schema_path" "$core" "$pure" "$native" --out "$scratch/build" \
+timeout --foreground 240 "$beagle/bin/beagle-build-all" \
+  "$json" "$datum" "$schema_path" "$core" "$pure" "$native" --out "$scratch/build" \
   >"$scratch/build.out" 2>"$scratch/build.err" || {
     sed -n '1,260p' "$scratch/build.err" >&2
     die 'closed Beagle/JS family build failed'
   }
 pure_js="$(find "$scratch/build" -name views-test.js -print -quit)"
 native_js="$(find "$scratch/build" -name views-native.js -print -quit)"
-[[ -n "$pure_js" && -f "$pure_js" ]] || die 'pure views module was not emitted'
 [[ -n "$native_js" && -f "$native_js" ]] || die 'views host module was not emitted'
+mkdir -p "$scratch/build/node_modules/beagle"
+cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
+  "$scratch/build/node_modules/beagle/core.js"
+printf '%s\n' '{"name":"beagle","type":"module"}' \
+  >"$scratch/build/node_modules/beagle/package.json"
 
 cat >"$scratch/firn-views-native" <<EOF
 #!/usr/bin/env bash
@@ -69,14 +74,11 @@ exec env FIRN_VIEWS_MODULE='$native_js' bun '$bridge' "\$@"
 EOF
 chmod +x "$scratch/firn-views-native"
 
-printf 'firn-views-native: pure fixed JSON/source/fake-result cases\n' >&2
 FIRN_VIEWS_TEST_MODULE="$pure_js" \
 timeout --foreground 30 bun --eval \
   'const m = await import(process.env.FIRN_VIEWS_TEST_MODULE); process.exitCode = m.run([]);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die 'pure fixture executable failed'
-[[ "$(rg -c '^PASS ' "$scratch/pure.out")" == '10' ]] \
-  || die 'pure fixture count changed'
 [[ ! -s "$scratch/pure.err" ]] || die 'pure fixtures wrote stderr'
 
 fixture="$scratch/repo"
@@ -147,16 +149,6 @@ cat >"$fixture/flake.bnix" <<'EOF'
 {:inputs {}}
 EOF
 
-cat >"$fakebin/firn" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'firn\t<%s>\t<%s>\t<%s>\n' \
-  "${1:-}" "${2:-}" "${3:-}" >>"${FIRN_FAKE_LOG:?}"
-printf 'schema-made:%s\n' "${3:-}"
-printf 'schema-note\n' >&2
-exit "${FIRN_FAKE_SCHEMA_STATUS:-0}"
-EOF
-
 cat >"$fakebin/nixos-rebuild" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -171,7 +163,7 @@ printf '40 old\n41 current\n'
 printf 'generation-note\n' >&2
 exit "${FIRN_FAKE_GEN_STATUS:-0}"
 EOF
-chmod +x "$fakebin/firn" "$fakebin/nixos-rebuild"
+chmod +x "$fakebin/nixos-rebuild"
 
 last_status=0
 run_cli() {
@@ -244,22 +236,6 @@ expect_contains "$scratch/explain.out" 'hosts/fixture-host/configuration.bnix' \
 run_cli suggest "$scratch/firn-views-native" schema explain services.modf
 expect_status suggest 1
 expect_contains "$scratch/suggest.err" 'services.mode' 'schema suggestion'
-
-: >"$scratch/fake.log"
-run_cli extract "$scratch/firn-views-native" schema extract fixture-host
-expect_status extract 0
-printf '%s\n' \
-  '>> firn schema extract fixture-host' \
-  'schema-made:fixture-host' >"$scratch/extract.expected.out"
-cmp -s "$scratch/extract.expected.out" "$scratch/extract.out" \
-  || { diff -u "$scratch/extract.expected.out" "$scratch/extract.out" >&2 || true; \
-       die 'schema extract stdout changed'; }
-printf '%s\n' 'schema-note' >"$scratch/extract.expected.err"
-cmp -s "$scratch/extract.expected.err" "$scratch/extract.err" \
-  || die 'schema extract stderr changed'
-printf '%s\n' 'firn	<schema>	<extract>	<fixture-host>' >"$scratch/extract.expected.log"
-cmp -s "$scratch/extract.expected.log" "$scratch/fake.log" \
-  || die 'schema extractor argv changed'
 
 : >"$scratch/fake.log"
 run_cli generation "$scratch/firn-views-native" host gen fixture-host

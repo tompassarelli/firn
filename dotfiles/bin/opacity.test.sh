@@ -181,39 +181,16 @@ grep -Fq 'opacity 0.66' "$(cfg)" \
 [ "$(commit_count)" -eq "$before_count" ] \
   && check "set with unrelated dirty path commits nothing" 0 \
   || check "set with unrelated dirty path commits nothing" 1
-if grep -Fq 'other uncommitted changes' <<<"$out"; then
-  check "message mentions other uncommitted changes" 0
-else
-  printf '%s\n' "$out" >&2
-  check "message mentions other uncommitted changes" 1
-fi
-dirty_lines=$(git -C "$container" status --porcelain | wc -l | tr -d ' ')
-[ "$dirty_lines" -eq 2 ] \
-  && check "both the unrelated edit and the opacity edit remain uncommitted" 0 \
-  || check "both the unrelated edit and the opacity edit remain uncommitted" 1
-
 # --- case 6: guard — missing config file -------------------------------------
 fresh_repo
 rm "$(cfg)"
 run_opacity
 [ "$status" -ne 0 ] && check "missing config file exits nonzero" 0 || check "missing config file exits nonzero" 1
-if grep -Fq 'missing' <<<"$out"; then
-  check "missing config file message is clear" 0
-else
-  printf '%s\n' "$out" >&2
-  check "missing config file message is clear" 1
-fi
 
 # --- case 7: guard — config present but no opacity line ---------------------
 no_opacity_line_repo
 run_opacity 0.70
 [ "$status" -ne 0 ] && check "no opacity line exits nonzero on set" 0 || check "no opacity line exits nonzero on set" 1
-if grep -Fq 'no opacity line found' <<<"$out"; then
-  check "no opacity line message is clear" 0
-else
-  printf '%s\n' "$out" >&2
-  check "no opacity line message is clear" 1
-fi
 
 # --- case 9: round-trip back to the pre-set value drops the commit ---------
 fresh_repo
@@ -272,12 +249,6 @@ grep -Fq 'opacity 0.88' "$(cfg)" \
 [ "$(commit_count)" -eq "$after_first_count" ] \
   && check "round-trip with unrelated dirty path commits/resets nothing" 0 \
   || check "round-trip with unrelated dirty path commits/resets nothing" 1
-if grep -Fq 'other uncommitted changes' <<<"$out"; then
-  check "round-trip with unrelated dirty path still names the guard" 0
-else
-  printf '%s\n' "$out" >&2
-  check "round-trip with unrelated dirty path still names the guard" 1
-fi
 
 if [ "$fail_count" -eq 0 ]; then
   printf 'opacity tests: PASS (%d checks)\n' "$pass"

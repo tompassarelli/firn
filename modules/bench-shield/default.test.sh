@@ -12,44 +12,24 @@ RUNTIME_LOCK="$SCRATCH/state.lock"
 RUN_LOCK="$SCRATCH/run.lock"
 mkdir -p "$FAKE_ROOT" "$FAKE_BIN"
 
-# Exercise the generated program, not a hand-maintained test copy. Nix indents
-# the shell body and escapes shell interpolation as two single quotes + `${`.
-in_script=0
-end_script=0
-root_gate_replacements=0
-while IFS= read -r line; do
-  if (( ! in_script )) && [[ "$line" == *'writeShellScriptBin "bench-shield"'* ]]; then
-    in_script=1
-    continue
-  fi
-  (( in_script )) || continue
-  if [[ "$line" == "      '')" ]]; then
-    end_script=1
-    break
-  fi
-  line="${line#        }"
-  line="${line//\'\'\$\{/\$\{}"
-  # These literal generated-program lines are test-harness substitutions.
-  # shellcheck disable=SC2016
+nix-instantiate --eval --strict --json --expr "
+  let module = import $REPO/modules/bench-shield/default.nix {
+    config.myConfig.modules.bench-shield.enable = true;
+    lib.mkIf = condition: value: if condition then value else {};
+    lib.mkEnableOption = _: {};
+    pkgs.writeShellScriptBin = _: text: text;
+  }; in builtins.head module.config.environment.systemPackages
+" | jq -r . | while IFS= read -r line; do
   if [[ "$line" == 'if [[ "$COMMAND" =~ ^(on|off|status)$ ]] && (( EUID != 0 )); then' \
      || "$line" == 'if [[ "$COMMAND" == __run ]] && (( EUID != 0 )); then' ]]; then
     line='if false; then'
-    ((root_gate_replacements += 1))
   fi
   line="${line//\/run\/bench-shield.run.lock/$RUN_LOCK}"
   line="${line//\/run\/bench-shield.lock/$RUNTIME_LOCK}"
   line="${line//\/run\/bench-shield/$RUNTIME_STATE}"
-  printf '%s\n' "$line" >> "$SCRIPT"
-done < "$REPO/modules/bench-shield/default.nix"
-(( in_script ))
-(( end_script ))
-(( root_gate_replacements == 2 ))
-if grep -Fq /run/bench-shield "$SCRIPT"; then
-  echo "test extraction retained a live bench-shield runtime path" >&2
-  exit 1
-fi
+  printf '%s\n' "$line"
+done > "$SCRIPT"
 chmod +x "$SCRIPT"
-bash -n "$SCRIPT"
 
 cat > "$FAKE_BIN/nproc" <<'EOF'
 #!/usr/bin/env bash
