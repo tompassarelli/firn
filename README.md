@@ -27,7 +27,7 @@ The output above is illustrative: each error points at `file:line:col` and sugge
 - **A module library.** 231 module directories under `modules/` (`ls modules | wc -l`). Each module is one package or service, selected by tags.
 - **One reference host.** `hosts/whiterabbit/` enables 158 of those modules, directly or through tags. Its private values (email, timezone, input devices and secrets) are not in this repository. They come from a private overlay.
 
-A second host, `hosts/nexus/`, is also built from this repository.
+The server host nexus is defined in a private overlay; its modules (`nexus-*`, `wg-nexus`, `github-pat`) live here.
 
 ## Private overlays
 

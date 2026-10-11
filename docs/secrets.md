@@ -33,9 +33,6 @@ sudo install -Dm600 ~/.config/sops/age/keys.txt /var/lib/sops-nix/key.txt
 
 Or simplest: leave the secret-backed modules disabled.
 
-`secrets/nexus/*` remains in firn until the nexus host builds from its own
-overlay.
-
 ## Tom's machines
 
 Tom's overlay is the private `south` repository. Its encrypted files live at

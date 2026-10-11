@@ -10,7 +10,7 @@ usage() {
 
 [[ $# -eq 1 ]] || usage
 out="$1"
-repo="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
+repo="${NEXUS_SECRETS_REPO:-$(git rev-parse --show-toplevel)}"
 secret="$repo/secrets/nexus/hostkey.yaml"
 public="$repo/secrets/nexus/ssh_host_ed25519_key.pub"
 [[ -f "$secret" && -f "$public" ]] || { printf 'nexus-stage-hostkey: missing %s or %s\n' "$secret" "$public" >&2; exit 1; }

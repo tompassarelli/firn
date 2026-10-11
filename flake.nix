@@ -328,12 +328,6 @@
         hostConfig = ./hosts/whiterabbit/configuration.nix;
         hardwareConfig = ./hardware-configuration.nix;
       };
-      nexus = self.lib.mkSystem {
-        hostname = "nexus";
-        hostConfig = ./hosts/nexus/configuration.nix;
-        hardwareConfig = ./hosts/nexus/hardware.nix;
-        extraModules = [ disko.nixosModules.disko ];
-      };
     };
     templates.default = {
       description = "firn starter configuration";

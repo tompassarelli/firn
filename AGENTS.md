@@ -2,7 +2,7 @@ profile: tooling
 
 # NixOS configuration
 
-- Keep host credentials in the private overlay with sops-nix (docs/secrets.md); firn holds only `secrets/nexus/*`.
+- Keep host credentials in the private overlay with sops-nix (docs/secrets.md); firn holds no secrets.
 - Treat this repository and its issues as public: keep Tom's location, email and other personal data out of issues, comments, commits and docs.
 - Write Beagle/Nix `.bnix` or explicitly selected Clause modules and compile through `firn repo build`.
 - Query Beagle from `~/code/beagle/main` or the immutable Clause pin in `config/clause-revision` for uncertain compiler/schema facts.
