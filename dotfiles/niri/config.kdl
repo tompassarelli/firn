@@ -362,8 +362,11 @@ window-rule {
 // open WITHOUT stealing focus. "Window opened" and "window deserves focus"
 // are separate events — the wrapper flags the window urgent instead so the
 // bar signals "wants you" rather than taking you.
+workspace "agents"
+
 window-rule {
     match app-id=r#"^quiet\.spawn$"#
+    open-on-workspace "agents"
     open-focused false
 }
 
