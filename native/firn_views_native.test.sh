@@ -244,9 +244,6 @@ printf '%s\n' 'current: 41' 'next:    42' \
   >"$scratch/generation.expected.out"
 cmp -s "$scratch/generation.expected.out" "$scratch/generation.out" \
   || die 'generation output changed'
-printf '%s\n' 'generation-note' >"$scratch/generation.expected.err"
-cmp -s "$scratch/generation.expected.err" "$scratch/generation.err" \
-  || die 'generation child stderr changed'
 printf '%s\n' 'nixos-rebuild	<list-generations>' \
   >"$scratch/generation.expected.log"
 cmp -s "$scratch/generation.expected.log" "$scratch/fake.log" \

@@ -11,6 +11,12 @@ concurrency:
 
 jobs:
   tests:
+    name: Tests (${{ matrix.suite }})
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        suite: [runtime, discovered]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -52,17 +58,21 @@ jobs:
           ref: ${{ steps.clause.outputs.revision }}
           path: clause
 
+      - name: Install test tools
+        run: nix profile install nixpkgs#bun nixpkgs#ripgrep nixpkgs#jq
+
       - name: Install firn user runtime
+        if: matrix.suite == 'discovered'
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
           FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
-          nix profile install nixpkgs#bun nixpkgs#ripgrep nixpkgs#jq
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
 
       - name: Drift check (.bnix and .nix in sync)
+        if: matrix.suite == 'discovered'
         # Regenerates every .nix from its sibling .bnix and fails if any
         # generated file differs from what's committed. Forces .bnix to
         # remain the source of truth.
@@ -84,10 +94,12 @@ jobs:
           FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
           FIRN_REAL_REPO: ${{ github.workspace }}/firn
+          FIRN_TEST_SUITE: ${{ matrix.suite }}
         run: |
           export FIRN_BUN="$(command -v bun)"
           skip=(
             modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
+            native/authoring_native.test.sh # needs the private Galileo compiler; public firn CI cannot check it out
           )
           mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | sort)
           status=0
@@ -95,6 +107,11 @@ jobs:
             if printf '%s\n' "${skip[@]}" | grep -Fxq "$test"; then
               echo "::notice::$test requires the local machine"
               continue
+            fi
+            if [[ "$test" == dotfiles/bin/firn.test.sh ]]; then
+              [[ "$FIRN_TEST_SUITE" == runtime ]] || continue
+            else
+              [[ "$FIRN_TEST_SUITE" == discovered ]] || continue
             fi
             echo "::group::$test"
             bash "$test" || { echo "::error::$test failed"; status=1; }
