@@ -97,7 +97,6 @@ tag_sources=(
 tag_bridge="$firn_repo/native/firn_tag_host.mjs"
 module_facts_bridge="$firn_repo/native/module_facts_host.mjs"
 flake_input_sources=(
-  "$datum_reader"
   "$firn_repo/native/flake_input.bjs"
   "$firn_repo/native/flake_input_driver.bjs"
   "$firn_repo/native/flake_input_family.bjs"
@@ -380,7 +379,7 @@ materialize_js() {
   fi
   cp -- "$bridge" "$host"
   case "$component" in
-    tag|inventory|repo-build)
+    tag|inventory|repo-build|flake-input)
       cp -- "$module_facts_bridge" "$output_root/module_facts_host.mjs"
       record_artifact "$component-module-facts-host" \
         "lib/$component/module_facts_host.mjs" "$module_facts_bridge"

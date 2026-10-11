@@ -21,8 +21,8 @@ function galileo() {
   return runtime && existsSync(join(runtime, 'galileo')) ? join(runtime, 'galileo') : 'galileo';
 }
 
-function query(root, question) {
-  const run = Bun.spawnSync([galileo(), 'query', question, '--json'], {
+function query(root, question, paths = []) {
+  const run = Bun.spawnSync([galileo(), 'query', ...paths, question, '--json'], {
     cwd: root, stdout: 'pipe', stderr: 'pipe', timeout: 120000,
   });
   if (run.exitCode !== 0) {
@@ -91,11 +91,32 @@ export function buildGenerated(root) {
 const noHost = Object.freeze({ platform: 'linux', enables: [], adds: new Map(),
   drops: new Map(), disables: [], active: [] });
 const hostFacts = (hosts, name) => hosts.get(name) ?? noHost;
+
+const flakeProgram = ['flake.gal', 'modules', 'config'];
+
+export function readFlakeInputs(root) {
+  try {
+    const rows = query(root, 'all ?m, ?n, ?u where ?m needs flake input ?n from ?u', flakeProgram);
+    return Object.freeze({ status: 0, value: rows.map((row) => [row.m, row.n, row.u]), message: '' });
+  } catch (error) {
+    return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
+  }
+}
+
+export function runFlakeBuild(root) {
+  const run = Bun.spawnSync([galileo(), 'build', ...flakeProgram], {
+    cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 300000,
+  });
+  return run.exitCode ?? 1;
+}
+
 const empty = Object.freeze({ tags: [], optIn: [], overrides: new Map() });
 const facts = (modules, name) => modules.get(name) ?? empty;
 
 export const moduleFactsBridge = Object.freeze({
   readModuleFacts,
+  readFlakeInputs,
+  runFlakeBuild,
   factTags(modules, name) { return [...facts(modules, name).tags].sort(); },
   factOptIn(modules, name) { return [...facts(modules, name).optIn].sort(); },
   factOverrideTags(modules, name) { return [...facts(modules, name).overrides.keys()].sort(); },

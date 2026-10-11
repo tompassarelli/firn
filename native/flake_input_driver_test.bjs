@@ -2,111 +2,47 @@
 (ns firn.flake-input-driver-test
   (:require [firn.flake-input :as input] [firn.flake-input-driver :as driver]))
 
-(defn alpha-source [seed Int] String
-  (str
-    "(nix/module [config] {:flake-inputs "
-    (str
-      "{:zeta"
-      (if (= seed 0) "" seed)
-      " {:url \"github:zeta"
-      (if (= seed 0) "" seed)
-      "/project\"}}})\n")))
-
-(defn conflict-source [seed Int] String
-  (str
-    "(nix/module [config] {:flake-inputs "
-    (str
-      "{:zeta"
-      (if (= seed 0) "" seed)
-      " {:url \"github:other"
-      (if (= seed 0) "" seed)
-      "/project\"}}})\n")))
-
-(defn empty-flake [seed Int] String
-  (str
-    input/input-begin-marker
-    "\n"
-    input/input-end-marker
-    "\n"
-    input/args-begin-marker
-    "\n"
-    input/args-end-marker
-    "\n"
-    input/special-begin-marker
-    "\n"
-    input/special-end-marker
-    "\n"
-    input/hm-special-begin-marker
-    "\n"
-    input/hm-special-end-marker
-    "\n"
-    input/darwin-special-begin-marker
-    "\n"
-    input/darwin-special-end-marker
-    "\n"
-    input/darwin-hm-begin-marker
-    "\n"
-    input/darwin-hm-end-marker
-    "\n"))
-
-(defn repository [seed Int second-name String second-source String flake-text String] driver/FlakeInputRepositoryData
-  (driver/->FlakeInputRepositoryData
-    [
-      (driver/->ModuleSource (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
-      (driver/->ModuleSource second-name second-source)]
-    flake-text))
-
-(defn parsed? [seed Int argv (Vec String)] Bool
+(defn parsed? [argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) true]
     [(OtherFirnCommand other) false]
     [(InvalidFlakeInputArgv invalid) false]))
 
-(defn invalid? [seed Int argv (Vec String)] Bool
+(defn invalid? [argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) false]
     [(OtherFirnCommand other) false]
     [(InvalidFlakeInputArgv invalid) true]))
 
-(defn other? [seed Int argv (Vec String)] Bool
+(defn other? [argv (Vec String)] Bool
   (match (driver/parse-flake-input-argv argv)
     [(ParsedFlakeInputEmit token) false]
     [(OtherFirnCommand other) true]
     [(InvalidFlakeInputArgv invalid) false]))
 
-(defn case-argv-grammar [seed Int] Bool
+(defn case-argv-grammar [] Bool
   (and
-    (parsed? seed ["flake-input" "resolve" "emit"])
-    (invalid? seed ["flake-input" "resolve"])
-    (invalid? seed ["flake-input" "resolve" "show"])
-    (invalid? seed ["flake-input" "resolve" "emit" (str "extra" (if (= seed 0) "" seed))])
-    (other? seed ["tag" "resolve" "all"])))
+    (parsed? ["flake-input" "resolve" "emit"])
+    (invalid? ["flake-input" "resolve"])
+    (invalid? ["flake-input" "resolve" "show"])
+    (invalid? ["flake-input" "resolve" "emit" "extra"])
+    (other? ["tag" "resolve" "all"])))
 
-(defn effect-count [outcome driver/FlakeInputOutcome kind String] Int
-  (let [kinds (Vec String) (driver/outcome-effect-kinds outcome)]
-    (loop [index Int 0 total Int 0]
-      (if (>= index (count kinds))
-        total
-        (recur (+ index 1) (+ total (if (= (nth kinds index) kind) 1 0)))))))
-
-(defn case-conflict-before-summary [seed Int] Bool
-  (let [
-     (outcome driver/FlakeInputOutcome)
-     (driver/run-flake-input-emit
-       (repository
-         seed
-         (str "beta" (if (= seed 0) "" seed) "-module")
-         (conflict-source seed)
-         (empty-flake seed)))]
+(defn case-shared-input-keeps-first-module [] Bool
+  (let [inputs (Vec input/FlakeInput)
+          (driver/inputs-from-rows
+            [["alpha" "alpha" "github:alpha/project"]
+             ["alpha" "zeta" "github:zeta/project"]
+             ["beta" "zeta" "github:zeta/project"]])]
     (and
-      (= (driver/flakeinputoutcome-status outcome) 1)
-      (and (= (effect-count outcome "write") 0) (> (count (driver/outcome-stderr outcome)) 0))
-      (= (driver/outcome-stdout outcome) ""))))
+      (= (input/sorted-input-names inputs) ["alpha" "zeta"])
+      (= (input/flakeinput-source-module (input/find-input inputs "zeta")) "alpha")
+      (= (input/source-module-count inputs) 1))))
 
 (js/export
   (defn run-scenarios [] Int
     (if (and
-      (case-argv-grammar 0)
-      (case-conflict-before-summary 0))
+      (case-argv-grammar)
+      (case-shared-input-keeps-first-module))
       0
       (do (println "FAIL flake_input_driver scenarios") 1))))
