@@ -59,6 +59,33 @@
           WantedBy = [ "timers.target" ];
         };
       };
+      systemd.user.services.skill-prune = {
+        Unit = {
+          Description = "Weekly skill and lesson prune";
+          OnFailure = [ "update-notify@%n.service" ];
+        };
+        Service = {
+          Type = "oneshot";
+          Nice = 10;
+          TimeoutStartSec = "100min";
+          Environment = [
+            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.python3 ]}"
+          ];
+          ExecStart = jobRun "skill-prune" "${homeDir}/.local/share/north/bin/skill-prune";
+        };
+      };
+      systemd.user.timers.skill-prune = {
+        Unit = {
+          Description = "Weekly skill and lesson prune";
+        };
+        Timer = {
+          OnCalendar = [ "Sun 09:00" ];
+          Persistent = true;
+        };
+        Install = {
+          WantedBy = [ "timers.target" ];
+        };
+      };
     });
   };
 }) "Twice-daily ranked public watch digest")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
