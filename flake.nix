@@ -84,7 +84,7 @@
             "z /var/lib/sops-nix/key.txt 0400 ${config.myConfig.modules.users.username} users -"
           ];
           environment.systemPackages = with pkgs; [ sops age ];
-          imports = ((moduleDirs: ((builtins.map (m: "${firnModules}/${m}") moduleDirs))) (builtins.attrNames (nixpkgs.lib.filterAttrs (n: v: (v == "directory")) (builtins.readDir ./modules))));
+          imports = ((moduleDirs: builtins.map (m: "${firnModules}/${m}") moduleDirs) (builtins.attrNames (nixpkgs.lib.filterAttrs (n: v: (v == "directory")) (builtins.readDir ./modules))));
           home-manager.backupFileExtension = "backup";
           home-manager.extraSpecialArgs = ({
             inputs = {
@@ -246,7 +246,7 @@
         home-manager.darwinModules.home-manager
         hostConfig
         ({ config, lib, pkgs, ... }: {
-          imports = ((builtins.map (m: "${firnModules}/${m}") darwinModuleNames));
+          imports = builtins.map (m: "${firnModules}/${m}") darwinModuleNames;
           options.myConfig.modules.users.username = lib.mkOption {
             type = lib.types.str;
             default = "you";

@@ -26,9 +26,9 @@ terminal is a Tag
 theming is a Tag
 vpn is a Tag
 writing is a Tag
-darwin is a Platform
 linux is a Platform
 linux allows every module
+darwin is a Platform
 atuin supports darwin
 bash supports darwin
 bc supports darwin
