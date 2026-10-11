@@ -133,8 +133,11 @@ const random = () => (seed = seed * 48271 % 2147483647);
 for (let index=0; index<(process.env.CI ? 512 : 128); index++) {
   const modules = Array.from({length: 5}, (_, i) => `module${i}`);
   const linuxEverywhere = random()%2 === 0;
-  const rows = [...(linuxEverywhere ? modules.map(m => [m,'linux']) : []),
-    ...modules.filter(() => random()%2 === 0).map(m => [m,'darwin'])];
+  const everywhere = linuxEverywhere ? modules.map(m => [m,'linux']) : [];
+  const supported = ['darwin', ...(linuxEverywhere ? [] : ['linux'])]
+    .flatMap(platform => modules.filter(() => random()%2 === 0).map(m => [m,platform]));
+  const rows = [...everywhere, ...supported];
+  const toRows = list => list.map(([m,platform]) => p['->PlatformRow'](m, platform));
   const matrix = p['platform-matrix'](modules, rows.map(([m,platform]) => p['->PlatformRow'](m, platform)));
   const expected = modules.map(m => {
     const lacks = ['darwin','linux'].filter(platform => !rows.some(([n,q]) => n === m && q === platform));
@@ -147,9 +150,12 @@ for (let index=0; index<(process.env.CI ? 512 : 128); index++) {
   assert.deepEqual(listed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), modules);
   const darwinListed = p['render-platform-list']('darwin',matrix);
   assert.deepEqual(darwinListed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), rows.filter(([,q]) => q === 'darwin').map(([m]) => m).sort());
-  const safelist = p['render-platform-safelist'](matrix);
+  const safelist = p['render-platform-safelist'](toRows(everywhere), toRows(supported));
   assert.equal(safelist.status, 0);
-  assert.deepEqual([...safelist.stdout.matchAll(/"(module[0-9]+)"/g)].map(match => match[1]).sort(), modules.filter((m,i) => ['both','darwin-only'].includes(expected[i].kind)).sort());
+  assert.equal(safelist.stdout, ['darwin','linux'].filter(platform => !(linuxEverywhere && platform === 'linux')).map(platform => {
+    const names = supported.filter(([,q]) => q === platform).map(([m]) => m).sort();
+    return names.length === 0 ? '' : `${names.length === 1 ? names[0] : `[${names.join(', ')}]`} supports ${platform}\n`;
+  }).join(''));
   const shown = p['render-platform-show']('module0', matrix);
   assert.equal(shown.status, 0);
   assert.equal(shown.stdout.split('unsupported on:\n')[1] ?? '', expected[0].blockers.map(platform => `  ${platform}\n`).join(''));
