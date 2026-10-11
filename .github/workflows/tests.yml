@@ -11,12 +11,17 @@ concurrency:
 
 jobs:
   tests:
-    name: Tests (${{ matrix.suite }})
+    name: Tests (${{ matrix.name }})
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 5
       matrix:
-        suite: [runtime, discovered]
+        include:
+          - {suite: runtime, shard: 0, name: runtime}
+          - {suite: discovered, shard: 0, name: discovered 1/4}
+          - {suite: discovered, shard: 1, name: discovered 2/4}
+          - {suite: discovered, shard: 2, name: discovered 3/4}
+          - {suite: discovered, shard: 3, name: discovered 4/4}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -95,14 +100,17 @@ jobs:
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
           FIRN_REAL_REPO: ${{ github.workspace }}/firn
           FIRN_TEST_SUITE: ${{ matrix.suite }}
+          FIRN_TEST_SHARD: ${{ matrix.shard }}
+          FIRN_TEST_SHARDS: 4
         run: |
           export FIRN_BUN="$(command -v bun)"
           skip=(
             modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
             native/authoring_native.test.sh # needs the private Galileo compiler; public firn CI cannot check it out
           )
-          mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | sort)
+          mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | LC_ALL=C sort)
           status=0
+          index=0
           for test in "${tests[@]}"; do
             if printf '%s\n' "${skip[@]}" | grep -Fxq "$test"; then
               echo "::notice::$test requires the local machine"
@@ -112,6 +120,9 @@ jobs:
               [[ "$FIRN_TEST_SUITE" == runtime ]] || continue
             else
               [[ "$FIRN_TEST_SUITE" == discovered ]] || continue
+              shard=$((index % FIRN_TEST_SHARDS))
+              index=$((index + 1))
+              [[ "$shard" == "$FIRN_TEST_SHARD" ]] || continue
             fi
             echo "::group::$test"
             bash "$test" || { echo "::error::$test failed"; status=1; }
