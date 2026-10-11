@@ -102,6 +102,7 @@ jq -e --slurpfile projection "$claude_projection" '
   and .hooks == $projection[0].hooks
   and .autoCompactWindow == 500000
   and .subagentPromptCacheTtl == "1h"
+  and .statusLine.command == "$HOME/.local/share/north/bin/agent-statusline"
 ' "$target" >/dev/null
 [[ $(stat -c '%a' "$target") == 600 ]]
 

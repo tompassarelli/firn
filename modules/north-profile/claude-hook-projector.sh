@@ -35,9 +35,9 @@ RM_BIN=${RM_BIN:-rm}
   die "projection is not a regular file: $projection"
 "$JQ_BIN" -e '
   type == "object"
-  and (keys - ["autoCompactWindow", "hooks", "subagentPromptCacheTtl"]) == []
+  and (keys - ["autoCompactWindow", "hooks", "statusLine", "subagentPromptCacheTtl"]) == []
   and (.hooks | type == "object")
-' "$projection" >/dev/null || die "projection may hold only hooks, autoCompactWindow and subagentPromptCacheTtl: $projection"
+' "$projection" >/dev/null || die "projection may hold only hooks, autoCompactWindow, statusLine and subagentPromptCacheTtl: $projection"
 
 parent=${target%/*}
 [[ -n $parent && $parent != "$target" ]] ||

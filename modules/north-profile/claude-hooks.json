@@ -1,6 +1,7 @@
 {
   "autoCompactWindow": 500000,
   "subagentPromptCacheTtl": "1h",
+  "statusLine": {"type": "command", "command": "$HOME/.local/share/north/bin/agent-statusline", "padding": 0},
   "hooks": {
     "PreToolUse": [
       {
