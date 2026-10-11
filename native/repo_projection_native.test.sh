@@ -7,7 +7,7 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-projection-test.XXXXXX")"
 cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 mkdir -p "$scratch/hosts" "$scratch/modules/sample" "$scratch/config"
-cp "$repo/config/clause-revision" "$scratch/config/clause-revision"
+cp "$repo/config/galileo-revision" "$scratch/config/galileo-revision"
 cp "$repo/flake.bnix" "$scratch/flake.bnix"
 cat >"$scratch/modules/sample/default.bnix" <<'SOURCE'
 #lang beagle/nix

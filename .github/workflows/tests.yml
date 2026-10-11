@@ -42,18 +42,18 @@ jobs:
         id: setup
         run: |
           echo "beagle=$(git -C beagle rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "clause=$(cat firn/config/clause-revision)" >> "$GITHUB_OUTPUT"
+          echo "galileo=$(cat firn/config/galileo-revision)" >> "$GITHUB_OUTPUT"
           nix flake metadata nixpkgs --json > "$RUNNER_TEMP/test-tools-lock.json"
           echo "tools-url=$(jq -r .url "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
           tools_key=$(jq -r .locked.narHash "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
           echo "tools-key=$tools_key" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout clause
+      - name: Checkout galileo
         uses: actions/checkout@v4
         with:
-          repository: tompassarelli/clause
-          ref: ${{ steps.setup.outputs.clause }}
-          path: clause
+          repository: tompassarelli/galileo
+          ref: ${{ steps.setup.outputs.galileo }}
+          path: galileo
 
       - name: Cache test tools
         id: tools-cache
@@ -119,18 +119,18 @@ jobs:
           path: |
             ${{ runner.temp }}/firn-runtime
             ${{ runner.temp }}/firn-runtime-closure.nar
-          key: runtime-repo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.beagle }}-${{ steps.setup.outputs.tools-key }}-${{ hashFiles('firn/native/**', 'firn/config/clause-revision', 'firn/dotfiles/bin/firn-runtime-update') }}
+          key: runtime-repo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.beagle }}-${{ steps.setup.outputs.tools-key }}-${{ hashFiles('firn/native/**', 'firn/config/galileo-revision', 'firn/dotfiles/bin/firn-runtime-update') }}
 
       - name: Install firn user runtime
         if: matrix.suite != 'runtime' && steps.runtime-cache.outputs.cache-hit != 'true'
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
-          FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
+          FIRN_GALILEO_REPO: }/galileo
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
-          mapfile -t roots < <(awk -F= '/^(bun_store_path|clause_runtime_dependency)=\/nix\/store\// {print $2}' \
+          mapfile -t roots < <(awk -F= '/^(bun_store_path|galileo_runtime_dependency)=\/nix\/store\// {print $2}' \
             "$FIRN_RUNTIME_ROOT/current/manifest")
           mapfile -t closure < <(nix-store --query --requisites "${roots[@]}")
           nix-store --export "${closure[@]}" > "$RUNNER_TEMP/firn-runtime-closure.nar"
@@ -157,7 +157,7 @@ jobs:
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
-          FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
+          FIRN_GALILEO_REPO: }/galileo
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
           FIRN_REAL_REPO: ${{ github.workspace }}/firn
           FIRN_TEST_SUITE: ${{ matrix.suite }}

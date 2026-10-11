@@ -67,15 +67,6 @@
       (ends-with? relative "/responsibilities.bnix")))
 
 (js/export
-  (defn clause-source-path? [relative String] Bool
-    (and (starts-with? relative "native/nix/")
-         (ends-with? relative ".clause"))))
-
-(js/export
-  (defn clause-module-name [relative String] String
-    (subs relative 11 (- (count relative) 7))))
-
-(js/export
   (defn source-path? [relative String] Bool
   (and (ends-with? relative ".bnix")
        (not (source-excluded? relative)))))
@@ -110,10 +101,7 @@
     (let [source-relative String (sourcestate-relative state)
           destination-relative String (sourcestate-output-relative state)]
       (->CompilerProcess source-relative destination-relative
-      (if (clause-source-path? source-relative)
-        [compiler "compile-nix" (absolute-path root source-relative)
-         (str (clause-module-name source-relative) "-module") temporary]
-        [compiler (absolute-path root source-relative) temporary])))))
+        [compiler (absolute-path root source-relative) temporary]))))
 
 (js/export
   (defn parse-repo-build-argv [argv (Vec String)] RepoBuildArgv

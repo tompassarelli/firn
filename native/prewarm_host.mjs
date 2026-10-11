@@ -16,7 +16,7 @@ import {
 import { hostname, platform } from 'node:os';
 
 const modulePath = process.env.FIRN_PREWARM_MODULE
-  ?? new URL('./prewarm.js', import.meta.url).pathname;
+  ?? new URL('./prewarm.ts', import.meta.url).pathname;
 const policy = await import(modulePath);
 const call = (name, ...args) => policy[name](...args);
 const maxOutput = 16 * 1024 * 1024;
@@ -59,7 +59,7 @@ function kind(path) {
 
 function looksLikeFirn(path) {
   return kind(path) === 2
-    && kind(`${path}/native/firn.clause`) === 1
+    && kind(`${path}/config/galileo-revision`) === 1
     && kind(`${path}/flake.bnix`) === 1;
 }
 

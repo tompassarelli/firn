@@ -5,7 +5,7 @@ profile: tooling
 - Keep host credentials in the private overlay with sops-nix (docs/secrets.md); firn holds no secrets.
 - Treat this repository and its issues as public: keep Tom's location, email and other personal data out of issues, comments, commits and docs.
 - Write Beagle/Nix `.bnix` or explicitly selected Clause modules and compile through `firn repo build`.
-- Query Beagle from `~/code/beagle/main` or the immutable Clause pin in `config/clause-revision` for uncertain compiler/schema facts.
+- Query Beagle from `~/code/beagle/main` or Galileo at the pin in `config/galileo-revision` for uncertain compiler/schema facts.
 - Compose one package/service per module through `myConfig.modules.*` and declared tags; let dynamic imports discover modules.
 - Verify `whiterabbit` and `nexus`; use `firn rebuild` for exact committed snapshots on the laptop and `firn host deploy nexus` (from a checkout at origin/main of the repo nexus upgrades from) for nexus.
 - Keep general commands under `dotfiles/bin/` and repository commands in entity-first `firn`.
