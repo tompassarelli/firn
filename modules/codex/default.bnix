@@ -64,6 +64,8 @@
            (providerAdapter "modern-search-guard.sh")
            (providerAdapter "session-kill-guard.sh")
            (providerAdapter "lib/authoring-killswitch.sh")
+           (providerAdapter "chat-post.sh")
+           (providerAdapter "lib/chat_post.py")
            (providerAdapter "codex-behavior-guard.sh")
            (providerAdapter "lib/codex_behavior.py")
            (providerAdapter "lib/spawn_capacity.py")
