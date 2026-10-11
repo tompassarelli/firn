@@ -23,6 +23,26 @@
                  (s "token=$(cat " config.sops.secrets.ntfy-publisher-token.path ")")
                  "curl -fsS -H @<(printf 'Authorization: Bearer %s\\nPriority: %s\\nTitle: %s\\n' \"$token\" \"$prio\" \"$title\"; [ -z \"$click\" ] || printf 'Click: %s\\n' \"$click\") \\"
                  (s "  --data-binary \"$2\" \"" baseUrl "/$1\" | jq -r .id"))})
+        notifyBody
+         (ms "name=${unit%.service}"
+             "result=$(systemctl $scope show \"$unit\" -p Result --value)"
+             "status=$(systemctl $scope show \"$unit\" -p ExecMainStatus --value)"
+             "case \"$result\" in"
+             "  exit-code) reason=\"it exited with error code $status\" ;;"
+             "  timeout) reason='it took too long and was stopped' ;;"
+             "  signal) reason='it was killed by a signal' ;;"
+             "  core-dump) reason='it crashed' ;;"
+             "  oom-kill) reason='it ran out of memory' ;;"
+             "  start-limit-hit) reason='it kept failing and systemd stopped restarting it' ;;"
+             "  *) reason=\"systemd reports: ${result:-unknown}\" ;;"
+             "esac"
+             "title=\"Nexus: $name failed\""
+             "case \"$name\" in nexus-selftest-*) title=\"Nexus self-test (no action needed): $name failed\" ;; esac"
+             "last=$(journalctl $scope -u \"$unit\" -n 1 --no-pager -o cat | cut -c1-200)"
+             "lines=$(journalctl $scope -u \"$unit\" -n 10 --no-pager -o cat | tail -c 3000)"
+             "nexus-alert urgent \"$(printf '%s failed because %s.\\nLast log line: %s\\n\\n%s' \"$name\" \"$reason\" \"$last\" \"$lines\")\" \"$title\"")
+        userNotify
+         (pkgs.writeShellScript "nexus-notify-user" (ms "unit=$1" "scope=--user" notifyBody))
         onFailureDropin
          (pkgs.writeTextDir "lib/systemd/system/service.d/10-nexus-notify.conf"
            (ms "[Unit]" "OnFailure=nexus-notify@%n.service" ""))
@@ -71,28 +91,19 @@
             :path [pkgs.systemd pkgs.coreutils nexusAlert]
             :scriptArgs "%i"
             :script
-             (ms "unit=$1"
-                 "name=${unit%.service}"
-                 "result=$(systemctl show \"$unit\" -p Result --value)"
-                 "status=$(systemctl show \"$unit\" -p ExecMainStatus --value)"
-                 "case \"$result\" in"
-                 "  exit-code) reason=\"it exited with error code $status\" ;;"
-                 "  timeout) reason='it took too long and was stopped' ;;"
-                 "  signal) reason='it was killed by a signal' ;;"
-                 "  core-dump) reason='it crashed' ;;"
-                 "  oom-kill) reason='it ran out of memory' ;;"
-                 "  start-limit-hit) reason='it kept failing and systemd stopped restarting it' ;;"
-                 "  *) reason=\"systemd reports: ${result:-unknown}\" ;;"
-                 "esac"
-                 "title=\"Nexus: $name failed\""
-                 "case \"$name\" in nexus-selftest-*) title=\"Nexus self-test (no action needed): $name failed\" ;; esac"
-                 "last=$(journalctl -u \"$unit\" -n 1 --no-pager -o cat | cut -c1-200)"
-                 "lines=$(journalctl -u \"$unit\" -n 10 --no-pager -o cat | tail -c 3000)"
-                 "nexus-alert urgent \"$(printf '%s failed because %s.\\nLast log line: %s\\n\\n%s' \"$name\" \"$reason\" \"$last\" \"$lines\")\" \"$title\"")
+             (ms "unit=$1" "scope=" notifyBody)
             :serviceConfig {:Type "oneshot"}}
            "nexus-selftest-fail"
            {:description "Deliberately failing unit for the nexus alert self-test"
             :serviceConfig {:Type "oneshot" :ExecStart (s pkgs.coreutils "/bin/false")}}}
+         :home-manager.users
+          {username
+            (nix/module [...]
+              {:systemd.user.services {"nexus-notify@"
+                {:Unit {:Description "Push an urgent nexus alert for failed user unit %i"}
+                 :Service {:Type "oneshot"
+                           :Environment [(s "PATH=" (lib.makeBinPath [pkgs.systemd pkgs.coreutils nexusAlert]))]
+                           :ExecStart (s userNotify " %i")}}}})}
          :security.polkit.extraConfig
           (ms "polkit.addRule(function(action, subject) {"
               (s "  if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '" username "' &&")

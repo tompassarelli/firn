@@ -3,15 +3,17 @@
 (nix/module [config lib pkgs jobRun ...]
   (let [homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
+        gh (if config.myConfig.modules.github-pat.enable config.myConfig.modules.github-pat.gh pkgs.gh)
+        notify (if config.myConfig.modules.nexus-alerts.enable "nexus-notify@%n.service" "update-notify@%n.service")
         description "Weekly skill review queue: open or update the north issue listing skill reviews older than 30 days"]
     {:tags-opt-in [development]
      :options.myConfig.modules.skill-review-queue.enable (lib.mkEnableOption description)
      :config (lib.mkIf config.myConfig.modules.skill-review-queue.enable
        {:home-manager.users {username (nix/module [config ...]
          {:systemd.user.services.skill-review-queue
-           {:Unit {:Description description :OnFailure ["update-notify@%n.service"]}
+           {:Unit {:Description description :OnFailure [notify]}
             :Service {:Type "oneshot"
-              :Environment [(s "PATH=" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.jq pkgs.gh pkgs.git]))]
+              :Environment [(s "PATH=" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bash pkgs.coreutils pkgs.jq gh pkgs.git]))]
               :ExecStart (jobRun "skill-review-queue" (s homeDir "/.local/share/north/bin/skill-review-queue"))}}
           :systemd.user.timers.skill-review-queue
            {:Unit {:Description description}

@@ -11,6 +11,12 @@
     default = [ "tompassarelli/firn" "tompassarelli/north" "tompassarelli/south" ];
     description = "lower-case OWNER/REPO names that use the read-only nexus-apply token";
   };
+  options.myConfig.modules.github-pat.gh = lib.mkOption {
+    type = lib.types.package;
+    readOnly = true;
+    default = ghWrapper;
+    description = "gh that injects the per-repository PAT";
+  };
   options.myConfig.modules.github-pat.nixAccessToken = lib.mkEnableOption "the read-only nexus-apply token as nix's github.com access token, so root nix can fetch private flakes";
   config = lib.mkIf cfg.enable {
     sops.secrets.nexus-apply = {

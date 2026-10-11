@@ -1,6 +1,6 @@
 { config, lib, pkgs, ... }:
 
-((username: ((port: ((listen: ((baseUrl: ((sopsFile: ((ph: ((envTemplate: ((nexusAlert: ((onFailureDropin: ((notifyResetDropin: {
+((username: ((port: ((listen: ((baseUrl: ((sopsFile: ((ph: ((envTemplate: ((nexusAlert: ((notifyBody: ((userNotify: ((onFailureDropin: ((notifyResetDropin: {
   options.myConfig.modules.nexus-alerts.enable = lib.mkEnableOption "nexus push alerts: ntfy on wg-nexus, nexus-alert CLI, OnFailure notify for every service";
   options.myConfig.modules.nexus-alerts.sopsFile = lib.mkOption {
     type = lib.types.path;
@@ -48,23 +48,8 @@
         scriptArgs = "%i";
         script = ''
           unit=$1
-          name=''${unit%.service}
-          result=$(systemctl show "$unit" -p Result --value)
-          status=$(systemctl show "$unit" -p ExecMainStatus --value)
-          case "$result" in
-            exit-code) reason="it exited with error code $status" ;;
-            timeout) reason='it took too long and was stopped' ;;
-            signal) reason='it was killed by a signal' ;;
-            core-dump) reason='it crashed' ;;
-            oom-kill) reason='it ran out of memory' ;;
-            start-limit-hit) reason='it kept failing and systemd stopped restarting it' ;;
-            *) reason="systemd reports: ''${result:-unknown}" ;;
-          esac
-          title="Nexus: $name failed"
-          case "$name" in nexus-selftest-*) title="Nexus self-test (no action needed): $name failed" ;; esac
-          last=$(journalctl -u "$unit" -n 1 --no-pager -o cat | cut -c1-200)
-          lines=$(journalctl -u "$unit" -n 10 --no-pager -o cat | tail -c 3000)
-          nexus-alert urgent "$(printf '%s failed because %s.\nLast log line: %s\n\n%s' "$name" "$reason" "$last" "$lines")" "$title"
+          scope=
+          ${notifyBody}
         '';
         serviceConfig = {
           Type = "oneshot";
@@ -78,6 +63,20 @@
         };
       };
     };
+    home-manager.users.${username} = ({ ... }: {
+      systemd.user.services."nexus-notify@" = {
+        Unit = {
+          Description = "Push an urgent nexus alert for failed user unit %i";
+        };
+        Service = {
+          Type = "oneshot";
+          Environment = [
+            "PATH=${lib.makeBinPath [ pkgs.systemd pkgs.coreutils nexusAlert ]}"
+          ];
+          ExecStart = "${userNotify} %i";
+        };
+      };
+    });
     security.polkit.extraConfig = ''
       polkit.addRule(function(action, subject) {
         if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&
@@ -96,7 +95,29 @@
     [Unit]
     OnFailure=nexus-notify@%n.service
 
-  ''))) (pkgs.writeShellApplication {
+  ''))) (pkgs.writeShellScript "nexus-notify-user" ''
+    unit=$1
+    scope=--user
+    ${notifyBody}
+  ''))) ''
+    name=''${unit%.service}
+    result=$(systemctl $scope show "$unit" -p Result --value)
+    status=$(systemctl $scope show "$unit" -p ExecMainStatus --value)
+    case "$result" in
+      exit-code) reason="it exited with error code $status" ;;
+      timeout) reason='it took too long and was stopped' ;;
+      signal) reason='it was killed by a signal' ;;
+      core-dump) reason='it crashed' ;;
+      oom-kill) reason='it ran out of memory' ;;
+      start-limit-hit) reason='it kept failing and systemd stopped restarting it' ;;
+      *) reason="systemd reports: ''${result:-unknown}" ;;
+    esac
+    title="Nexus: $name failed"
+    case "$name" in nexus-selftest-*) title="Nexus self-test (no action needed): $name failed" ;; esac
+    last=$(journalctl $scope -u "$unit" -n 1 --no-pager -o cat | cut -c1-200)
+    lines=$(journalctl $scope -u "$unit" -n 10 --no-pager -o cat | tail -c 3000)
+    nexus-alert urgent "$(printf '%s failed because %s.\nLast log line: %s\n\n%s' "$name" "$reason" "$last" "$lines")" "$title"
+  '')) (pkgs.writeShellApplication {
     name = "nexus-alert";
     runtimeInputs = [ pkgs.curl pkgs.coreutils pkgs.jq ];
     text = ''
