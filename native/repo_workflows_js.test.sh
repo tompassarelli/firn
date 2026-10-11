@@ -119,4 +119,67 @@ pin_skewed="$scratch/pin-skewed"
 run_pin_ancestry "$pin_skewed"
 [[ "$(<"$pin_skewed.status")" == 1 ]] \
   || die "non-ancestor pin was accepted"
+galileo_dir="${FIRN_RUNTIME_BIN:-}"
+if [[ ! -x "$galileo_dir/galileo" ]]; then
+  galileo_dir="$(dirname "$(command -v galileo)")" \
+    || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
+fi
+inotify_bin="$(dirname "$(command -v inotifywait 2>/dev/null || true)")"
+if [[ "$inotify_bin" == "." ]]; then
+  inotify_bin="$(nix build --no-link --print-out-paths nixpkgs#inotify-tools)/bin" \
+    || die "cannot provide inotifywait"
+fi
+
+gal_repo="$scratch/gal-repo"
+mkdir -p "$gal_repo/modules/demo"
+git init --quiet --initial-branch=main "$gal_repo"
+printf '%s\n' '{"nodes":{"root":{"inputs":{}}}}' >"$gal_repo/flake.lock"
+printf '%s\n' 'nix module' '  arguments: config, lib, ...' \
+  '  option "myConfig"."modules"."demo"."enable": enable "demo"' \
+  >"$gal_repo/modules/demo/default.gal"
+(cd "$gal_repo" && "$galileo_dir/galileo" build) >/dev/null \
+  || die "fixture galileo build failed"
+printf '# stale\n' >>"$gal_repo/modules/demo/default.nix"
+
+run_repo() {
+  local result="$1"
+  shift
+  set +e
+  timeout --foreground 60 env \
+    PATH="$repo/dotfiles/bin:$inotify_bin:$PATH" \
+    FIRN_RUNTIME_BIN="$galileo_dir" \
+    FIRN_REPO="$gal_repo" \
+    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+    bun "$repo/native/repo_workflows_host.mjs" repo "$@" \
+    >"$result.out" 2>"$result.err"
+  printf '%s\n' "$?" >"$result.status"
+  set -e
+}
+
+doctor="$scratch/doctor-stale"
+run_repo "$doctor" doctor
+[[ "$(<"$doctor.status")" != 0 ]] || die "doctor passed a stale generated output"
+grep -q 'modules/demo/default.nix (committed)' "$doctor.out" "$doctor.err" \
+  || die "doctor did not name the stale generated output"
+
+watch="$scratch/watch-gal"
+run_repo "$watch" watch &
+watch_pid=$!
+for _ in $(seq 100); do
+  pgrep -f "inotifywait.*$gal_repo" >/dev/null && break
+  sleep 0.1
+done
+printf '\n' >>"$gal_repo/modules/demo/default.gal"
+wait "$watch_pid"
+grep -q 'galileo check' "$watch.err" \
+  || die "watch did not validate after a .gal change"
+
+upgrade="$scratch/upgrade-dry-run"
+run_repo "$upgrade" upgrade dry-run
+[[ "$(<"$upgrade.status")" == 0 ]] || die "upgrade dry run failed"
+printf '%s\n' \
+  '>> [dry-run] would run: nix flake update --flake <repo>' \
+  '>> [dry-run] would run: galileo schema extract for NixOS' \
+  'firn upgrade: dry run complete; no files were changed.' \
+  | cmp -s - "$upgrade.out" || die "upgrade dry run changed its phase order"
 printf 'PASS repo-workflows-js\n'

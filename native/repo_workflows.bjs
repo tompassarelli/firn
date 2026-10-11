@@ -118,9 +118,9 @@
    added (Vec SchemaEntry)
    type-changed (Vec SchemaTypeChange)])
 
-(defrecord SourceText
-  [path String
-   text String])
+(defrecord OptionReference
+  [option String
+   path String])
 
 (defrecord SchemaReference
   [name String
@@ -842,28 +842,50 @@
                         (schemaentry-type-name old-entry)
                         (schemaentry-type-name new-entry)))))])]))))))
 
+(defn reference-line-path [line String] String
+  (let [start Int (if (starts-with? line "./") 2 0)]
+    (loop [cursor Int start]
+      (cond
+        (>= cursor (count line)) ""
+        (= (subs line cursor (+ cursor 1)) ":") (subs line start cursor)
+        :else (recur (+ cursor 1))))))
+
+(defn parse-option-references
+  [option String
+   text String] (Vec OptionReference)
+  (let [lines (Vec String) (split-lines text)]
+    (loop [index Int 0
+           references (Vec OptionReference) []]
+      (if (>= index (count lines))
+        references
+        (let [path String (reference-line-path (nth lines index))]
+          (recur (+ index 1)
+            (if (= path "")
+              references
+              (conj references (->OptionReference option path)))))))))
+
 (defn source-reference-paths
-  [sources (Vec SourceText)
+  [references (Vec OptionReference)
    name String] (Vec String)
   (loop [index Int 0
          paths (Vec String) []]
-    (if (>= index (count sources))
+    (if (>= index (count references))
       paths
-      (let [source SourceText (nth sources index)]
+      (let [reference OptionReference (nth references index)]
         (recur (+ index 1)
-          (if (string-contains? (sourcetext-text source) name)
-            (conj paths (sourcetext-path source))
+          (if (= (optionreference-option reference) name)
+            (append-unique paths (optionreference-path reference))
             paths))))))
 
 (defn schema-impact
   [diff SchemaDiff
-   sources (Vec SourceText)] SchemaImpact
+   option-references (Vec OptionReference)] SchemaImpact
   (let [removed-references (Vec SchemaReference) (loop [index Int 0
                                                         references (Vec SchemaReference) []]
                                                    (if (>= index (count (schemadiff-removed diff)))
             references
             (let [entry SchemaEntry (nth (schemadiff-removed diff) index)
-                  paths (Vec String) (source-reference-paths sources (schemaentry-name entry))]
+                  paths (Vec String) (source-reference-paths option-references (schemaentry-name entry))]
               (recur (+ index 1)
                 (if (= (count paths) 0)
                   references
@@ -878,7 +900,7 @@
                                                    (if (>= index (count (schemadiff-type-changed diff)))
             references
             (let [change SchemaTypeChange (nth (schemadiff-type-changed diff) index)
-                  paths (Vec String) (source-reference-paths sources
+                  paths (Vec String) (source-reference-paths option-references
                     (schematypechange-name change))]
               (recur (+ index 1)
                 (if (= (count paths) 0)
@@ -1096,6 +1118,8 @@
       "--recursive"
       "--event"
       "close_write,create,delete,move"
+      "--include"
+      "\\.gal$"
       root])
    (->InheritProcess
      "validate changed repository"
