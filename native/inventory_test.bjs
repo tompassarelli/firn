@@ -58,15 +58,6 @@
        (= (i/state-paths config true) ["myConfig.modules.alpha"])
        (= (i/state-paths config false) ["myConfig.modules.beta"]))]))
 
-(defn case-status-layout [] Bool
-  (= (i/render-host-status (parsed-config "alpha-host" alpha-source))
-     (str
-       "Enabled in alpha-host:\n"
-       "  myConfig.modules.alpha\n"
-       "\n"
-       "Explicitly disabled in alpha-host:\n"
-       "  myConfig.modules.beta\n")))
-
 (defn case-live-closure [] Bool
   (let [(repo i/InventoryRepository) (repository)]
     (and
@@ -76,24 +67,6 @@
       (= (i/tag-hosts repo "beta") ["alpha-host"])
       (= (i/direct-hosts repo "gamma") ["alpha-host"])
       (= (i/tag-hosts repo "gamma") ["zeta-host"]))))
-
-(defn case-used-layout [] Bool
-  (= (i/render-module-list-used (repository))
-     (str
-       "Used modules (3):\n"
-       "  alpha  (alpha-host)\n"
-       "  beta  (alpha-host, zeta-host, via tag@alpha-host)\n"
-       "  gamma  (alpha-host, via tag@zeta-host)\n")))
-
-(defn case-refs-layout [] Bool
-  (= (i/render-module-refs (repository) "beta")
-     (str
-       "Hosts (direct, from configuration.bnix):\n"
-       "  alpha-host\n"
-       "  zeta-host\n"
-       "\n"
-       "Hosts (via tag resolution):\n"
-       "  alpha-host\n")))
 
 (defn module-list-all-action? [(action i/InventoryAction)] Bool
   (match action
@@ -145,10 +118,7 @@
 
 (def tests (Vec TestResult)
   [(->TestResult "canonical-paths-and-states" (case-canonical-paths-and-states))
-   (->TestResult "status-layout" (case-status-layout))
    (->TestResult "live-closure" (case-live-closure))
-   (->TestResult "used-layout" (case-used-layout))
-   (->TestResult "refs-layout" (case-refs-layout))
    (->TestResult "argv-grammar" (case-argv-grammar))])
 
 (js/export

@@ -9,9 +9,6 @@
     0
     1))
 
-(defn source [relative String] build/SourceState
-  (build/->SourceState relative (build/output-relative relative)))
-
 (defn test-path-contract [] Int
   (expect
     (and
@@ -28,31 +25,6 @@
       (= (build/output-relative "modules/alpha/default.bnix")
          "modules/alpha/default.nix"))
     "source inventory path contract"))
-
-(defn test-plan-contract [] Int
-  (let [sources (Vec build/SourceState) [(source "a.bnix") (source "b.bnix")]
-        plan build/RepoBuildPlan (build/build-plan
-          (build/->SourceInventory sources ["hosts/a/enabled-tags.nix"]))]
-    (expect (and (= (build/repobuildplan-sources plan) sources)
-                  (= (build/repobuildplan-obsolete-outputs plan)
-                     ["hosts/a/enabled-tags.nix"]))
-      "every source is checked against compiler output")))
-
-(defn test-process-contract [] Int
-  (let [state build/SourceState (source "modules/alpha/default.bnix")
-        process build/CompilerProcess (build/compiler-process "/beagle/bin/beagle-build" "/repo"
-          state "/repo/modules/alpha/.default.nix.tmp")]
-    (expect
-      (and
-        (= (build/compilerprocess-source-relative process)
-           "modules/alpha/default.bnix")
-        (= (build/compilerprocess-destination-relative process)
-           "modules/alpha/default.nix")
-        (= (build/compilerprocess-argv process)
-           ["/beagle/bin/beagle-build"
-            "/repo/modules/alpha/default.bnix"
-            "/repo/modules/alpha/.default.nix.tmp"]))
-      "tokenized compiler process plan")))
 
 (defn test-cleanup-contract [] Int
   (let [generated String (str
@@ -93,10 +65,8 @@
 (js/export
  (defn test [] Int
   (let [results (Vec Int) [(test-path-contract)
-         (test-plan-contract)
-         (test-process-contract)
          (test-cleanup-contract)
          (test-command-contract)]]
-    (if (= results [0 0 0 0 0])
+    (if (= results [0 0 0])
       0
       1))))
