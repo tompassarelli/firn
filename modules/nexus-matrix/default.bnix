@@ -37,7 +37,8 @@
                 :allow_registration false
                 :allow_federation false
                 :trusted_servers []
-                :allow_announcements_check false}}
+                :allow_announcements_check false
+                :new_user_displayname_suffix ""}}
             :systemd.services.continuwuity.serviceConfig
              {:DynamicUser (lib.mkForce false)
               :StateDirectoryMode (lib.mkForce "0750")}

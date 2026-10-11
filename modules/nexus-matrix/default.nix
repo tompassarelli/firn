@@ -24,6 +24,7 @@
           allow_federation = false;
           trusted_servers = [ ];
           allow_announcements_check = false;
+          new_user_displayname_suffix = "";
         };
       };
       systemd.services.continuwuity.serviceConfig = {
