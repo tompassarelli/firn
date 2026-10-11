@@ -8,11 +8,7 @@ nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/north-profile/default.test.sh	1
 nixos-config/modules/theme-switcher/default.bnix	1
 nixos-config/native/rebuild.bjs	1
-north/bin/convo.test.sh	2
 north/bin/north-runtime-update	2
-north/bin/north-runtime-update.test.sh	6
-north/bin/wc3-login-field.test.sh	1
 north/socrates/hooks/launch-critical-worktree-guard.test.py	8
 north/socrates/hooks/launch-critical-worktree-guard.test.sh	5
 north/socrates/scripts/agent-config-check.sh	1
-north/socrates/scripts/agent-config-check.test.sh	1

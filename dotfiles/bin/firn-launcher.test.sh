@@ -14,7 +14,7 @@ printf '%s\n' "$FIRN_REPO"
 RUNNER
 chmod +x "$scratch/runtime/current/bin/bun"
 export FIRN_RUNTIME_ROOT="$scratch/runtime"
-unset FIRN_REPO
+unset FIRN_REPO FIRN_BUN
 cd "$repo/modules/codex"
 [[ "$("$here/firn" repo diff all)" == "$repo" ]]
 [[ "$(FIRN_REPO="$scratch/explicit" "$here/firn" repo diff all)" == "$scratch/explicit" ]]

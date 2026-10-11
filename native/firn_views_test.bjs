@@ -261,7 +261,8 @@
    (->TestResult "child-results" (case-child-results))
    (->TestResult "argv" (case-argv))])
 
-(defn -main [(args (Vec String))] Int
+(js/export
+  (defn run [(args (Vec String))] Int
   (loop [(remaining (Vec TestResult)) tests]
     (if (= (count remaining) 0)
       0
@@ -272,4 +273,4 @@
             (recur (rest remaining)))
           (do
             (print (str "FAIL " (testresult-name test) "\n"))
-            1))))))
+            1)))))))

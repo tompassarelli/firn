@@ -4,7 +4,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the repository compiler}"
-workbench="${1:?pass the clause-workbench executable built from config/clause-revision}"
+workbench="${1:-${FIRN_CLAUSE_WORKBENCH:-${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/clause-workbench}}"
 output="$repo/.firn-build/nix-resolver"
 mkdir -p "$output/node_modules/beagle"
 fixture="$(mktemp -d "$repo/.firn-build/nix-resolver-fixture.XXXXXX")"
@@ -97,5 +97,4 @@ if bun "$repo/native/firn_tag_host.mjs" tag show btop >"$output/missing.out" 2>"
   exit 1
 fi
 rg -F 'native/nix/btop.clause' "$output/missing.err"
-"$here/compare.test.sh" "$workbench" "$fixture"
 printf 'ok: Clause discovery, compilation, tags, evaluation, and source ownership\n'

@@ -3,7 +3,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
-workbench="${1:?pass the clause-workbench executable built from config/clause-revision}"
+workbench="${1:-${FIRN_CLAUSE_WORKBENCH:-${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/clause-workbench}}"
 discovered="${2:-$repo}"
 output="$repo/.firn-build/nix-comparison"
 mkdir -p "$output/baseline"

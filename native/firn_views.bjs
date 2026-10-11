@@ -3,11 +3,13 @@
   (:require [native.json :as json]
             [beagle.nix-schema-path :as paths]))
 
-(defrecord Follow
+(js/export
+  (defrecord Follow
   [input String
-   target String])
+   target String]))
 
-(defrecord FlakeRow
+(js/export
+  (defrecord FlakeRow
   [name String
    url String
    age-seconds Int
@@ -15,19 +17,20 @@
    revision String
    frozen Bool
    broken Bool
-   follows (Vec Follow)])
+   follows (Vec Follow)]))
 
 (js/export
   (defunion FlakeRowsResult
   (FlakeRows [rows (Vec FlakeRow)])
   (FlakeRowsRejected [message String])))
 
-(defrecord SchemaEntry
+(js/export
+  (defrecord SchemaEntry
   [path String
    type String
    inner-type String
    enum-values (Vec String)
-   declarations (Vec String)])
+   declarations (Vec String)]))
 
 (js/export
   (defunion SchemaResult
@@ -45,10 +48,11 @@
   (ModulePaths [paths (Vec String)])
   (ModulePathsRejected [message String]))
 
-(defrecord PlatformVerdict
+(js/export
+  (defrecord PlatformVerdict
   [module String
    verdict Keyword
-   blockers (Vec String)])
+   blockers (Vec String)]))
 
 (defunion PlatformVerdictResult
   (PlatformVerdictLoaded [value PlatformVerdict])
@@ -86,11 +90,12 @@
   (ParsedViews [action ViewsAction])
   (InvalidViewsArgv [argv (Vec String)])))
 
-(defn starts-with?
+(js/export
+  (defn starts-with?
   [text String
    prefix String] Bool
   (and (>= (count text) (count prefix))
-       (= prefix (subs text 0 (count prefix)))))
+       (= prefix (subs text 0 (count prefix))))))
 
 (js/export
   (defn ends-with?
@@ -230,7 +235,7 @@
    key String] Int
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonObjectStart (nth events start))))
+          (not (instance? json/JsonObjectStart (nth events start))))
     -1
     (let [end Int (json-value-end events start)]
       (if (< end 0)
@@ -261,7 +266,7 @@
    start Int] (Vec String)
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonObjectStart (nth events start))))
+          (not (instance? json/JsonObjectStart (nth events start))))
     []
     (let [end Int (json-value-end events start)]
       (if (< end 0)
@@ -339,7 +344,7 @@
    start Int] (Vec String)
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonArrayStart (nth events start))))
+          (not (instance? json/JsonArrayStart (nth events start))))
     []
     (let [end Int (json-value-end events start)]
       (loop [index Int (+ start 1)
@@ -364,7 +369,8 @@
 (defn first-string [values (Vec String)] String
   (if (= (count values) 0) "" (nth values 0)))
 
-(defn human-age [seconds Int] String
+(js/export
+  (defn human-age [seconds Int] String
   (let [safe Int (max seconds 0)
         minutes Int (quot safe 60)
         hours Int (quot minutes 60)
@@ -375,7 +381,7 @@
       (< hours 24) (str hours "h")
       (< days 30) (str days "d")
       (< days 365) (str (quot days 30) "mo")
-      :else (str (quot days 365) "y"))))
+      :else (str (quot days 365) "y")))))
 
 (defn original-url
   [events (Vec json/JsonEvent)
@@ -498,7 +504,7 @@
      (->FlakeRowsRejected (str "invalid flake.lock at " offset ": " message))]
     [(JsonDecoded events)
      (if (or (= (count events) 0)
-             (not (instance? JsonObjectStart (nth events 0))))
+             (not (instance? json/JsonObjectStart (nth events 0))))
        (->FlakeRowsRejected "flake.lock must be a JSON object")
        (let [root-name String (string-or (object-string events 0 "root") "root")
              nodes Int (object-field-start events 0 "nodes")
@@ -621,7 +627,7 @@
    start Int] (U SchemaEntry Nil)
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonObjectStart (nth events start))))
+          (not (instance? json/JsonObjectStart (nth events start))))
     nil
     (let [name (U String Nil) (object-string events start "name")
           legacy (U String Nil) (object-string events start "p")
@@ -648,7 +654,7 @@
    start Int] SchemaResult
   (if (or (< start 0)
           (>= start (count events))
-          (not (instance? JsonArrayStart (nth events start))))
+          (not (instance? json/JsonArrayStart (nth events start))))
     (->SchemaRejected "expected a schema array" 0)
     (let [end Int (json-value-end events start)]
       (if (< end 0)
@@ -708,7 +714,8 @@
       (recur (rest remaining)
         (append-unique result (schemaentry-path (first remaining)))))))
 
-(defn schema-entry-for
+(js/export
+  (defn schema-entry-for
   [entries (Vec SchemaEntry)
    path String] (U SchemaEntry Nil)
   (loop [remaining (Vec SchemaEntry) entries]
@@ -717,7 +724,7 @@
       (let [entry SchemaEntry (first remaining)]
         (if (= path (schemaentry-path entry))
           entry
-          (recur (rest remaining)))))))
+          (recur (rest remaining))))))))
 
 (defn freeform-type? [type String] Bool
   (or (= type "attrsOf")
@@ -956,7 +963,8 @@
         (str "firn platform list: expected all|darwin|linux, got '"
           selection "'\n"))))))
 
-(defn verdict-for
+(js/export
+  (defn verdict-for
   [verdicts (Vec PlatformVerdict)
    module String] (U PlatformVerdict Nil)
   (loop [remaining (Vec PlatformVerdict) verdicts]
@@ -965,7 +973,7 @@
       (let [verdict PlatformVerdict (first remaining)]
         (if (= module (platformverdict-module verdict))
           verdict
-          (recur (rest remaining)))))))
+          (recur (rest remaining))))))))
 
 (defn blocker-lines [blockers (Vec String)] String
   (loop [remaining (Vec String) blockers
@@ -1019,7 +1027,8 @@
       (= character ">")
       (= character "-")))
 
-(defn find-substring
+(js/export
+  (defn find-substring
   [text String
    needle String] Int
   (if (= needle "")
@@ -1029,7 +1038,7 @@
         -1
         (if (= needle (subs text index (+ index (count needle))))
           index
-          (recur (+ index 1)))))))
+          (recur (+ index 1))))))))
 
 (defn path-token-at
   [text String
@@ -1055,14 +1064,15 @@
             candidate (U String Nil) (path-token-at trimmed 0)]
         (if (and (some? candidate) (= candidate trimmed)) candidate nil)))))
 
-(defn describe-type [entry SchemaEntry] String
+(js/export
+  (defn describe-type [entry SchemaEntry] String
   (if (and (or (= (schemaentry-type entry) "listOf")
                (= (schemaentry-type entry) "nullOr")
                (= (schemaentry-type entry) "attrsOf")
                (= (schemaentry-type entry) "lazyAttrsOf"))
            (not= (schemaentry-inner-type entry) ""))
     (str (schemaentry-type entry) " (" (schemaentry-inner-type entry) ")")
-    (schemaentry-type entry)))
+    (schemaentry-type entry))))
 
 (defn quoted-values [values (Vec String)] String
   (loop [remaining (Vec String) values

@@ -5,6 +5,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -12,6 +16,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           path: firn
+          fetch-depth: 0
 
       - name: Checkout beagle
         uses: actions/checkout@v4
@@ -54,7 +59,7 @@ jobs:
           FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
-          nix profile install nixpkgs#bun nixpkgs#ripgrep
+          nix profile install nixpkgs#bun nixpkgs#ripgrep nixpkgs#jq
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
 
       - name: Drift check (.bnix and .nix in sync)
@@ -72,16 +77,27 @@ jobs:
             exit 1
           fi
 
-      - name: Test repository boot-coupling budget
+      - name: Discovered shell tests
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
+          FIRN_CLAUSE_REPO: ${{ github.workspace }}/clause
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
-        run: bash native/repo_build_native.test.sh
-
-
-      - name: Test activity daemon behavior
-        working-directory: firn
-        env:
-          BEAGLE_PATH: ${{ github.workspace }}/beagle
-        run: bash native/activity_native.test.sh
+          FIRN_REAL_REPO: ${{ github.workspace }}/firn
+        run: |
+          export FIRN_BUN="$(command -v bun)"
+          skip=(
+            modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
+          )
+          mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | sort)
+          status=0
+          for test in "${tests[@]}"; do
+            if printf '%s\n' "${skip[@]}" | grep -Fxq "$test"; then
+              echo "::notice::$test requires the local machine"
+              continue
+            fi
+            echo "::group::$test"
+            bash "$test" || { echo "::error::$test failed"; status=1; }
+            echo "::endgroup::"
+          done
+          exit "$status"
