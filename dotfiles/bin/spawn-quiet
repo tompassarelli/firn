@@ -44,7 +44,7 @@ if (( chrome_session )); then
     fi
   done
 fi
-cmd=( env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_JOB_DIR -u CLAUDE_CODE_SESSION_ATTENDED "${cmd[@]}" )
+cmd=( env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_JOB_DIR -u CLAUDE_CODE_SESSION_ATTENDED -u CLAUDE_CODE_CHILD_SESSION -u CLAUDE_CODE_BRIDGE_SESSION_ID -u CLAUDE_CODE_MESSAGING_SOCKET -u CLAUDE_CODE_MESSAGING_TOKEN -u CLAUDE_PID -u CLAUDECODE "${cmd[@]}" )
 
 # Own systemd scope per window, so capacity tools attribute its load to it
 # rather than to whichever terminal launched it.

@@ -28,4 +28,14 @@
           :systemd.user.timers.cross-project-scan
            {:Unit {:Description "Daily cross-project overlap scan for Plato"}
             :Timer {:OnCalendar ["07:30"] :Persistent true}
+            :Install {:WantedBy ["timers.target"]}}
+          :systemd.user.services.skill-prune
+           {:Unit {:Description "Weekly skill and lesson prune"
+                   :OnFailure ["update-notify@%n.service"]}
+            :Service {:Type "oneshot" :Nice 10 :TimeoutStartSec "100min"
+              :Environment [(s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/bin:" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.python3]))]
+              :ExecStart (jobRun "skill-prune" (s homeDir "/.local/share/north/bin/skill-prune"))}}
+          :systemd.user.timers.skill-prune
+           {:Unit {:Description "Weekly skill and lesson prune"}
+            :Timer {:OnCalendar ["Sun 09:00"] :Persistent true}
             :Install {:WantedBy ["timers.target"]}}})}})}))
