@@ -34,6 +34,7 @@
    :myConfig.modules.doom-emacs.enable (lib.mkDefault true)
    :myConfig.modules.duf.enable (lib.mkDefault true)
    :myConfig.modules.dust.enable (lib.mkDefault true)
+   :myConfig.modules.element-desktop.enable (lib.mkDefault true)
    :myConfig.modules.emacs.enable (lib.mkDefault true)
    :myConfig.modules.eyedropper.enable (lib.mkDefault true)
    :myConfig.modules.eza.enable (lib.mkDefault true)
