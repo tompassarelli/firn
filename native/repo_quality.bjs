@@ -296,8 +296,7 @@
     (and
       (ends-with? path ".bnix")
       (not (excluded-quality-path? segments))
-      (not= basename "enabled-tags.bnix")
-      (not= basename "responsibilities.bnix"))))
+      (not= basename "enabled-tags.bnix"))))
 
 (defn select-quality-targets [paths (Vec String)] (Vec String)
   (loop [index Int 0

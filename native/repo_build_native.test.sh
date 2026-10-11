@@ -44,7 +44,6 @@ build_family() {
     >"$output/node_modules/beagle/package.json"
   cp -- "$repo/native/repo_build_family_test_host.mjs" \
     "$output/repo_build_family_test_host.mjs"
-  cp -- "$repo/native/module_facts_host.mjs" "$output/module_facts_host.mjs"
   [[ -f "$output/firn/repo-build-family.js" ]] \
     || die "compiled repo-build family module is unavailable"
 }
@@ -59,8 +58,6 @@ tag_family="$repo/native/tag_resolve_family.bjs"
 flake_input="$repo/native/flake_input.bjs"
 flake_driver="$repo/native/flake_input_driver.bjs"
 flake_family="$repo/native/flake_input_family.bjs"
-responsibility_projection="$repo/native/responsibility_projection.bjs"
-responsibility_test="$repo/native/responsibility_projection_test.bjs"
 inventory="$repo/native/inventory.bjs"
 inventory_family="$repo/native/inventory_family.bjs"
 
@@ -69,20 +66,26 @@ build_family \
   "$tag_family" \
   "$flake_input" "$flake_driver" "$flake_family" \
   "$inventory" "$inventory_family" \
-  "$responsibility_projection" "$responsibility_test" \
   "$core" "$repo/native/repo_build_test.bjs" \
   "$repo/native/repo_build_family.bjs"
 
 timeout --foreground 60 bun \
-  "$scratch/build/repo_build_family_test_host.mjs" "$repo" \
-  >"$scratch/responsibility.out" 2>"$scratch/responsibility.err" \
+  "$scratch/build/repo_build_family_test_host.mjs" \
+  >"$scratch/scenarios.out" 2>"$scratch/scenarios.err" \
   || {
-    sed -n '1,240p' "$scratch/responsibility.err" >&2
-    die "responsibility projection boot-coupling budget failed"
+    sed -n '1,240p' "$scratch/scenarios.err" >&2
+    die "repo-build policy scenarios failed"
   }
-[[ ! -s "$scratch/responsibility.out" ]] \
-  || die "responsibility projection fixture wrote stdout"
-[[ ! -s "$scratch/responsibility.err" ]] \
-  || die "responsibility projection fixture wrote stderr"
+
+galileo="galileo"
+[[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] && galileo="$FIRN_RUNTIME_BIN/galileo"
+command -v "$galileo" >/dev/null \
+  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
+(cd "$repo" && timeout --foreground 120 "$galileo" check) \
+  >"$scratch/budget.out" 2>"$scratch/budget.err" \
+  || {
+    sed -n '1,240p' "$scratch/budget.out" "$scratch/budget.err" >&2
+    die "galileo check boot-coupling budget failed"
+  }
 
 printf 'ok: real repository boot-coupling budget and policy checks pass\n'
