@@ -7,6 +7,7 @@
    :myConfig.modules.users.enable true
    :myConfig.modules.users.username "tom"
    :myConfig.modules.users.fullName "tompassarelli"
+   :myConfig.modules.chrome.default true
    :myConfig.modules.nix-settings.enable true
    :myConfig.modules.boot.enable true
    :myConfig.modules.networking.enable true
