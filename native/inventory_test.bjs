@@ -1,36 +1,18 @@
 #lang beagle/js
 (ns firn.inventory-test (:require [firn.inventory :as i] [firn.tag-resolve :as r]))
 
-(defn alpha-source [seed Int] String
-  (str
-    "#lang beagle/nix\n\n"
-    "(ns configuration)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    (str "  {:myConfig.modules.alpha" (if (= seed 0) "" seed) ".enable true\n")
-    (str "   :myConfig.modules.beta" (if (= seed 0) "" seed) "\n")
-    "    {:enable false\n"
-    "     :port 44}\n"
-    (str "   :myConfig.modules.gamma" (if (= seed 0) "" seed) ".someOption \"configured\"\n")
-    "   :sops.secrets {\"opaque\" {:enable true}}\n"
-    "   :imports [(p \"./_generated-enables.nix\")]})\n"))
-
-(defn zeta-source [seed Int] String
-  (str
-    "#lang beagle/nix\n\n"
-    "(ns configuration)\n\n"
-    "(nix/module [config lib pkgs ...]\n"
-    (str "  {:myConfig.modules.beta" (if (= seed 0) "" seed) ".enable true})\n")))
-
 (defn make-module [seed Int name String tags (Vec String)] r/ModuleTags
   (r/->ModuleTags name tags [] []))
 
-(defn host-tags [seed Int name String tag String] r/HostTags
-  (r/->HostTags name [(r/->EnabledTag tag [] [])] [] "linux" false []))
+(defn alpha-config [seed Int] i/HostConfig
+  (i/host-config (str "alpha" (if (= seed 0) "" seed) "-host")
+    [(str "alpha" (if (= seed 0) "" seed))]
+    [(str "beta" (if (= seed 0) "" seed))]))
 
-(defn parsed-config [seed Int host String source String] i/HostConfig
-  (match (i/host-config-from-source host source)
-    [(HostConfigParsed value) value]
-    [(HostConfigRejected message offset) (i/->HostConfig host [] [])]))
+(defn zeta-config [seed Int] i/HostConfig
+  (i/host-config (str "zeta" (if (= seed 0) "" seed) "-host")
+    [(str "beta" (if (= seed 0) "" seed))]
+    []))
 
 (defn repository [seed Int] i/InventoryRepository
   (i/->InventoryRepository
@@ -47,32 +29,24 @@
         [(str "terminal" (if (= seed 0) "" seed))])]
     [
       (i/->InventoryHost
-        (host-tags
-          seed
-          (str "zeta" (if (= seed 0) "" seed) "-host")
-          (str "desktop" (if (= seed 0) "" seed)))
-        (parsed-config seed (str "zeta" (if (= seed 0) "" seed) "-host") (zeta-source seed)))
+        (str "zeta" (if (= seed 0) "" seed) "-host")
+        [(str "gamma" (if (= seed 0) "" seed))]
+        (zeta-config seed))
       (i/->InventoryHost
-        (host-tags
-          seed
-          (str "alpha" (if (= seed 0) "" seed) "-host")
-          (str "terminal" (if (= seed 0) "" seed)))
-        (parsed-config seed (str "alpha" (if (= seed 0) "" seed) "-host") (alpha-source seed)))]))
+        (str "alpha" (if (= seed 0) "" seed) "-host")
+        []
+        (alpha-config seed))]))
 
 (defn case-canonical-paths-and-states [seed Int] Bool
-  (match (i/host-config-from-source (str "alpha" (if (= seed 0) "" seed) "-host") (alpha-source seed))
-    [(HostConfigRejected message offset) false]
-    [
-      (HostConfigParsed config)
-      (and
-        (=
-          (i/hostconfig-references config)
-          [
-            (str "alpha" (if (= seed 0) "" seed))
-            (str "beta" (if (= seed 0) "" seed))
-            (str "gamma" (if (= seed 0) "" seed))])
-        (= (i/state-paths config true) [(str "myConfig.modules.alpha" (if (= seed 0) "" seed))])
-        (= (i/state-paths config false) [(str "myConfig.modules.beta" (if (= seed 0) "" seed))]))]))
+  (let [config i/HostConfig (alpha-config seed)]
+    (and
+      (=
+        (i/hostconfig-references config)
+        [
+          (str "alpha" (if (= seed 0) "" seed))
+          (str "beta" (if (= seed 0) "" seed))])
+      (= (i/state-paths config true) [(str "myConfig.modules.alpha" (if (= seed 0) "" seed))])
+      (= (i/state-paths config false) [(str "myConfig.modules.beta" (if (= seed 0) "" seed))]))))
 
 (defn case-live-closure [seed Int] Bool
   (let [(repo i/InventoryRepository) (repository seed)]
@@ -87,12 +61,8 @@
       (=
         (i/direct-hosts repo (str "beta" (if (= seed 0) "" seed)))
         [(str "alpha" (if (= seed 0) "" seed) "-host") (str "zeta" (if (= seed 0) "" seed) "-host")])
-      (=
-        (i/tag-hosts repo (str "beta" (if (= seed 0) "" seed)))
-        [(str "alpha" (if (= seed 0) "" seed) "-host")])
-      (=
-        (i/direct-hosts repo (str "gamma" (if (= seed 0) "" seed)))
-        [(str "alpha" (if (= seed 0) "" seed) "-host")])
+      (= (i/tag-hosts repo (str "beta" (if (= seed 0) "" seed))) [])
+      (= (i/direct-hosts repo (str "gamma" (if (= seed 0) "" seed))) [])
       (=
         (i/tag-hosts repo (str "gamma" (if (= seed 0) "" seed)))
         [(str "zeta" (if (= seed 0) "" seed) "-host")]))))

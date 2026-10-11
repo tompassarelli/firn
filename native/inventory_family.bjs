@@ -1,89 +1,38 @@
 #lang beagle/js
 (ns firn.inventory-family
   (:require [firn.inventory :as inventory]
-            [firn.tag-resolve-driver :as driver]
             [firn.tag-resolve-family :as tag-family]))
 
-(def max-source-bytes Int 16777216)
-
-(defunion ConfigLoadResult
-  (ConfigLoaded [(config inventory/HostConfig)])
-  (ConfigRejected [(message String)]))
-
-(js/export
- (defunion InventoryHostLoadResult
-  (InventoryHostLoaded [(host inventory/InventoryHost)])
-  (InventoryHostRejected [(message String)])))
-
-(defunion InventoryHostsLoadResult
-  (InventoryHostsLoaded [(hosts (Vec inventory/InventoryHost))])
-  (InventoryHostsRejected [(message String)]))
+(defunion HostFactsResult
+  (HostFactsRead [(facts Any)])
+  (HostFactsFailed [(message String)]))
 
 (defunion RepositoryLoadResult
   (RepositoryLoaded [(repository inventory/InventoryRepository)])
   (RepositoryRejected [(message String)]))
 
-(defn path [(root String) (relative String)] String
-  (str root "/" relative))
+(defn read-host-facts [(bridge Any) (root String)] HostFactsResult
+  (let [(result Any) (.readHostFacts bridge root)]
+    (if (= (.status bridge result) 0)
+      (->HostFactsRead (.value bridge result))
+      (->HostFactsFailed
+        (str "firn inventory: cannot load host facts through galileo query: "
+             (.moduleFactsMessage bridge result) "\n")))))
 
-(defn errno-message [(operation String) (relative String) (errno Int)] String
-  (str "firn inventory: " operation " '" relative "': errno " errno "\n"))
+(defn host-config [(bridge Any) (facts Any) (host String)] inventory/HostConfig
+  (inventory/host-config host (.hostTurnsOn bridge facts host)
+    (.hostTurnsOff bridge facts host)))
 
-(defn parse-message [(relative String) (message String) (offset Int)] String
-  (str "firn inventory: invalid configuration '" relative
-    "' at offset " offset ": " message "\n"))
-
-(defn load-config [(bridge Any) (root String) (host String)] ConfigLoadResult
-  (let [(relative String) (str "hosts/" host "/configuration.bnix")
-        (absolute String) (path root relative)
-        (kind-result Any) (.pathKind bridge absolute)
-        (kind-errno Int) (.status bridge kind-result)]
-    (if (not (= kind-errno 0))
-       (->ConfigRejected (errno-message "cannot inspect" relative kind-errno))
-      (let [(kind Int) (.value bridge kind-result)]
-       (if (not (or (= kind 1) (= kind 3)))
-         (->ConfigRejected
-           (str "firn inventory: configuration is not a file '"
-             relative "'\n"))
-         (let [(read-result Any) (.readText bridge absolute max-source-bytes)
-               (read-errno Int) (.status bridge read-result)]
-           (if (not (= read-errno 0))
-            (->ConfigRejected
-              (errno-message "cannot read" relative read-errno))
-            (let [(source String) (.value bridge read-result)]
-            (match (inventory/host-config-from-source host source)
-              [(HostConfigParsed config) (->ConfigLoaded config)]
-              [(HostConfigRejected message offset)
-               (->ConfigRejected
-                 (parse-message relative message offset))])))))))))
-
-(js/export
- (defn load-inventory-host [(bridge Any) (root String) (host String)] InventoryHostLoadResult
-  (match (tag-family/load-host bridge root host)
-    [(HostRejected message) (->InventoryHostRejected message)]
-    [(HostLoaded data)
-     (match (load-config bridge root host)
-       [(ConfigRejected message) (->InventoryHostRejected message)]
-       [(ConfigLoaded config)
-        (->InventoryHostLoaded
-          (inventory/->InventoryHost
-            (driver/tagresolvehostdata-tags data) config))])])))
-
-(defn load-inventory-hosts-from
-  [(bridge Any)
-   (root String)
-   (names (Vec String))
-   (index Int)
-   (hosts (Vec inventory/InventoryHost))]
-  InventoryHostsLoadResult
-  (if (>= index (count names))
-    (->InventoryHostsLoaded hosts)
-    (match (load-inventory-host bridge root (nth names index))
-      [(InventoryHostRejected message)
-       (->InventoryHostsRejected message)]
-      [(InventoryHostLoaded host)
-       (load-inventory-hosts-from bridge root names (+ index 1)
-         (conj hosts host))])))
+(defn inventory-hosts [(bridge Any) (facts Any) (names (Vec String))] (Vec inventory/InventoryHost)
+  (loop [(index Int) 0
+         (hosts (Vec inventory/InventoryHost)) []]
+    (if (>= index (count names))
+      hosts
+      (let [(host String) (nth names index)]
+        (recur (+ index 1)
+          (conj hosts
+            (inventory/->InventoryHost host (.hostActive bridge facts host)
+              (host-config bridge facts host))))))))
 
 (defn load-repository [(bridge Any) (root String)] RepositoryLoadResult
   (match (tag-family/load-modules bridge root)
@@ -92,20 +41,23 @@
      (match (tag-family/directory-names bridge root "hosts")
        [(DirectoryNamesRejected message) (->RepositoryRejected message)]
        [(DirectoryNamesLoaded names)
-        (match (load-inventory-hosts-from bridge root names 0 [])
-          [(InventoryHostsRejected message) (->RepositoryRejected message)]
-          [(InventoryHostsLoaded hosts)
+        (match (read-host-facts bridge root)
+          [(HostFactsFailed message) (->RepositoryRejected message)]
+          [(HostFactsRead facts)
            (->RepositoryLoaded
-             (inventory/->InventoryRepository modules hosts))])])]))
+             (inventory/->InventoryRepository modules
+               (inventory-hosts bridge facts names)))])])]))
 
 (defn emit-error [(bridge Any) (message String)] Int
   (do (.err bridge message) 1))
 
 (defn print-config-status [(bridge Any) (root String) (host String)] Int
-  (match (load-config bridge root host)
-    [(ConfigRejected message) (emit-error bridge message)]
-    [(ConfigLoaded config)
-     (do (.out bridge (inventory/render-host-status config)) 0)]))
+  (match (read-host-facts bridge root)
+    [(HostFactsFailed message) (emit-error bridge message)]
+    [(HostFactsRead facts)
+     (if (.hostDeclared bridge facts host)
+       (do (.out bridge (inventory/render-host-status (host-config bridge facts host))) 0)
+       (emit-error bridge (str "firn inventory: no such host '" host "'\n")))]))
 
 (defn print-directory-list [(bridge Any) (root String) (relative String) (modules Bool)] Int
   (match (tag-family/directory-names bridge root relative)

@@ -14,6 +14,8 @@ const questions = {
   drops: 'all ?h, ?m, ?t where ?h drops ?m from ?t',
   disables: 'all ?h, ?m where ?h disables ?m',
   active: 'all ?h, ?m where ?m is tag-enabled on ?h',
+  turnsOn: 'all ?h, ?m where ?h turns on ?m',
+  turnsOff: 'all ?h, ?m where ?h turns off ?m',
 };
 
 function galileo() {
@@ -55,7 +57,7 @@ export function readModuleFacts(root) {
 function hostEntry(hosts, name) {
   if (!hosts.has(name)) {
     hosts.set(name, { platform: 'linux', enables: [], adds: new Map(), drops: new Map(),
-      disables: [], active: [] });
+      disables: [], active: [], turnsOn: [], turnsOff: [] });
   }
   return hosts.get(name);
 }
@@ -75,6 +77,8 @@ export function readHostFacts(root) {
     for (const row of query(root, questions.drops)) push(hostEntry(hosts, row.h).drops, row.t, row.m);
     for (const row of query(root, questions.disables)) hostEntry(hosts, row.h).disables.push(row.m);
     for (const row of query(root, questions.active)) hostEntry(hosts, row.h).active.push(row.m);
+    for (const row of query(root, questions.turnsOn)) hostEntry(hosts, row.h).turnsOn.push(row.m);
+    for (const row of query(root, questions.turnsOff)) hostEntry(hosts, row.h).turnsOff.push(row.m);
     return Object.freeze({ status: 0, value: hosts, message: '' });
   } catch (error) {
     return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
@@ -89,7 +93,7 @@ export function buildGenerated(root) {
 }
 
 const noHost = Object.freeze({ platform: 'linux', enables: [], adds: new Map(),
-  drops: new Map(), disables: [], active: [] });
+  drops: new Map(), disables: [], active: [], turnsOn: [], turnsOff: [] });
 const hostFacts = (hosts, name) => hosts.get(name) ?? noHost;
 
 const flakeProgram = ['flake.gal', 'modules', 'config'];
@@ -196,4 +200,6 @@ export const moduleFactsBridge = Object.freeze({
   hostDrops(hosts, name, tag) { return [...(hostFacts(hosts, name).drops.get(tag) ?? [])].sort(); },
   hostDisabled(hosts, name) { return [...hostFacts(hosts, name).disables].sort(); },
   hostActive(hosts, name) { return [...hostFacts(hosts, name).active].sort(); },
+  hostTurnsOn(hosts, name) { return [...hostFacts(hosts, name).turnsOn].sort(); },
+  hostTurnsOff(hosts, name) { return [...hostFacts(hosts, name).turnsOff].sort(); },
 });
