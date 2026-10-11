@@ -12,16 +12,6 @@
       (if (= seed 0) "" seed)
       "/project\"}}})\n")))
 
-(defn beta-source [seed Int] String
-  (str
-    "(nix/module [config] {:flake-inputs "
-    (str
-      "{:alpha"
-      (if (= seed 0) "" seed)
-      " {:url \"github:alpha"
-      (if (= seed 0) "" seed)
-      "/project\"}}})\n")))
-
 (defn conflict-source [seed Int] String
   (str
     "(nix/module [config] {:flake-inputs "
@@ -92,44 +82,12 @@
     (invalid? seed ["flake-input" "resolve" "emit" (str "extra" (if (= seed 0) "" seed))])
     (other? seed ["tag" "resolve" "all"])))
 
-(defn written-text [seed Int outcome driver/FlakeInputOutcome] String
-  (loop [(index Int) 0]
-    (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
-      ""
-      (match (nth (driver/flakeinputoutcome-effects outcome) index)
-        [(StdoutText text) (recur (+ index 1))]
-        [(StderrText text) (recur (+ index 1))]
-        [(WriteFlake path text) text]))))
-
 (defn effect-count [outcome driver/FlakeInputOutcome kind String] Int
   (let [kinds (Vec String) (driver/outcome-effect-kinds outcome)]
     (loop [index Int 0 total Int 0]
       (if (>= index (count kinds))
         total
         (recur (+ index 1) (+ total (if (= (nth kinds index) kind) 1 0)))))))
-
-(defn case-emit-and-up-to-date [seed Int] Bool
-  (let [
-     (first driver/FlakeInputOutcome)
-     (driver/run-flake-input-emit
-       (repository
-         seed
-         (str "beta" (if (= seed 0) "" seed) "-module")
-         (beta-source seed)
-         (empty-flake seed)))
-     (generated String)
-     (written-text seed first)
-     (second driver/FlakeInputOutcome)
-     (driver/run-flake-input-emit
-       (repository seed (str "beta" (if (= seed 0) "" seed) "-module") (beta-source seed) generated))]
-    (and
-      (= (driver/flakeinputoutcome-status first) 0)
-      (= (effect-count first "write") 1)
-      (= (driver/outcome-stderr first) "")
-      (> (count generated) (count (empty-flake seed)))
-      (= (driver/flakeinputoutcome-status second) 0)
-      (= (effect-count second "write") 0)
-      (= (driver/outcome-stderr second) ""))))
 
 (defn case-conflict-before-summary [seed Int] Bool
   (let [
@@ -149,7 +107,6 @@
   (defn run-scenarios [] Int
     (if (and
       (case-argv-grammar 0)
-      (case-emit-and-up-to-date 0)
       (case-conflict-before-summary 0))
       0
       (do (println "FAIL flake_input_driver scenarios") 1))))

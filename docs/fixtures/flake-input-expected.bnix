@@ -1,0 +1,44 @@
+#lang beagle/nix
+(ns flake)
+{:inputs
+  {;; --- GENERATED MODULE INPUTS (do not edit) ---
+   :alpha {:url "github:alpha/project"}
+   :zeta {:inputs.nixpkgs.follows "nixpkgs" :url "github:zeta/project"}
+   ;; --- END GENERATED MODULE INPUTS ---
+   }
+ :outputs
+  (nix/module
+    [self
+     ;; --- GENERATED MODULE ARGS (do not edit) ---
+     alpha
+     zeta
+     ;; --- END GENERATED MODULE ARGS ---
+     ...]
+    {:linux
+      {:inputs
+        {;; --- GENERATED MODULE SPECIALARGS (do not edit) ---
+                    :alpha alpha
+                    :zeta zeta
+         ;; --- END GENERATED MODULE SPECIALARGS ---
+         }}
+     :home
+      {:inputs
+        {;; --- GENERATED HM SPECIALARGS (do not edit) ---
+                    :alpha alpha
+                    :zeta zeta
+         ;; --- END GENERATED HM SPECIALARGS ---
+         }}
+     :darwin
+      {:inputs
+        {;; --- GENERATED DARWIN SPECIALARGS (do not edit) ---
+                    :alpha alpha
+                    :zeta zeta
+         ;; --- END GENERATED DARWIN SPECIALARGS ---
+         }}
+     :darwin-home
+      {:inputs
+        {;; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---
+                    :alpha alpha
+                    :zeta zeta
+         ;; --- END GENERATED DARWIN HM SPECIALARGS ---
+         }}})}

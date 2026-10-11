@@ -1,0 +1,38 @@
+#lang beagle/nix
+(ns flake)
+{:inputs
+  {;; --- GENERATED MODULE INPUTS (do not edit) ---
+   :old {:url "old"}
+   ;; --- END GENERATED MODULE INPUTS ---
+   }
+ :outputs
+  (nix/module
+    [self
+     ;; --- GENERATED MODULE ARGS (do not edit) ---
+     old
+     ;; --- END GENERATED MODULE ARGS ---
+     ...]
+    {:linux
+      {:inputs
+        {;; --- GENERATED MODULE SPECIALARGS (do not edit) ---
+         :old old
+         ;; --- END GENERATED MODULE SPECIALARGS ---
+         }}
+     :home
+      {:inputs
+        {;; --- GENERATED HM SPECIALARGS (do not edit) ---
+         :old old
+         ;; --- END GENERATED HM SPECIALARGS ---
+         }}
+     :darwin
+      {:inputs
+        {;; --- GENERATED DARWIN SPECIALARGS (do not edit) ---
+         :old old
+         ;; --- END GENERATED DARWIN SPECIALARGS ---
+         }}
+     :darwin-home
+      {:inputs
+        {;; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---
+         :old old
+         ;; --- END GENERATED DARWIN HM SPECIALARGS ---
+         }}})}

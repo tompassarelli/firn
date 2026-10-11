@@ -34,7 +34,7 @@ empty-hosts(): HostNames
   {names: [], error: ""}
 
 errno-message(?operation: Text, ?relative: Text, ?errno: F64): Text
-  "firn tag resolve: {?operation} '{?relative}': errno {?errno}\n"
+  "firn host list: {?operation} '{?relative}': errno {?errno}\n"
 
 inspection-result(?prior: HostNames, ?name: Text, ?observation: PathObservation): HostNames
   if(?observation.status = 0,

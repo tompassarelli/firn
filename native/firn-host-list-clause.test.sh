@@ -33,5 +33,7 @@ compare "$scratch/missing" missing 0 host list
 : >"$scratch/bad/hosts"
 compare "$scratch/bad" ENOTDIR 1 host list all
 [[ ! -s "$scratch/actual.out" ]]
+printf "firn host list: cannot list 'hosts': errno 20\n" >"$scratch/expected.err"
+cmp "$scratch/actual.err" "$scratch/expected.err"
 
 compare "${FIRN_REAL_REPO:-$HOME/code/nixos-config/main}" real-repository 0 host list all # hardcoded-repo-path:allow

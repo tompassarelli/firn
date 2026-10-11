@@ -1,26 +1,20 @@
 # Clause modules
 
 These compiler-to-Nix integration checks follow
-`north:socrates/skills/testing/SKILL.md`. The resolver runs the comparison once;
-do not run the comparison again as part of the same local check.
+`north:socrates/skills/testing/SKILL.md`. CI regenerates the committed Nix
+outputs with `firn repo build` and rejects drift with `git diff --exit-code`.
+The full whiterabbit build checks their Nix evaluation.
 
 `nixos-config:native/nix/btop.clause` and `nixos-config:native/nix/jq.clause`
-are the original small comparison using one shared declaration source,
-`nixos-config:native/nix/nixpkgs.clause`. Their generated enable options and
-conditional package lists are compared with the pre-migration modules at
-`d5734ff6` using the
-repository's locked nixpkgs input.
-The same checked module form also supplies fifteen package modules, including
+use the shared declaration source `nixos-config:native/nix/nixpkgs.clause`.
+The same checked module form supplies fifteen package modules, including
 ripgrep, fd, tree, wget, unzip, and curl.
 
 Build `clause-workbench` from the exact revision in
 `nixos-config:config/clause-revision`, read its `authoring-card`, and pass that
-executable to `nixos-config:native/nix/compare.test.sh`. The check opens all five
-sources through reading, elaboration, lowering, and session opening, then
-compiles them and evaluates default, disabled, and enabled configurations. It
-compares enablement, option types, defaults, descriptions, package names, and
-package output paths. Generated modules remain under
-`nixos-config:.firn-build/nix-comparison/`.
+executable to `nixos-config:native/nix/resolver.test.sh`. The resolver discovers
+and compiles the selected sources and checks tag selection and source ownership.
+Generated fixtures remain under `nixos-config:.firn-build/nix-resolver/`.
 
 `nixos-config:modules/<name>/tags.clause` explicitly selects
 `nixos-config:native/nix/<name>.clause`, exporting `<name>-module`, as the
@@ -60,8 +54,7 @@ With `BEAGLE_PATH` set to the repository's Beagle compiler, run
 `nixos-config:native/nix/resolver.test.sh` with the pinned workbench executable
 as its argument. It builds the resolver/build graph, discovers and compiles the
 five actual sources in a fixture, checks automatic and opt-in selection and
-generated outputs,
-evaluates them against the original modules, and rejects conflicting or missing
+generated outputs, and rejects conflicting or missing
 source ownership and wrongly typed metadata exports.
 
 The three Clause sources follow

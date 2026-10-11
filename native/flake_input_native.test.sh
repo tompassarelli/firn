@@ -101,46 +101,7 @@ EOF
 (nix/module [config lib pkgs ...]
   {:config {}})
 EOF
-  cat >"$root/flake.bnix" <<'EOF'
-#lang beagle/nix
-(ns flake)
-{:inputs
-  {;; --- GENERATED MODULE INPUTS (do not edit) ---
-   :old {:url "old"}
-   ;; --- END GENERATED MODULE INPUTS ---
-   }
- :outputs
-  (nix/module
-    [self
-     ;; --- GENERATED MODULE ARGS (do not edit) ---
-     old
-     ;; --- END GENERATED MODULE ARGS ---
-     ...]
-    {:linux
-      {:inputs
-        {;; --- GENERATED MODULE SPECIALARGS (do not edit) ---
-         :old old
-         ;; --- END GENERATED MODULE SPECIALARGS ---
-         }}
-     :home
-      {:inputs
-        {;; --- GENERATED HM SPECIALARGS (do not edit) ---
-         :old old
-         ;; --- END GENERATED HM SPECIALARGS ---
-         }}
-     :darwin
-      {:inputs
-        {;; --- GENERATED DARWIN SPECIALARGS (do not edit) ---
-         :old old
-         ;; --- END GENERATED DARWIN SPECIALARGS ---
-         }}
-     :darwin-home
-      {:inputs
-        {;; --- GENERATED DARWIN HM SPECIALARGS (do not edit) ---
-         :old old
-         ;; --- END GENERATED DARWIN HM SPECIALARGS ---
-         }}})}
-EOF
+  cp "$repo/docs/fixtures/flake-input-before.bnix" "$root/flake.bnix"
 }
 
 native_root="$scratch/native-repo"
@@ -165,14 +126,14 @@ run_once "$scratch/native" \
 [[ "$(<"$scratch/native.status")" == "0" ]] \
   || die "native command failed with status $(<"$scratch/native.status")"
 
-cp "$native_root/flake.bnix" "$scratch/first-native-flake.bnix"
+diff -u "$repo/docs/fixtures/flake-input-expected.bnix" "$native_root/flake.bnix"
 run_once "$scratch/native-second" \
   env FIRN_REPO="$native_root" \
     env FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
       bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
 [[ "$(<"$scratch/native-second.status")" == "0" ]] \
   || die "second native run failed"
-cmp -s "$scratch/first-native-flake.bnix" "$native_root/flake.bnix" \
+cmp -s "$repo/docs/fixtures/flake-input-expected.bnix" "$native_root/flake.bnix" \
   || die "idempotent run changed flake.bnix"
 run_once "$scratch/invalid" env \
   FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
@@ -181,4 +142,4 @@ run_once "$scratch/invalid" env \
   || die "invalid grammar did not return 64"
 [[ ! -s "$scratch/invalid.out" ]] || die "invalid grammar wrote stdout"
 
-printf 'ok: Beagle/JS flake-input emit passes pure, driver, and CLI contracts\n'
+printf 'ok: flake-input emit matches recorded output, is idempotent and refuses conflicts or invalid input\n'

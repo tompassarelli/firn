@@ -83,67 +83,6 @@
       (= (input/collectedinputs-errors collected) [])
       (= (input/flakeinput-source-module zeta) (str "alpha" (if (= seed 0) "" seed) "-module")))))
 
-(defn marker-source [seed Int] String
-  (str
-    "prefix "
-    input/input-begin-marker
-    "\n"
-    (str "   :old" (if (= seed 0) "" seed) " {:url \"old" (if (= seed 0) "" seed) "\"}\n")
-    "   "
-    input/input-end-marker
-    " suffix\n"
-    "args "
-    input/args-begin-marker
-    "\n"
-    (str "     old" (if (= seed 0) "" seed) "\n")
-    "     "
-    input/args-end-marker
-    "\n"
-    "special "
-    input/special-begin-marker
-    "\n"
-    (str "                    :old" (if (= seed 0) "" seed) " old" (if (= seed 0) "" seed) "\n")
-    "  "
-    input/special-end-marker
-    "\n"
-    "hm "
-    input/hm-special-begin-marker
-    "\n"
-    (str " old" (if (= seed 0) "" seed) "\n")
-    "    "
-    input/hm-special-end-marker
-    "\n"
-    "darwin "
-    input/darwin-special-begin-marker
-    "\n"
-    (str " old" (if (= seed 0) "" seed) "\n")
-    "      "
-    input/darwin-special-end-marker
-    "\n"
-    "darwin-hm "
-    input/darwin-hm-begin-marker
-    "\n"
-    (str " old" (if (= seed 0) "" seed) "\n")
-    "        "
-    input/darwin-hm-end-marker
-    "\n"))
-
-(defn case-six-marker-splice-and-idempotence [seed Int] Bool
-  (let [
-     (inputs (Vec input/FlakeInput))
-     (parsed-inputs seed (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
-     (first input/SpliceResult)
-     (input/splice-flake-inputs (marker-source seed) inputs)]
-    (match first
-      [(SpliceRejected message) false]
-      [(SpliceUnchanged text) false]
-      [
-        (SpliceChanged text)
-        (match (input/splice-flake-inputs text inputs)
-          [(SpliceRejected message) false]
-          [(SpliceChanged changed) false]
-          [(SpliceUnchanged unchanged) (= unchanged text)])])))
-
 (defn case-missing-marker-rejected [seed Int] Bool
   (match (input/splice-flake-inputs "no markers\n" [])
     [(SpliceRejected message) true]
@@ -155,7 +94,6 @@
     (if (and
       (case-parse-and-render 0)
       (case-duplicate-url-keeps-first 0)
-      (case-six-marker-splice-and-idempotence 0)
       (case-missing-marker-rejected 0))
       0
       (do (println "FAIL flake_input scenarios") 1))))
