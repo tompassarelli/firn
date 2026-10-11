@@ -68,7 +68,6 @@ esac
 
 datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bjs"
 native_json="$beagle_path/native-core/src/native/json.bjs"
-nix_schema_path="$beagle_path/native-core/src/beagle/nix_schema_path.bjs"
 dispatcher_bridge="$firn_repo/native/firn_host.mjs"
 dispatcher_io="$firn_repo/native/firn_io.mjs"
 host_list_source="$firn_repo/native/firn-host-list.ts"
@@ -124,7 +123,6 @@ authoring_bridge="$firn_repo/native/authoring_host.mjs"
 views_sources=(
   "$datum_reader"
   "$native_json"
-  "$nix_schema_path"
   "$firn_repo/native/firn_views.bjs"
   "$firn_repo/native/firn_views_native.bjs"
 )

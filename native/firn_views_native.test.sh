@@ -45,7 +45,6 @@ done
 
 json="$beagle/native-core/src/native/json.bjs"
 datum="$beagle/native-core/src/beagle/datum_reader.bjs"
-schema_path="$beagle/native-core/src/beagle/nix_schema_path.bjs"
 core="$repo/native/firn_views.bjs"
 pure="$repo/native/firn_views_test.bjs"
 native="$repo/native/firn_views_native.bjs"
@@ -54,7 +53,7 @@ bridge="$repo/native/firn_views_host.mjs"
 printf 'firn-views-js: building one closed typed family graph\n' >&2
 mkdir -p "$scratch/build"
 timeout --foreground 240 "$beagle/bin/beagle-build-all" \
-  "$json" "$datum" "$schema_path" "$core" "$pure" "$native" --out "$scratch/build" \
+  "$json" "$datum" "$core" "$pure" "$native" --out "$scratch/build" \
   >"$scratch/build.out" 2>"$scratch/build.err" || {
     sed -n '1,260p' "$scratch/build.err" >&2
     die 'closed Beagle/JS family build failed'
@@ -81,26 +80,10 @@ timeout --foreground 30 bun --eval \
   || die 'pure fixture executable failed'
 [[ ! -s "$scratch/pure.err" ]] || die 'pure fixtures wrote stderr'
 
-FIRN_VIEWS_CORE="$scratch/build/firn/views.js" FIRN_REFERENCE_ROOT="$here/fixtures" FIRN_REAL_LOCK="$repo/flake.lock" \
+FIRN_VIEWS_CORE="$scratch/build/firn/views.js" FIRN_REAL_LOCK="$repo/flake.lock" \
   timeout --foreground 30 bun - <<'JS'
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
 const p = await import(process.env.FIRN_VIEWS_CORE);
-const root = process.env.FIRN_REFERENCE_ROOT;
-const schemaName = readdirSync(root).find(name => name.endsWith('-openssh-schema.json'));
-const schemaText = await Bun.file(`${root}/${schemaName}`).text();
-const schema = JSON.parse(schemaText);
-const decoded = p['schema-from-json'](schemaText);
-assert.equal(decoded._tag, 'SchemaLoaded');
-assert.deepEqual(decoded.entries.map(row => [row.path,row.type,row.inner_type,row.enum_values]),
-  schema.map(row => [row.name,row.t,row.inner?.t ?? '',row.enum ?? row.inner?.enum ?? []]));
-const conflicting = {...schema[0], p:'different.path'};
-assert.equal(p['schema-from-json'](JSON.stringify([conflicting]))._tag, 'SchemaRejected');
-const subText = await Bun.file(`${root}/beagle-schema-submodules-2026-05-16-users.json`).text();
-const sub = p['submodule-schema-from-json'](subText);
-assert.equal(sub._tag, 'SchemaLoaded');
-assert.deepEqual(sub.entries.map(row => row.path), JSON.parse(subText).submodules['users.users'].map(row => row.p ?? row.name));
 const text = await Bun.file(process.env.FIRN_REAL_LOCK).text();
 const lock = JSON.parse(text);
 const rows = p['flake-rows'](text, 2000000000);
@@ -120,14 +103,6 @@ const plain = p['render-flake-rows'](rows.rows,false);
 const tty = p['render-flake-rows'](rows.rows,true);
 assert.ok(!plain.includes('\u001b['));
 assert.ok(tty.includes('\u001b['));
-const paths = await import(new URL('../beagle/nix-schema-path.js', pathToFileURL(process.env.FIRN_VIEWS_CORE)));
-const referenceDocument = paths['->SourceDocument']('modules/reference/default.bnix', '#lang beagle/nix\n{:boot.initrd.systemd.root "fstab"}');
-const explained = p['render-schema-explain']('boot.initrd.systemd.root', decoded.entries, [referenceDocument]);
-assert.equal(explained.status, 0);
-for (const value of ['nullOr','enum','fstab','gpt-auto',referenceDocument.source_id]) assert.ok(explained.stdout.includes(value), value);
-const suggestion = p['render-schema-explain']('services.openssh.enabl', decoded.entries, []);
-assert.equal(suggestion.status, 1);
-assert.ok(suggestion.stderr.includes('services.openssh.enable'));
 let seed = 73421;
 const random = () => (seed = seed * 48271 % 2147483647);
 for (let index=0; index<(process.env.CI ? 512 : 128); index++) {
@@ -191,4 +166,25 @@ timeout --foreground 30 env PATH="$fakebin:$PATH" FIRN_REPO="$fixture" FIRN_HOST
 status=$?
 set -e
 [[ "$status" == 9 ]] || die "child failure returned $status"
+mkdir -p "$fixture/.beagle-cache"
+cp -- "$here/fixtures/beagle-bfe06d21f4bd-2026-10-11-openssh-schema.json" \
+  "$fixture/.beagle-cache/schema.json"
+set +e
+timeout --foreground 60 env FIRN_REPO="$fixture" \
+  "$scratch/firn-views-native" schema explain services.openssh.enable \
+  >"$scratch/explain.out" 2>"$scratch/explain.err"
+status=$?
+set -e
+[[ "$status" == 0 ]] || die "schema explain returned $status"
+rg -qx 'path:  services.openssh.enable' "$scratch/explain.out" || die 'explain lacks the path'
+rg -qx 'type:  bool' "$scratch/explain.out" || die 'explain lacks the type'
+set +e
+timeout --foreground 60 env FIRN_REPO="$fixture" \
+  "$scratch/firn-views-native" schema explain 'error: unknown option services.openssh.enabl' \
+  >"$scratch/misspelled.out" 2>"$scratch/misspelled.err"
+status=$?
+set -e
+[[ "$status" == 1 ]] || die "misspelled explain returned $status"
+rg -qx '  services.openssh.enable' "$scratch/misspelled.out" "$scratch/misspelled.err" \
+  || die 'misspelled explain does not suggest services.openssh.enable'
 printf 'ok: views recorded references, child conservation and generation boundary\n'

@@ -33,7 +33,6 @@
     [(PlatformShow module) "platform-show"]
     [(PlatformSafelist token) "platform-safelist"]
     [(SchemaExplain input) "schema-explain"]
-    [(SchemaExtract host) (str "schema-extract:" host)]
     [(HostGeneration host) (str "host-gen:" host)]))
 
 (defn parsed-kind [seed Int argv (Vec String)] String
@@ -50,9 +49,7 @@
     (=
       (parsed-kind seed ["schema" "explain" (str "services.mode" (if (= seed 0) "" seed))])
       "schema-explain")
-    (=
-      (parsed-kind seed ["schema" "extract"])
-      (str "schema-extract:host-a" (if (= seed 0) "" seed)))
+    (= (parsed-kind seed ["schema" "extract"]) "invalid")
     (= (parsed-kind seed ["host" "gen"]) (str "host-gen:host-a" (if (= seed 0) "" seed)))
     (= (parsed-kind seed ["stale"]) "invalid")))
 
@@ -69,14 +66,10 @@
      (str "error-" seed)
      failed
      views/CommandResult
-     (views/render-host-generation (views/->ChildResult status out err))
-     extract
-     views/CommandResult
-     (views/render-schema-extract (str "host-" seed) (views/->ChildResult status out err))]
+     (views/render-host-generation (views/->ChildResult status out err))]
     (and
       (= (views/commandresult-status failed) status)
-      (= (views/commandresult-status extract) status)
-      (views/starts-with? (views/commandresult-stderr extract) err))))
+      (views/starts-with? (views/commandresult-stderr failed) err))))
 
 (js/export
   (defn run-scenarios [] Int

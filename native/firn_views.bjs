@@ -1,7 +1,6 @@
 #lang beagle/js
 (ns firn.views
-  (:require [native.json :as json]
-            [beagle.nix-schema-path :as paths]))
+  (:require [native.json :as json]))
 
 (js/export
   (defrecord Follow
@@ -23,26 +22,6 @@
   (defunion FlakeRowsResult
   (FlakeRows [rows (Vec FlakeRow)])
   (FlakeRowsRejected [message String])))
-
-(js/export
-  (defrecord SchemaEntry
-  [path String
-   type String
-   inner-type String
-   enum-values (Vec String)
-   declarations (Vec String)]))
-
-(js/export
-  (defunion SchemaResult
-  (SchemaLoaded [entries (Vec SchemaEntry)])
-  (SchemaRejected
-    [message String
-     offset Int])))
-
-(js/export
-  (defrecord ModuleSource
-  [name String
-   documents (Vec paths/SourceDocument)]))
 
 (js/export
   (defrecord PlatformRow
@@ -84,7 +63,6 @@
   (PlatformShow [module String])
   (PlatformSafelist [token Bool])
   (SchemaExplain [input String])
-  (SchemaExtract [host String])
   (HostGeneration [host String])))
 
 (js/export
@@ -359,12 +337,6 @@
               []
               (recur next (if (nil? value) values (conj values value))))))))))
 
-(defn object-array-strings
-  [events (Vec json/JsonEvent)
-   start Int
-   key String] (Vec String)
-  (array-strings events (object-field-start events start key)))
-
 (defn last-string [values (Vec String)] String
   (if (= (count values) 0) "" (nth values (- (count values) 1))))
 
@@ -623,110 +595,6 @@
         (if has-follows
           "→ └─ X shares Y = this input uses our copy of Y.\n"
           ""))))))
-
-(defn parse-schema-entry
-  [events (Vec json/JsonEvent)
-   start Int] (U SchemaEntry Nil)
-  (if (or (< start 0)
-          (>= start (count events))
-          (not (instance? json/JsonObjectStart (nth events start))))
-    nil
-    (let [name (U String Nil) (object-string events start "name")
-          legacy (U String Nil) (object-string events start "p")
-          path String (if (some? name) name (string-or legacy ""))
-          type String (string-or (object-string events start "t") "?")
-          inner Int (object-field-start events start "inner")
-          inner-type String (if (< inner 0)
-            ""
-            (string-or (object-string events inner "t") "?"))
-          enum-values (Vec String) (let [direct (Vec String) (object-array-strings events start "enum")]
-            (if (> (count direct) 0)
-              direct
-              (if (< inner 0)
-                []
-                (object-array-strings events inner "enum"))))
-          declarations (Vec String) (object-array-strings events start "declarations")]
-      (if (or (= path "")
-              (and (some? name) (some? legacy) (not= name legacy)))
-        nil
-        (->SchemaEntry path type inner-type enum-values declarations)))))
-
-(defn parse-schema-array
-  [events (Vec json/JsonEvent)
-   start Int] SchemaResult
-  (if (or (< start 0)
-          (>= start (count events))
-          (not (instance? json/JsonArrayStart (nth events start))))
-    (->SchemaRejected "expected a schema array" 0)
-    (let [end Int (json-value-end events start)]
-      (if (< end 0)
-        (->SchemaRejected "unterminated schema array" 0)
-        (loop [index Int (+ start 1)
-               entries (Vec SchemaEntry) []]
-          (if (>= index (- end 1))
-            (->SchemaLoaded entries)
-            (let [next Int (json-value-end events index)
-                  entry (U SchemaEntry Nil) (parse-schema-entry events index)]
-              (if (or (< next 0) (nil? entry))
-                (->SchemaRejected "schema entries must name a path" index)
-                (recur next (conj entries entry))))))))))
-
-(js/export
-  (defn schema-from-json [source String] SchemaResult
-  (match (json/decode source)
-    [(JsonDecodeError offset message) (->SchemaRejected message offset)]
-    [(JsonDecoded events) (parse-schema-array events 0)])))
-
-(js/export
-  (defn append-schema-entries
-  [left (Vec SchemaEntry)
-   right (Vec SchemaEntry)] (Vec SchemaEntry)
-  (loop [remaining (Vec SchemaEntry) right
-         result (Vec SchemaEntry) left]
-    (if (= (count remaining) 0)
-      result
-      (recur (rest remaining) (conj result (first remaining)))))))
-
-(js/export
-  (defn submodule-schema-from-json [source String] SchemaResult
-  (match (json/decode source)
-    [(JsonDecodeError offset message) (->SchemaRejected message offset)]
-    [(JsonDecoded events)
-     (let [submodules Int (object-field-start events 0 "submodules")
-           names (Vec String) (object-field-names events submodules)]
-       (if (< submodules 0)
-         (->SchemaRejected "expected a submodules object" 0)
-         (loop [remaining (Vec String) names
-                entries (Vec SchemaEntry) []]
-           (if (= (count remaining) 0)
-             (->SchemaLoaded entries)
-             (match (parse-schema-array events
-                      (object-field-start events submodules (first remaining)))
-               [(SchemaRejected message offset)
-                (->SchemaRejected message offset)]
-               [(SchemaLoaded nested)
-                (recur (rest remaining)
-                  (append-schema-entries entries nested))])))))])))
-
-(defn schema-paths [entries (Vec SchemaEntry)] (Vec String)
-  (loop [remaining (Vec SchemaEntry) entries
-         result (Vec String) []]
-    (if (= (count remaining) 0)
-      result
-      (recur (rest remaining)
-        (append-unique result (schemaentry-path (first remaining)))))))
-
-(js/export
-  (defn schema-entry-for
-  [entries (Vec SchemaEntry)
-   path String] (U SchemaEntry Nil)
-  (loop [remaining (Vec SchemaEntry) entries]
-    (if (= (count remaining) 0)
-      nil
-      (let [entry SchemaEntry (first remaining)]
-        (if (= path (schemaentry-path entry))
-          entry
-          (recur (rest remaining))))))))
 
 (defn combine-unique
   [left (Vec String)
@@ -1014,7 +882,8 @@
         (recur (+ end 1))
         (if (= end start) nil (subs text start end))))))
 
-(defn extract-option-path [input String] (U String Nil)
+(js/export
+  (defn extract-option-path [input String] (U String Nil)
   (let [unknown String "unknown option "
         mismatch String "type mismatch at "
         unknown-at Int (find-substring input unknown)
@@ -1025,98 +894,7 @@
       :else
       (let [trimmed String (trim-spaces input)
             candidate (U String Nil) (path-token-at trimmed 0)]
-        (if (and (some? candidate) (= candidate trimmed)) candidate nil)))))
-
-(js/export
-  (defn describe-type [entry SchemaEntry] String
-  (if (and (or (= (schemaentry-type entry) "listOf")
-               (= (schemaentry-type entry) "nullOr")
-               (= (schemaentry-type entry) "attrsOf")
-               (= (schemaentry-type entry) "lazyAttrsOf"))
-           (not= (schemaentry-inner-type entry) ""))
-    (str (schemaentry-type entry) " (" (schemaentry-inner-type entry) ")")
-    (schemaentry-type entry))))
-
-(defn quoted-values [values (Vec String)] String
-  (loop [remaining (Vec String) values
-         text String ""]
-    (if (= (count remaining) 0)
-      text
-      (recur (rest remaining)
-        (str text (if (= text "") "" ", ") "\"" (first remaining) "\"")))))
-
-(defn declaration-lines [values (Vec String)] String
-  (loop [remaining (Vec String) values
-         text String ""]
-    (if (= (count remaining) 0)
-      text
-      (recur (rest remaining) (str text "  " (first remaining) "\n")))))
-
-(defn references-for
-  [path String
-   documents (Vec paths/SourceDocument)] (Vec String)
-  (loop [remaining (Vec paths/SourceDocument) documents
-         result (Vec String) []]
-    (if (= (count remaining) 0)
-      (sort result)
-      (let [document paths/SourceDocument (first remaining)]
-        (match (paths/extract-nix-option-paths document [])
-          [(OptionPathError source-id offset message)
-           (recur (rest remaining) result)]
-          [(OptionPaths occurrences)
-           (recur (rest remaining)
-             (if (> (count (paths/occurrences-for-path path occurrences)) 0)
-               (append-unique result (paths/sourcedocument-source-id document))
-               result))])))))
-
-(defn reference-lines [references (Vec String)] String
-  (if (= (count references) 0)
-    "referenced in: (nowhere in this repo)\n"
-    (loop [remaining (Vec String) references
-           text String "referenced in this repo:\n"]
-      (if (= (count remaining) 0)
-        text
-        (recur (rest remaining) (str text "  " (first remaining) "\n"))))))
-
-(defn suggestion-lines [suggestions (Vec paths/PathSuggestion)] String
-  (if (= (count suggestions) 0)
-    "  no similar option paths found.\n"
-    (loop [remaining (Vec paths/PathSuggestion) suggestions
-           text String "did you mean:\n"]
-      (if (= (count remaining) 0)
-        text
-        (recur (rest remaining)
-          (str text "  "
-            (paths/pathsuggestion-path (first remaining)) "\n"))))))
-
-(js/export
-  (defn render-schema-explain
-  [input String
-   entries (Vec SchemaEntry)
-   documents (Vec paths/SourceDocument)] CommandResult
-  (let [path (U String Nil) (extract-option-path input)]
-    (if (nil? path)
-      (->CommandResult 1 ""
-        (str "firn explain: couldn't extract an option path from: " input "\n"))
-      (let [entry (U SchemaEntry Nil) (schema-entry-for entries path)]
-        (if (nil? entry)
-          (->CommandResult 1 ""
-            (str "no exact match for " path "\n"
-              (suggestion-lines
-                (paths/rank-path-suggestions path (schema-paths entries) 5))))
-          (->CommandResult 0
-            (str "path:  " path "\n"
-              "type:  " (describe-type entry) "\n"
-              (if (= (count (schemaentry-enum-values entry)) 0)
-                ""
-                (str "enum:  "
-                  (quoted-values (schemaentry-enum-values entry)) "\n"))
-              (if (= (count (schemaentry-declarations entry)) 0)
-                ""
-                (str "defined in:\n"
-                  (declaration-lines (schemaentry-declarations entry))))
-              (reference-lines (references-for path documents)))
-            "")))))))
+        (if (and (some? candidate) (= candidate trimmed)) candidate nil))))))
 
 (defn line-has-current? [line String] Bool
   (or (>= (find-substring line "current") 0)
@@ -1155,18 +933,6 @@
           ""))))))
 
 (js/export
-  (defn render-schema-extract
-  [host String
-   child ChildResult] CommandResult
-  (let [prefix String (str ">> firn schema extract " host "\n")]
-    (if (= (childresult-status child) 0)
-      (->CommandResult 0 (str prefix (childresult-stdout child))
-        (childresult-stderr child))
-      (->CommandResult (childresult-status child)
-        (str prefix (childresult-stdout child))
-        (str (childresult-stderr child) "firn schema extract: failed.\n"))))))
-
-(js/export
   (defn parse-views-argv
   [argv (Vec String)
    current-host String] ViewsArgv
@@ -1200,14 +966,6 @@
          (= (nth argv 0) "schema")
          (= (nth argv 1) "explain"))
     (->ParsedViews (->SchemaExplain (nth argv 2)))
-
-    (= argv ["schema" "extract"])
-    (->ParsedViews (->SchemaExtract current-host))
-
-    (and (= (count argv) 3)
-         (= (nth argv 0) "schema")
-         (= (nth argv 1) "extract"))
-    (->ParsedViews (->SchemaExtract (nth argv 2)))
 
     (= argv ["host" "gen"])
     (->ParsedViews (->HostGeneration current-host))
