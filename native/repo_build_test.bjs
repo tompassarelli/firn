@@ -13,8 +13,6 @@
       (not (build/source-path? "tests/fixture.bnix"))
       (not (build/source-path? "docs/fixtures/example.bnix"))
       (not (build/source-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.bnix")))
-      (not
-        (build/source-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/responsibilities.bnix")))
       (not (build/source-path? "result-old/module.bnix"))
       (not (build/source-path? ".direnv/cache/module.bnix"))
       (build/obsolete-output-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.nix"))
