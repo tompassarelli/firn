@@ -118,7 +118,9 @@ run_case pass \
   '{"tool_name":"Bash","tool_input":{"command":"firn rebuild"},"session_id":"pass"}'
 [[ ! -s "$scratch/pass.out" ]] || die "pass emitted output"
 
-ln -s "$repo" "$scratch/repo-through-symlink"
+mkdir -p "$scratch/checkout/code/nixos-config/native"
+: >"$scratch/checkout/code/nixos-config/native/system_policy.bjs"
+ln -s "$scratch/checkout/code/nixos-config" "$scratch/repo-through-symlink"
 inject_payload="$(printf \
   '{"tool_name":"Edit","tool_input":{"file_path":"%s/native/system_policy.bjs"},"session_id":"inject/session"}' \
   "$scratch/repo-through-symlink")"
