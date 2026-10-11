@@ -5,7 +5,7 @@ if [ "$mode" = drift ]; then
   compiler_inputs() {
     {
       git ls-tree -r "$1" | awk -F '\t' '$2 ~ /\.(bnix|clause|nix)$/ || $2 ~ /^native\// ||
-        $2 == "dotfiles/bin/firn" || $2 == "config/clause-revision"'
+        $2 == "dotfiles/bin/firn" || $2 == "config/galileo-revision"'
       readlink -f "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current"
       git -C "${BEAGLE_PATH:-$HOME/code/beagle/main}" rev-parse HEAD
     } | sha256sum | cut -d' ' -f1

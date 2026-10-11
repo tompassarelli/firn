@@ -224,11 +224,7 @@
    state build/SourceState
    check-only Bool] Int
   (let [destination-relative String (build/sourcestate-output-relative state)
-        destination String (absolute-path root destination-relative)
-        selected (U String Nil) (if (build/clause-source-path? (build/sourcestate-relative state))
-                                 (.env bridge "FIRN_CLAUSE_WORKBENCH") compiler)]
-    (if (nil? selected)
-      (emit-error bridge "firn build: set FIRN_CLAUSE_WORKBENCH to the compiler built from config/clause-revision\n")
+        destination String (absolute-path root destination-relative)]
   (let [temporary-result Any (.createTemporarySibling bridge destination)
         errno Int (.status bridge temporary-result)]
     (if (not (= errno 0))
@@ -236,7 +232,7 @@
         (build/errno-message
           "cannot create temporary output for" destination-relative errno))
       (let [temporary String (.value bridge temporary-result)]
-        (run-compiler bridge root selected state temporary check-only)))))))
+        (run-compiler bridge root compiler state temporary check-only))))))
 
 (defn compile-sources
   [bridge Any

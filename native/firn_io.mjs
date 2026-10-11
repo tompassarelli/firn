@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 import { existsSync } from 'node:fs';
-
-const clauseModule = process.env.FIRN_CLAUSE_HOST_LIST_MODULE;
-const hostList = clauseModule ? await import(clauseModule) : undefined;
+import * as hostList from './firn-host-list.ts';
 
 export function executeRuntime(name, args) {
-  if (hostList?.handles(args)) {
+  if (hostList.handles(args)) {
     return hostList.run(process.env.FIRN_REPO, args);
   }
   const runtimeBin = process.env.FIRN_RUNTIME_BIN;
