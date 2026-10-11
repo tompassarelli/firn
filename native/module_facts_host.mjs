@@ -7,6 +7,13 @@ const questions = {
   tags: 'all ?m, ?t where ?m is tagged ?t',
   optIn: 'all ?m, ?t where ?m can opt into ?t',
   overrides: 'all ?m, ?t, ?p, ?v where ?t sets ?p to ?v for ?m',
+  hosts: 'all ?h where ?h is a Host',
+  platform: 'all ?h, ?p where ?h runs ?p',
+  enables: 'all ?h, ?t where ?h enables ?t',
+  adds: 'all ?h, ?m, ?t where ?h adds ?m to ?t',
+  drops: 'all ?h, ?m, ?t where ?h drops ?m from ?t',
+  disables: 'all ?h, ?m where ?h disables ?m',
+  active: 'all ?h, ?m where ?m is tag-enabled on ?h',
 };
 
 function galileo() {
@@ -45,6 +52,45 @@ export function readModuleFacts(root) {
   }
 }
 
+function hostEntry(hosts, name) {
+  if (!hosts.has(name)) {
+    hosts.set(name, { platform: 'linux', enables: [], adds: new Map(), drops: new Map(),
+      disables: [], active: [] });
+  }
+  return hosts.get(name);
+}
+
+function push(map, key, value) {
+  if (!map.has(key)) map.set(key, []);
+  map.get(key).push(value);
+}
+
+export function readHostFacts(root) {
+  try {
+    const hosts = new Map();
+    for (const name of query(root, questions.hosts)) hostEntry(hosts, name);
+    for (const row of query(root, questions.platform)) hostEntry(hosts, row.h).platform = row.p;
+    for (const row of query(root, questions.enables)) hostEntry(hosts, row.h).enables.push(row.t);
+    for (const row of query(root, questions.adds)) push(hostEntry(hosts, row.h).adds, row.t, row.m);
+    for (const row of query(root, questions.drops)) push(hostEntry(hosts, row.h).drops, row.t, row.m);
+    for (const row of query(root, questions.disables)) hostEntry(hosts, row.h).disables.push(row.m);
+    for (const row of query(root, questions.active)) hostEntry(hosts, row.h).active.push(row.m);
+    return Object.freeze({ status: 0, value: hosts, message: '' });
+  } catch (error) {
+    return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
+  }
+}
+
+export function buildGenerated(root) {
+  const run = Bun.spawnSync([galileo(), 'build'], {
+    cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 120000,
+  });
+  return run.exitCode ?? 1;
+}
+
+const noHost = Object.freeze({ platform: 'linux', enables: [], adds: new Map(),
+  drops: new Map(), disables: [], active: [] });
+const hostFacts = (hosts, name) => hosts.get(name) ?? noHost;
 const empty = Object.freeze({ tags: [], optIn: [], overrides: new Map() });
 const facts = (modules, name) => modules.get(name) ?? empty;
 
@@ -60,4 +106,13 @@ export const moduleFactsBridge = Object.freeze({
     return facts(modules, name).overrides.get(tag).get(path);
   },
   moduleFactsMessage(result) { return result.message; },
+  readHostFacts,
+  buildGenerated,
+  hostDeclared(hosts, name) { return hosts.has(name); },
+  hostPlatform(hosts, name) { return hostFacts(hosts, name).platform; },
+  hostEnabledTags(hosts, name) { return [...hostFacts(hosts, name).enables].sort(); },
+  hostAdds(hosts, name, tag) { return [...(hostFacts(hosts, name).adds.get(tag) ?? [])].sort(); },
+  hostDrops(hosts, name, tag) { return [...(hostFacts(hosts, name).drops.get(tag) ?? [])].sort(); },
+  hostDisabled(hosts, name) { return [...hostFacts(hosts, name).disables].sort(); },
+  hostActive(hosts, name) { return [...hostFacts(hosts, name).active].sort(); },
 });

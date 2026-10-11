@@ -28,11 +28,9 @@
   (HostsRejected [message String])))
 
 (js/export
-  (defunion GeneratedLoadResult
-  (GeneratedLoaded
-    [present Bool
-     text String])
-  (GeneratedRejected [message String])))
+  (defunion HostFactsLoadResult
+  (HostFactsLoaded [facts Any])
+  (HostFactsRejected [message String])))
 
 (js/export
   (defunion AllowlistLoadResult
@@ -164,125 +162,94 @@
           (->AllowlistRejected
             (parse-message "Darwin allowlist" relative message offset))]))))))
 
-(defn load-generated
-  [bridge Any
-   root String
-   host String
-   needed Bool] GeneratedLoadResult
-  (if (not needed)
-    (->GeneratedLoaded false "")
-    (let [relative String (str "hosts/" host "/_generated-enables.bnix")
-          absolute String (path root relative)
-          kind-result Any (.pathKind bridge absolute)
-          kind-errno Int (.status bridge kind-result)]
-      (if (not (= kind-errno 0))
-        (if (= kind-errno 2)
-           (->GeneratedLoaded false "")
-           (->GeneratedRejected
-             (errno-message "cannot inspect" relative kind-errno)))
-        (let [kind Int (.value bridge kind-result)]
-         (if (not (or (= kind 1) (= kind 3)))
-           (->GeneratedLoaded false "")
-           (let [read-result Any (.readText bridge absolute max-source-bytes)
-                 read-errno Int (.status bridge read-result)]
-             (if (not (= read-errno 0))
-              (->GeneratedRejected
-                (errno-message "cannot read" relative read-errno))
-              (let [text String (.value bridge read-result)]
-                (->GeneratedLoaded true text))))))))))
-
 (defn empty-host [host String] r/HostTags
   (r/->HostTags host [] [] "linux" false []))
 
-(defn host-data
-  [tags r/HostTags
-   tag-source-present Bool
-   generated GeneratedLoadResult] HostLoadResult
-  (match generated
-    [(GeneratedRejected message) (->HostRejected message)]
-    [(GeneratedLoaded present text)
-     (->HostLoaded
-       (driver/->TagResolveHostData tags tag-source-present present text))]))
+(defn enabled-tags
+  [bridge Any
+   facts Any
+   host String] (Vec r/EnabledTag)
+  (loop [tags (Vec String) (.hostEnabledTags bridge facts host)
+         result (Vec r/EnabledTag) []]
+    (if (= (count tags) 0)
+      result
+      (let [tag String (first tags)]
+        (recur (rest tags)
+          (conj result
+            (r/->EnabledTag tag (.hostAdds bridge facts host tag)
+              (.hostDrops bridge facts host tag))))))))
 
-(defn parse-host-source
+(defn host-tags
+  [bridge Any
+   facts Any
+   host String
+   platform String
+   allowed (Vec String)] r/HostTags
+  (r/->HostTags host (enabled-tags bridge facts host)
+    (.hostDisabled bridge facts host) platform (= platform "darwin") allowed))
+
+(defn host-from-facts
   [bridge Any
    root String
-   host String
-   relative String
-   source String
-   load-generated? Bool] HostLoadResult
-  (match (input/host-tags-from-source host source [])
-    [(HostSourceRejected message offset)
-     (->HostRejected
-       (parse-message "host tag source" relative message offset))]
-    [(HostSourceParsed preliminary)
-     (if (= (r/hosttags-platform preliminary) "darwin")
-       (match (load-darwin-allowlist bridge root)
-         [(AllowlistRejected message) (->HostRejected message)]
-         [(AllowlistLoaded allowed)
-          (match (input/host-tags-from-source host source allowed)
-            [(HostSourceRejected message offset)
-             (->HostRejected
-               (parse-message "host tag source" relative message offset))]
-            [(HostSourceParsed tags)
-             (host-data tags true
-               (load-generated bridge root host load-generated?))])])
-       (host-data preliminary true
-         (load-generated bridge root host load-generated?)))]))
+   facts Any
+   host String] HostLoadResult
+  (if (not (.hostDeclared bridge facts host))
+    (->HostLoaded (driver/->TagResolveHostData (empty-host host) false []))
+    (let [platform String (.hostPlatform bridge facts host)
+          active (Vec String) (.hostActive bridge facts host)]
+      (if (= platform "darwin")
+        (match (load-darwin-allowlist bridge root)
+          [(AllowlistRejected message) (->HostRejected message)]
+          [(AllowlistLoaded allowed)
+           (->HostLoaded (driver/->TagResolveHostData
+             (host-tags bridge facts host platform allowed) true active))])
+        (->HostLoaded (driver/->TagResolveHostData
+          (host-tags bridge facts host platform []) true active))))))
+
+(defn read-host-facts
+  [bridge Any
+   root String] HostFactsLoadResult
+  (let [result Any (.readHostFacts bridge root)]
+    (if (= (.status bridge result) 0)
+      (->HostFactsLoaded (.value bridge result))
+      (->HostFactsRejected
+        (str "firn: cannot load host tags through galileo query: "
+             (.moduleFactsMessage bridge result) "\n")))))
 
 (js/export
   (defn load-host
     [bridge Any
      root String
-     host String
-     load-generated? Bool] HostLoadResult
-    (let [relative String (str "hosts/" host "/enabled-tags.bnix")
-          absolute String (path root relative)
-          kind-result Any (.pathKind bridge absolute)
-          kind-errno Int (.status bridge kind-result)]
-      (if (not (= kind-errno 0))
-      (if (= kind-errno 2)
-         (host-data (empty-host host) false
-           (load-generated bridge root host load-generated?))
-         (->HostRejected
-           (errno-message "cannot inspect" relative kind-errno)))
-      (let [kind Int (.value bridge kind-result)]
-       (if (not (or (= kind 1) (= kind 3)))
-         (host-data (empty-host host) false
-           (load-generated bridge root host load-generated?))
-         (let [read-result Any (.readText bridge absolute max-source-bytes)
-               read-errno Int (.status bridge read-result)]
-           (if (not (= read-errno 0))
-             (->HostRejected
-               (errno-message "cannot read" relative read-errno))
-             (let [source String (.value bridge read-result)]
-               (parse-host-source bridge root host relative source
-                 load-generated?))))))))))
+     host String] HostLoadResult
+    (match (read-host-facts bridge root)
+      [(HostFactsRejected message) (->HostRejected message)]
+      [(HostFactsLoaded facts) (host-from-facts bridge root facts host)])))
 
 (defn load-hosts-from
   [bridge Any
    root String
+   facts Any
    names (Vec String)
    index Int
-   load-generated? Bool
    hosts (Vec driver/TagResolveHostData)] HostsLoadResult
   (if (>= index (count names))
     (->HostsLoaded hosts)
-    (match (load-host bridge root (nth names index) load-generated?)
+    (match (host-from-facts bridge root facts (nth names index))
       [(HostRejected message) (->HostsRejected message)]
       [(HostLoaded data)
-       (load-hosts-from bridge root names (+ index 1) load-generated?
-         (conj hosts data))])))
+       (load-hosts-from bridge root facts names (+ index 1) (conj hosts data))])))
 
 (defn load-hosts
   [bridge Any
    root String
    names (Vec String)
    action driver/TagResolveAction] HostsLoadResult
-  (if (driver/action-all? action)
-    (load-hosts-from bridge root names 0 (driver/action-emit? action) [])
-    (load-hosts-from bridge root [(driver/action-host action)] 0
-      (driver/action-emit? action) [])))
+  (match (read-host-facts bridge root)
+    [(HostFactsRejected message) (->HostsRejected message)]
+    [(HostFactsLoaded facts)
+     (load-hosts-from bridge root facts
+       (if (driver/action-all? action) names [(driver/action-host action)])
+       0 [])]))
 
 (defn string-member?
   [values (Vec String)
@@ -302,7 +269,7 @@
       (recur (+ index 1)
         (conj hosts
           (driver/->TagResolveHostData
-            (empty-host (nth names index)) false false ""))))))
+            (empty-host (nth names index)) false []))))))
 
 (defn emit-io-error
   [bridge Any
@@ -332,12 +299,13 @@
       [(StderrText text)
        (do (.err bridge text)
            (execute-effects bridge root outcome (+ index 1)))]
-      [(WriteGenerated relative text)
-       (let [errno Int (.writeTextAtomic bridge (path root relative) text)]
-         (if (= errno 0)
+      [(BuildGenerated relative)
+       (let [status Int (.buildGenerated bridge root)]
+         (if (= status 0)
            (execute-effects bridge root outcome (+ index 1))
            (emit-io-error bridge
-             (errno-message "cannot write" relative errno))))])))
+             (str "firn tag resolve: galileo build '" relative "' exited "
+               status "\n"))))])))
 
 (js/export
   (defn run-action

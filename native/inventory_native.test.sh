@@ -120,21 +120,14 @@ gamma is a Module
 orphan is a Module
 beta is tagged terminal
 gamma is tagged desktop
-EOF
-
-cat >"$fixture/hosts/alpha-host/enabled-tags.bnix" <<'EOF'
-#lang beagle/nix
-(ns enabled-tags)
-{:platform linux
- :enabled [terminal]
- :disabled []}
-EOF
-cat >"$fixture/hosts/zeta-host/enabled-tags.bnix" <<'EOF'
-#lang beagle/nix
-(ns enabled-tags)
-{:platform linux
- :enabled [desktop]
- :disabled []}
+linux is a Platform
+linux allows every module
+alpha-host is a Host
+alpha-host runs linux
+alpha-host enables terminal
+zeta-host is a Host
+zeta-host runs linux
+zeta-host enables desktop
 EOF
 
 cat >"$fixture/hosts/alpha-host/configuration.bnix" <<'EOF'

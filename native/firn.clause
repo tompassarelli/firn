@@ -300,7 +300,7 @@ tag-index(): Command
 tag-resolve(): Command
   {node: "tag", edge: "resolve",
    leaf: {usage: "<host>|all [+emit]", arguments: []},
-   detail-gap: "  ", summary: "resolve enabled-tags → active module set; +emit writes _generated-enables.bnix",
+   detail-gap: "  ", summary: "resolve host tag facts → active module set; +emit runs galileo build",
    common-gap: "", common-summary: "",
    executable: "firn-tag"}
 

@@ -59,7 +59,7 @@
 
 (js/export
  (defn load-inventory-host [(bridge Any) (root String) (host String)] InventoryHostLoadResult
-  (match (tag-family/load-host bridge root host false)
+  (match (tag-family/load-host bridge root host)
     [(HostRejected message) (->InventoryHostRejected message)]
     [(HostLoaded data)
      (match (load-config bridge root host)
