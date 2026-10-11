@@ -1,0 +1,24 @@
+use firn/tags
+
+agent-slice is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.agent-slice.enable
+    "systemd"
+      "user"
+        "slices"
+          "agent"
+            "description": "Agent lanes — yielding compute class"
+            "sliceConfig"
+              "CPUWeight": 20
+              "IOWeight": 20
+              "MemoryHigh": "61G"
+          "app"
+            "sliceConfig"
+              "MemoryLow": "12G"
+          "session"
+            "sliceConfig"
+              "CPUWeight": 300
+              "IOWeight": 300
+  option "myConfig"."modules"."agent-slice"."enable": enable "agent.slice compute governance — weight-based backpressure so agent lanes yield to the desktop"

@@ -1,0 +1,11 @@
+use firn/tags
+
+pavucontrol is a Module
+pavucontrol is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.pavucontrol.enable
+    "environment"
+      "systemPackages": [pkgs.pavucontrol]
+  option "myConfig"."modules"."pavucontrol"."enable": enable "PulseAudio volume control"

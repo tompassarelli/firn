@@ -1,0 +1,10 @@
+use firn/tags
+
+vscode is a Module
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.vscode.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.vscode]
+  option "myConfig"."modules"."vscode"."enable": enable "Visual Studio Code (Microsoft build)"

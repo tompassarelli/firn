@@ -1,0 +1,12 @@
+use firn/tags
+
+bunfig is a Module
+bunfig is tagged javascript
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.bunfig.enable
+    "home-manager"
+      "users"
+        {config.myConfig.modules.users.username}: (__clause_argument_0) => {"home": {"file": {".bunfig.toml": {"source": (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink(("" ++ ((__clause_argument_0.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/bun/bunfig.toml")}}}}
+  option "myConfig"."modules"."bunfig"."enable": enable "Global Bun settings: 7-day release cooldown, no auto-install"

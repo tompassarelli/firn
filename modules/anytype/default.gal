@@ -1,0 +1,11 @@
+use firn/tags
+
+anytype is a Module
+anytype is tagged notes
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.anytype.enable
+    "environment"
+      "systemPackages": [pkgs.anytype]
+  option "myConfig"."modules"."anytype"."enable": enable "Anytype — local-first knowledge/notes workspace"

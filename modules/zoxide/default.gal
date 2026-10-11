@@ -1,0 +1,19 @@
+use firn/tags
+
+zoxide is a Module
+zoxide is tagged terminal
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.zoxide.enable
+    "home-manager"
+      "users"
+        {config.myConfig.modules.users.username}
+          "programs"
+            "bash"
+              "shellAliases"
+                "cd": "z"
+            "zoxide"
+              "enable": true
+              "enableBashIntegration": true
+  option "myConfig"."modules"."zoxide"."enable": enable "zoxide smart directory jumper"

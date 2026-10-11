@@ -1,0 +1,11 @@
+use firn/tags
+
+gitleaks is a Module
+gitleaks is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gitleaks.enable
+    "environment"
+      "systemPackages": [pkgs.gitleaks]
+  option "myConfig"."modules"."gitleaks"."enable": enable "Enable gitleaks secret scanner (safe-push depends on it being on PATH)"

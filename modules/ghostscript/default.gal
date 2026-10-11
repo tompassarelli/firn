@@ -1,0 +1,11 @@
+use firn/tags
+
+ghostscript is a Module
+ghostscript is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.ghostscript.enable
+    "environment"
+      "systemPackages": [pkgs.ghostscript]
+  option "myConfig"."modules"."ghostscript"."enable": enable "Ghostscript PostScript interpreter"

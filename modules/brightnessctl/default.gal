@@ -1,0 +1,11 @@
+use firn/tags
+
+brightnessctl is a Module
+brightnessctl is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.brightnessctl.enable
+    "environment"
+      "systemPackages": [pkgs.brightnessctl]
+  option "myConfig"."modules"."brightnessctl"."enable": enable "screen brightness control"

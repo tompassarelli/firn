@@ -1,0 +1,11 @@
+use firn/tags
+
+wf-recorder is a Module
+wf-recorder is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.wf-recorder.enable
+    "environment"
+      "systemPackages": [pkgs.wf-recorder]
+  option "myConfig"."modules"."wf-recorder"."enable": enable "Wayland screen recorder"

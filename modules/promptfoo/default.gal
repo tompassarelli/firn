@@ -1,0 +1,11 @@
+use firn/tags
+
+promptfoo is a Module
+promptfoo is tagged development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.promptfoo.enable
+    "environment"
+      "systemPackages": [pkgs.promptfoo]
+  option "myConfig"."modules"."promptfoo"."enable": enable "promptfoo — local, MIT-licensed LLM eval runner (no lock-in)"

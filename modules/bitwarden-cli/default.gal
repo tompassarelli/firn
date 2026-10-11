@@ -1,0 +1,11 @@
+use firn/tags
+
+bitwarden-cli is a Module
+bitwarden-cli is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.bitwarden-cli.enable
+    "environment"
+      "systemPackages": [pkgs.bitwarden-cli]
+  option "myConfig"."modules"."bitwarden-cli"."enable": enable "bw — Bitwarden vault CLI"

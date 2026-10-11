@@ -1,0 +1,11 @@
+use firn/tags
+
+sqlite is a Module
+sqlite is tagged database
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.sqlite.enable
+    "environment"
+      "systemPackages": [pkgs.sqlite]
+  option "myConfig"."modules"."sqlite"."enable": enable "SQLite database"

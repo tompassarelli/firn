@@ -1,0 +1,11 @@
+use firn/tags
+
+freetds is a Module
+freetds is tagged database
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.freetds.enable
+    "environment"
+      "systemPackages": [pkgs.freetds]
+  option "myConfig"."modules"."freetds"."enable": enable "FreeTDS (TDS protocol library for MSSQL)"

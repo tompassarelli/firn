@@ -1,0 +1,14 @@
+use firn/tags
+
+nautilus is a Module
+nautilus is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.nautilus.enable
+    "environment"
+      "systemPackages": [pkgs.nautilus]
+    "services"
+      "gvfs"
+        "enable": true
+  option "myConfig"."modules"."nautilus"."enable": enable "Nautilus file manager"

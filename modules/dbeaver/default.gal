@@ -1,0 +1,11 @@
+use firn/tags
+
+dbeaver is a Module
+dbeaver is tagged database
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.dbeaver.enable
+    "environment"
+      "systemPackages": [pkgs.dbeaver-bin]
+  option "myConfig"."modules"."dbeaver"."enable": enable "DBeaver database GUI"

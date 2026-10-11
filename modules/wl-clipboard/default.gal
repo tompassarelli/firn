@@ -1,0 +1,11 @@
+use firn/tags
+
+wl-clipboard is a Module
+wl-clipboard is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.wl-clipboard.enable
+    "environment"
+      "systemPackages": [pkgs.wl-clipboard]
+  option "myConfig"."modules"."wl-clipboard"."enable": enable "Wayland clipboard utilities"

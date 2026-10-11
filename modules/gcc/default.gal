@@ -1,0 +1,12 @@
+use firn/tags
+
+gcc is a Module
+gcc is tagged doom-emacs
+gcc is tagged rust
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gcc.enable
+    "environment"
+      "systemPackages": [pkgs.gcc]
+  option "myConfig"."modules"."gcc"."enable": enable "GNU C compiler"

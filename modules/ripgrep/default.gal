@@ -1,0 +1,12 @@
+use firn/tags
+
+ripgrep is a Module
+ripgrep is tagged development
+ripgrep is tagged doom-emacs
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.ripgrep.enable
+    "environment"
+      "systemPackages": [pkgs.ripgrep]
+  option "myConfig"."modules"."ripgrep"."enable": enable "ripgrep search tool"

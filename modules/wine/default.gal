@@ -1,0 +1,11 @@
+use firn/tags
+
+wine is a Module
+wine is tagged gaming
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.wine.enable
+    "environment"
+      "systemPackages": [pkgs.wineWowPackages.unstable, pkgs.unstable.winetricks]
+  option "myConfig"."modules"."wine"."enable": enable "Wine (unstable, 32+64-bit)"

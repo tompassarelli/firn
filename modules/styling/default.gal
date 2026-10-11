@@ -1,0 +1,32 @@
+use firn/tags
+
+styling is a Module
+styling is tagged theming
+
+nix module
+  arguments: config, lib, pkgs, ...
+  let username = config.myConfig.modules.users.username
+  let chosenTheme = config.myConfig.modules.stylix.chosenTheme
+  let schemeFile = "{pkgs.base16-schemes}/share/themes/{chosenTheme}.yaml"
+  let schemeYaml = builtins.readFile(schemeFile)
+  let variant = ((lines) => ((variantLine) => ((match) => if match != null then builtins.head(match) else "dark")(builtins.match(".*variant: \"([^\"]+)\".*", variantLine)))(lib.findFirst((line) => lib.hasPrefix("variant:", line), "", lines)))(lib.splitString("\n", schemeYaml))
+  option myConfig.modules.styling.enable: enable "system-wide theming and styling"
+  config when config.myConfig.modules.styling.enable
+    stylix
+      enable: true
+      base16Scheme: schemeFile
+      polarity: variant
+      targets.nixos-icons.enable: false
+      fonts
+        monospace
+          package: pkgs.commit-mono
+          name: "CommitMono"
+        sansSerif
+          package: pkgs.dejavu_fonts
+          name: "DejaVu Sans"
+        serif
+          package: pkgs.ia-writer-quattro
+          name: "iA Writer Quattro S"
+        sizes
+          terminal: 14
+    home-manager.users.{username}: ({config, ...}) => {stylix.targets.firefox: {profileNames: [username], colorTheme.enable: true}, xdg.configFile."themes".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/nixos-config/dotfiles/themes")}

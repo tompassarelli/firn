@@ -1,0 +1,11 @@
+use firn/tags
+
+graphviz is a Module
+graphviz is tagged doom-emacs
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.graphviz.enable
+    "environment"
+      "systemPackages": [pkgs.graphviz]
+  option "myConfig"."modules"."graphviz"."enable": enable "Graphviz graph visualization"

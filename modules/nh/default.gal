@@ -1,0 +1,10 @@
+use firn/tags
+
+nh is a Module
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.nh.enable
+    "environment"
+      "systemPackages": [pkgs.nh]
+  option "myConfig"."modules"."nh"."enable": enable "Nix helper (nicer nixos-rebuild output, generation diff, search, clean)"

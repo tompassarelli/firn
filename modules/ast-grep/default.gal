@@ -1,0 +1,11 @@
+use firn/tags
+
+ast-grep is a Module
+ast-grep is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.ast-grep.enable
+    "environment"
+      "systemPackages": [pkgs.ast-grep]
+  option "myConfig"."modules"."ast-grep"."enable": enable "ast-grep structural code search"

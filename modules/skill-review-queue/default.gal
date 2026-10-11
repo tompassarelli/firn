@@ -1,0 +1,15 @@
+use firn/tags
+
+skill-review-queue is a Module
+skill-review-queue can opt into development
+
+nix module
+  arguments: config, lib, pkgs, jobRun, ...
+  let homeDir = config.myConfig.modules.users.homeDir
+  let username = config.myConfig.modules.users.username
+  let gh = if config.myConfig.modules.github-pat.enable then config.myConfig.modules.github-pat.gh else pkgs.gh
+  let notify = if config.myConfig.modules.nexus-alerts.enable then "nexus-notify@%n.service" else "update-notify@%n.service"
+  let description = "Weekly skill review queue: open or update the north issue listing skill reviews older than 30 days"
+  option myConfig.modules.skill-review-queue.enable: enable description
+  config when config.myConfig.modules.skill-review-queue.enable
+    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.skill-review-queue: {Unit: {Description: description, OnFailure: [notify]}, Service: {Type: "oneshot", Environment: ["PATH={homeDir}/.local/share/firn/bin:{homeDir}/.local/share/north/bin:{lib.makeBinPath([pkgs.bash, pkgs.coreutils, pkgs.jq, gh, pkgs.git])}"], ExecStart: jobRun("skill-review-queue", "{homeDir}/.local/share/north/bin/skill-review-queue")}}, systemd.user.timers.skill-review-queue: {Unit: {Description: description}, Timer: {OnCalendar: "Mon 09:00", Persistent: true}, Install: {WantedBy: ["timers.target"]}}}

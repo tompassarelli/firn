@@ -1,0 +1,11 @@
+use firn/tags
+
+clang is a Module
+clang is tagged doom-emacs
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.clang.enable
+    "environment"
+      "systemPackages": [pkgs.clang]
+  option "myConfig"."modules"."clang"."enable": enable "Clang C/C++ compiler"

@@ -1,0 +1,11 @@
+use firn/tags
+
+tree is a Module
+tree is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.tree.enable
+    "environment"
+      "systemPackages": [pkgs.tree]
+  option "myConfig"."modules"."tree"."enable": enable "Enable tree file tree display utility"

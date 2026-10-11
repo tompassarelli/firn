@@ -1,0 +1,11 @@
+use firn/tags
+
+unzip is a Module
+unzip is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.unzip.enable
+    "environment"
+      "systemPackages": [pkgs.unzip]
+  option "myConfig"."modules"."unzip"."enable": enable "unzip archive tool"

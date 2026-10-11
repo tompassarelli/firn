@@ -1,0 +1,11 @@
+use firn/tags
+
+guix is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.guix.enable
+    "services"
+      "guix"
+        "enable": true
+  option "myConfig"."modules"."guix"."enable": enable "GNU Guix package manager"

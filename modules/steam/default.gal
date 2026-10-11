@@ -1,0 +1,13 @@
+use firn/tags
+
+steam is a Module
+steam is tagged gaming
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.steam.enable
+    "programs"
+      "steam"
+        "enable": true
+        "package": pkgs.unstable.steam
+  option "myConfig"."modules"."steam"."enable": enable "Steam gaming platform"

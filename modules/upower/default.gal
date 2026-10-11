@@ -1,0 +1,12 @@
+use firn/tags
+
+upower is a Module
+upower is tagged desktop
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.upower.enable
+    "services"
+      "upower"
+        "enable": true
+  option "myConfig"."modules"."upower"."enable": enable "UPower power management"

@@ -1,0 +1,11 @@
+use firn/tags
+
+uv is a Module
+uv is tagged python
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.uv.enable
+    "environment"
+      "systemPackages": [pkgs.uv]
+  option "myConfig"."modules"."uv"."enable": enable "uv Python package manager"

@@ -1,0 +1,11 @@
+use firn/tags
+
+swaylock is a Module
+swaylock is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.swaylock.enable
+    "environment"
+      "systemPackages": [pkgs.swaylock]
+  option "myConfig"."modules"."swaylock"."enable": enable "swaylock screen locker"

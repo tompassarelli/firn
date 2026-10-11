@@ -1,0 +1,11 @@
+use firn/tags
+
+bubblewrap is a Module
+bubblewrap is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.bubblewrap.enable
+    "environment"
+      "systemPackages": [pkgs.bubblewrap]
+  option "myConfig"."modules"."bubblewrap"."enable": enable "Enable bubblewrap sandbox (north readonly-shell requires bwrap)"

@@ -1,0 +1,23 @@
+use firn/tags
+
+beagle is a Module
+beagle is tagged development
+
+nix module
+  arguments: config, flakeRoot, lib, pkgs, ...
+  let liveInputs = with pkgs: [bash, coreutils, direnv, findutils, gawk, git, gnugrep, gnused]
+  let devCommandNames = ["beagle", "beagle-build", "beagle-check", "beagle-validate", "beagle-syntax", "beagle-fix", "beagle-repair", "beagle-doctor", "beagle-daemon", "beagle-lsp"]
+  let mkDev = (name) => pkgs.writeShellApplication({name: "{name}-dev", runtimeInputs: liveInputs, text: '''
+    checkout=${BEAGLE_CHECKOUT:-$HOME/code/beagle/main}
+    target=$checkout/bin/{{name}}
+    if [ ! -x "$target" ]; then
+      echo "{{name}}-dev: checkout executable missing: $target" >&2
+      exit 127
+    fi
+    echo "{{name}}-dev: provenance=checkout path=$target" >&2
+    exec "$target" "$@"
+    '''})
+  let devCommands = builtins.map(mkDev, devCommandNames)
+  option myConfig.modules.beagle.enable: enable "Beagle checkout development commands"
+  config when config.myConfig.modules.beagle.enable
+    environment.systemPackages: devCommands

@@ -1,0 +1,15 @@
+use firn/tags
+
+cloudflare-auth is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.cloudflare-auth.enable
+    "sops"
+      "secrets"
+        "cloudflare-global-api-key"
+          "owner": config.myConfig.modules.users.username
+          "sopsFile": config.myConfig.modules.cloudflare-auth.sopsFile
+  option "myConfig"."modules"."cloudflare-auth"."enable": enable "Cloudflare deployment credentials"
+  option "myConfig"."modules"."cloudflare-auth"."sopsFile": Text
+    description: "sops file holding Cloudflare deployment credentials"
