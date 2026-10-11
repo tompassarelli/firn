@@ -14,6 +14,5 @@ north/socrates/hooks/launch-critical-worktree-guard.test.py	57
 north/socrates/hooks/launch-critical-worktree-guard.test.sh	16
 north/socrates/hooks/session-kill-guard.test.sh	1
 north/socrates/hooks/tripwire-guard.test.sh	2
-north/socrates/lib/routing.test.sh	1
 north/socrates/scripts/agent-config-check.sh	1
 north/socrates/scripts/agent-config-check.test.sh	1

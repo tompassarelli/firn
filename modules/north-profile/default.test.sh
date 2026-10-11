@@ -8,7 +8,7 @@ firn_skill=$repo/modules/north-profile/firn/skills/firn/SKILL.md
 checker=${NORTH_AGENT_CONFIG_CHECK:-$HOME/code/north/main/socrates/scripts/agent-config-check.sh}
 claude_projection=$repo/modules/north-profile/claude-hooks.json
 claude_projector=$repo/modules/north-profile/claude-hook-projector.sh
-catalog=$repo/dotfiles/agents/catalog-config.json
+catalog=${AGENTS_OPERATOR_DIR:-$HOME/code/south/main/agents}/catalog-config.json
 
 for target in \
   instructions/shared/AGENTS.md \
@@ -29,7 +29,7 @@ grep -Fq 'native/nix/north-profile.clause' "$checker"
 grep -Fq 'projectNorthClaudeHooks' "$source_file"
 grep -Fq 'projectNorthClaudeHooks' "$generated_file"
 
-hook_units=$(jq '[.. | objects | select(.kind? == "hook")] | length' "$repo/dotfiles/agents/catalog-config.json")
+hook_units=$(jq '[.. | objects | select(.kind? == "hook")] | length' "$catalog")
 jq -e --argjson hook_units "$hook_units" '
   [
     .hooks[] | .[] | .hooks[] | select(.type == "command") | .command
