@@ -4,12 +4,18 @@
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   options.myConfig.modules.codex.configFile = lib.mkOption {
     type = lib.types.path;
-    default = "${flakeRoot}/dotfiles/codex/config.toml";
+    default = builtins.path {
+      path = "${flakeRoot}/dotfiles/codex/config.toml";
+      name = "config.toml";
+    };
     description = "Codex config.toml linked at ~/.codex/config.toml";
   };
   config = lib.mkIf config.myConfig.modules.codex.enable {
     environment.etc = {
-      "codex/requirements.toml".source = "${flakeRoot}/modules/codex/requirements.toml";
+      "codex/requirements.toml".source = builtins.path {
+        path = "${flakeRoot}/modules/codex/requirements.toml";
+        name = "requirements.toml";
+      };
       "codex/hooks/runtime/bash" = {
         source = "${pkgs.bash}/bin/bash";
       };

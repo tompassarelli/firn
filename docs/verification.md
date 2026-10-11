@@ -47,6 +47,27 @@ rebuilding.
 
 Verify whiterabbit and nexus.
 
+The drift landing check regenerates sources, builds
+`checks.x86_64-linux.nix-syntax`, and runs `.github/scripts/host-diff.sh build`
+with `SAFE_PUSH_LAND_BASE` and `SAFE_PUSH_LAND_HEAD`. The selector evaluates all
+NixOS and Darwin hosts in both Git snapshots, reports unchanged derivations as
+reused, and builds only changed derivations. `select` reports the same comparison
+without building. Removed hosts are reported; added hosts are built. A change
+touching only `docs/` or `*.test.sh`/`*.test.py` skips host evaluation. Both
+snapshots evaluate in parallel, and the base result is reused from
+`~/.cache/firn/host-drvs` by Git tree hash and Nix version. Compiler drift is
+skipped when a committed clean tree's compiler input hash (every `.bnix`,
+`.clause`, `.nix` and `native/` blob, the installed runtime version and the
+Beagle revision) already passed, recorded in `~/.cache/firn/compiler-drift`.
+
+Snapshots use path flakes to exclude Git revision metadata from the comparison;
+deployment still uses committed snapshots through `firn rebuild`. File references
+must use individual paths rather than strings carrying the entire flake root.
+`checks.x86_64-linux.host-whiterabbit` also exposes the system build as a reusable
+check. The syntax check hashes only Nix files, so docs edits reuse it. Compiler
+drift remains outside the pure checks because its Beagle and Clause runtimes are
+installed out of store.
+
 The schema transaction suite keeps the SHA-256 `abc` vector from
 [RFC 6234, section 8.5](https://www.rfc-editor.org/rfc/rfc6234.html#section-8.5)
 as its external reference, separately from generated schema properties.

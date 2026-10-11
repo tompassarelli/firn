@@ -20,13 +20,19 @@
      :options.myConfig.modules.codex.configFile
       (lib.mkOption
         {:type lib.types.path
-         :default (s flakeRoot "/dotfiles/codex/config.toml")
+         :default
+          (builtins.path
+            {:path (s flakeRoot "/dotfiles/codex/config.toml")
+             :name "config.toml"})
          :description "Codex config.toml linked at ~/.codex/config.toml"})
      :config
       (lib.mkIf config.myConfig.modules.codex.enable
         {:environment.etc
           {"codex/requirements.toml"
-            {:source (s flakeRoot "/modules/codex/requirements.toml")}
+            {:source
+              (builtins.path
+                {:path (s flakeRoot "/modules/codex/requirements.toml")
+                 :name "requirements.toml"})}
            "codex/hooks/runtime/bash"
             {:source (s pkgs.bash "/bin/bash")}
            "codex/hooks/runtime/cat"

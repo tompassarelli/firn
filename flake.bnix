@@ -376,6 +376,27 @@
                      extraOverlays)}]
                 extraModules)}))
        :modules firnModules
+       :checks.x86_64-linux
+        {:host-whiterabbit
+          self.nixosConfigurations.whiterabbit.config.system.build.toplevel
+         :nix-syntax
+          (let
+            [pkgs nixpkgs.legacyPackages.x86_64-linux
+             source
+              (nixpkgs.lib.fileset.toSource
+                {:root (p "./.")
+                 :fileset
+                  (nixpkgs.lib.fileset.fileFilter
+                    (fn [file] Any (file.hasExt "nix"))
+                    (p "./."))})]
+            (pkgs.runCommand "firn-nix-syntax"
+              {:nativeBuildInputs [pkgs.nix pkgs.findutils]}
+              (ms
+                "export NIX_STATE_DIR=\"$TMPDIR/nix-state\""
+                (s "find " source " -type f -name '*.nix' -print0 | while IFS= read -r -d '' file; do")
+                "  nix-instantiate --store dummy:// --parse \"$file\" >/dev/null"
+                "done"
+                "touch $out")))}
        :homeConfigurations
         {(s "tom@whiterabbit") whiterabbitEnvironment}
        :packages.x86_64-linux.whiterabbit-environment

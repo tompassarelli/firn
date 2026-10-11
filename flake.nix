@@ -302,6 +302,21 @@
       ] ++ extraModules);
     });
     modules = firnModules;
+    checks.x86_64-linux = {
+      host-whiterabbit = self.nixosConfigurations.whiterabbit.config.system.build.toplevel;
+      nix-syntax = ((pkgs: ((source: pkgs.runCommand "firn-nix-syntax" {
+        nativeBuildInputs = [ pkgs.nix pkgs.findutils ];
+      } ''
+        export NIX_STATE_DIR="$TMPDIR/nix-state"
+        find ${source} -type f -name '*.nix' -print0 | while IFS= read -r -d ''' file; do
+          nix-instantiate --store dummy:// --parse "$file" >/dev/null
+        done
+        touch $out
+      '') (nixpkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = nixpkgs.lib.fileset.fileFilter (file: file.hasExt "nix") ./.;
+        }))) nixpkgs.legacyPackages.x86_64-linux);
+    };
     homeConfigurations = {
       "tom@whiterabbit" = whiterabbitEnvironment;
     };
