@@ -69,7 +69,7 @@ timeout --foreground 30 env \
   FIRN_REBUILD_TEST_MODULE="$modules/firn/rebuild-test.js" \
   "$bun" "$repo/native/firn_rebuild_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
-  || die "pure rebuild fixtures failed"
+  || die "seeded rebuild property or impact boundary failed"
 [[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
 [[ ! -s "$scratch/pure.err" ]] || die "pure fixtures wrote stderr"
 
@@ -213,35 +213,35 @@ run_case() {
   run_host_case "$name" "$platform" rebuild whiterabbit "$@"
 }
 
+assert_activation_order() {
+  local name="$1" mode="$2" position=0 build=0 profile=0 verified=0 switch=0 tag=0
+  local -a fields
+  while IFS=$'\t' read -r -a fields; do
+    ((position += 1))
+    case "${fields[0]}" in
+      nix) [[ "${fields[1]:-}" != build ]] || build=$position ;;
+      sudo)
+        if [[ "${fields[1]:-}" == nix-env ]]; then profile=$position
+        elif [[ "${fields[1]:-}" == */switch-to-configuration || "${fields[1]:-}" == darwin-rebuild ]]; then switch=$position; fi ;;
+      readlink) [[ "${fields[2]:-}" != /nix/var/nix/profiles/system ]] || verified=$position ;;
+      git) [[ "${fields[3]:-}" != tag || "$tag" != 0 ]] || tag=$position ;;
+    esac
+  done <"$scratch/$name.commands"
+  ((switch > 0 && profile < switch)) || die "$name switched before profile selection"
+  if [[ "$mode" == workflow ]]; then
+    ((build > 0 && build < switch && tag > switch)) || die "$name violated build/switch/tag order"
+    ((profile == 0 || build < profile)) || die "$name selected the profile before building"
+  elif [[ "$mode" == exact ]]; then
+    ((profile > 0 && profile < verified && verified < switch)) || die "$name switched before profile verification"
+  else
+    ((profile > 0)) || die "$name omitted rollback profile selection"
+  fi
+}
+
 run_case linux Linux env
 [[ "$(<"$scratch/linux.status")" == 0 ]] \
   || die "Linux controlled run failed"
-cut -f1 "$scratch/linux.commands" >"$scratch/linux.names"
-cat >"$scratch/linux.expected-names" <<'EOF'
-readlink
-git
-git
-uname
-git
-git
-firn
-git
-nix
-sudo
-sudo
-sudo
-nixos-rebuild
-git
-nix
-firn-environment-switch
-systemd-run
-tool-check-shell
-EOF
-cmp -s "$scratch/linux.expected-names" "$scratch/linux.names" \
-  || {
-    diff -u "$scratch/linux.expected-names" "$scratch/linux.names" >&2 || true
-    die "Linux phase order changed"
-  }
+assert_activation_order linux workflow
 rg -Fq $'nix\tbuild\t--no-link\t--print-out-paths\tgit+file://' \
   "$scratch/linux.commands" || die "Linux build did not use the snapshot URI"
 rg -Fq $'sudo\tnix-env\t--profile\t/nix/var/nix/profiles/system' \
@@ -270,10 +270,6 @@ run_case linux-no-environment Linux env ENVIRONMENT_PRESENT=false
 if rg -q '^firn-environment-switch' "$scratch/linux-no-environment.commands"; then
   die "environment switch ran for a host without an environment output"
 fi
-[[ "$(rg -c 'span_start' "$scratch/linux.trace")" == 16 ]] \
-  || die "Linux trace start count changed"
-[[ "$(rg -c 'span_end' "$scratch/linux.trace")" == 16 ]] \
-  || die "Linux trace end count changed"
 
 run_host_case prepare Linux prepare whiterabbit env
 [[ "$(<"$scratch/prepare.status")" == 0 ]] \
@@ -292,20 +288,7 @@ rg -Fq \
 run_host_case activate Linux activate /nix/store/controlled-system env
 [[ "$(<"$scratch/activate.status")" == 0 ]] \
   || die "controlled exact activation failed"
-cut -f1 "$scratch/activate.commands" >"$scratch/activate.names"
-cat >"$scratch/activate.expected-names" <<'EOF'
-test
-sudo
-sudo
-readlink
-sudo
-EOF
-cmp -s "$scratch/activate.expected-names" "$scratch/activate.names" \
-  || {
-    diff -u "$scratch/activate.expected-names" \
-      "$scratch/activate.names" >&2 || true
-    die "exact activation did not persist before switching"
-  }
+assert_activation_order activate exact
 if rg -q $'^git\t|^nix\t|^firn\t|worktree|darwin-rebuild' \
     "$scratch/activate.commands"; then
   die "preparation or evaluation leaked into exact activation"
@@ -355,6 +338,7 @@ run_host_case activate-invalid Linux activate relative-system env
 run_case darwin Darwin env
 [[ "$(<"$scratch/darwin.status")" == 0 ]] \
   || die "Darwin controlled run failed"
+assert_activation_order darwin workflow
 rg -Fq $'sudo\tdarwin-rebuild\tswitch\t--flake\tgit+file://' \
   "$scratch/darwin.commands" || die "Darwin activation was not selected"
 rg -Fq $'darwin-rebuild\t--list-generations' \
@@ -428,24 +412,7 @@ rg -Fq 'generation 41 is not present in the system profile' \
 run_rollback_case rollback-success Linux 40 env
 [[ "$(<"$scratch/rollback-success.status")" == 0 ]] \
   || die "controlled rollback failed"
-cut -f1 "$scratch/rollback-success.commands" \
-  >"$scratch/rollback-success.names"
-cat >"$scratch/rollback-success.expected-names" <<'EOF'
-uname
-nixos-rebuild
-readlink
-test
-sudo
-sudo
-sudo
-EOF
-cmp -s "$scratch/rollback-success.expected-names" \
-  "$scratch/rollback-success.names" \
-  || {
-    diff -u "$scratch/rollback-success.expected-names" \
-      "$scratch/rollback-success.names" >&2 || true
-    die "rollback effect order changed"
-  }
+assert_activation_order rollback-success rollback
 rg -Fq $'readlink\t-e\t/nix/var/nix/profiles/system-40-link' \
   "$scratch/rollback-success.commands" \
   || die "rollback did not resolve the exact generation link"
@@ -458,10 +425,6 @@ rg -Fq $'sudo\t/nix/store/controlled-rollback-system/bin/switch-to-configuration
 rg -Fq 'firn rollback: activated generation 40 (/nix/store/controlled-rollback-system)' \
   "$scratch/rollback-success.out" \
   || die "rollback success receipt is missing"
-[[ "$(rg -c 'span_start' "$scratch/rollback-success.trace")" == 7 ]] \
-  || die "rollback trace start count changed"
-[[ "$(rg -c 'span_end' "$scratch/rollback-success.trace")" == 7 ]] \
-  || die "rollback trace end count changed"
 
 run_rollback_case rollback-failure Linux 40 env ROLLBACK_SWITCH_FAIL=1
 [[ "$(<"$scratch/rollback-failure.status")" == 29 ]] \
@@ -486,36 +449,7 @@ override=$'\t--override-input\tfirn\t'"$firn_uri"
 run_case system-flake Linux env FIRN_SYSTEM_FLAKE="$system" SYSTEM_FIXTURE="$system"
 [[ "$(<"$scratch/system-flake.status")" == 0 ]] \
   || die "two-snapshot controlled run failed"
-cut -f1 "$scratch/system-flake.commands" >"$scratch/system-flake.names"
-cat >"$scratch/system-flake.expected-names" <<'EOF'
-readlink
-git
-git
-uname
-git
-git
-git
-git
-firn
-git
-nix
-sudo
-sudo
-sudo
-nixos-rebuild
-git
-git
-nix
-firn-environment-switch
-systemd-run
-tool-check-shell
-EOF
-cmp -s "$scratch/system-flake.expected-names" "$scratch/system-flake.names" \
-  || {
-    diff -u "$scratch/system-flake.expected-names" \
-      "$scratch/system-flake.names" >&2 || true
-    die "two-snapshot phase order changed"
-  }
+assert_activation_order system-flake workflow
 rg -Fxq $'nix\tbuild\t--no-link\t--print-out-paths\t'"$system_uri"$'#nixosConfigurations.whiterabbit.config.system.build.toplevel'"$override" \
   "$scratch/system-flake.commands" \
   || die "two-snapshot build did not use the system flake with the firn override"

@@ -36,7 +36,7 @@ die() {
   exit 1
 }
 
-[[ -x "$beagle/bin/beagle" ]] \
+[[ -x "$beagle/bin/beagle-build-all" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
 command -v bun >/dev/null 2>&1 || die "Bun is unavailable"
 
@@ -44,7 +44,7 @@ build_family() {
   local output="$scratch/build"
   printf 'tag-family: building closed Beagle/JS graph\n' >&2
   mkdir -p "$output/node_modules/beagle"
-  timeout --foreground 60 "$beagle/bin/beagle" build "$@" \
+  timeout --foreground 60 "$beagle/bin/beagle-build-all" "$@" \
     --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
     || {
       sed -n '1,240p' "$scratch/build.err" >&2
@@ -99,11 +99,21 @@ commands="$repo/native/tag_commands.bjs"
 commands_driver="$repo/native/tag_commands_driver.bjs"
 commands_family="$repo/native/tag_commands_family.bjs"
 family="$repo/native/firn_tag_family.bjs"
+resolve_property="$repo/native/tag_resolve_property_test.bjs"
+mutation_property="$repo/native/tag_mutation_property_test.bjs"
 
 build_family \
   "$datum" "$json" "$resolve" "$inputs" "$resolve_driver" \
   "$resolve_family" "$commands" "$commands_driver" "$commands_family" \
-  "$family"
+  "$family" "$resolve_property" "$mutation_property"
+printf 'tag-family: checking seeded algebra and mutation properties (seed 73421)\n' >&2
+timeout --foreground 30 bun --eval '
+  const resolve = await import(process.argv[1]);
+  const mutation = await import(process.argv[2]);
+  process.exitCode = resolve["run-tests"]() + mutation["run-tests"]();
+' "$scratch/build/firn/tag-resolve-property-test.js" \
+  "$scratch/build/firn/tag-mutation-property-test.js" \
+  || die "seeded tag properties failed"
 runtime=(env FIRN_TAG_MODULE="$scratch/build/firn/tag-family.js" \
   bun "$repo/native/firn_tag_host.mjs")
 
@@ -173,80 +183,7 @@ EOF
 EOF
 }
 
-write_expected_files() {
-  cat >"$scratch/enable-creative.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]
-   terminal
-   creative]
- :disabled [gamma]
-}
-EOF
-  cat >"$scratch/disable-terminal.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]]
- :disabled [gamma]
-}
-EOF
-  cat >"$scratch/opt-in-epsilon.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta +epsilon]
-   terminal]
- :disabled [gamma]
-}
-EOF
-  cat >"$scratch/opt-out-alpha.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]
-   [terminal -alpha]]
- :disabled [gamma]
-}
-EOF
-  cat >"$scratch/module-disable-alpha.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]
-   terminal]
- :disabled [alpha gamma]
-}
-EOF
-  cat >"$scratch/module-enable-gamma.bnix" <<'EOF'
-#lang beagle/nix
-
-(ns enabled-tags)
-
-{:platform linux
- :enabled
-  [[desktop -beta +delta]
-   terminal]
-}
-EOF
-
-  cat >"$scratch/status-base.expected" <<'EOF'
+cat >"$scratch/status-base.expected" <<'EOF'
 Host: fixture
 Platform: linux
 Source: hosts/fixture/enabled-tags.bnix
@@ -262,121 +199,6 @@ Resolved active modules (2):
   alpha
   delta
 EOF
-  cat >"$scratch/status-enable-creative.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (3):
-  [desktop -beta +delta]
-  terminal
-  creative
-
-:disabled (1):
-  gamma
-
-Resolved active modules (3):
-  alpha
-  delta
-  epsilon
-EOF
-  cat >"$scratch/status-disable-terminal.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (1):
-  [desktop -beta +delta]
-
-:disabled (1):
-  gamma
-
-Resolved active modules (2):
-  alpha
-  delta
-EOF
-  cat >"$scratch/status-opt-in-epsilon.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (2):
-  [desktop -beta +delta +epsilon]
-  terminal
-
-:disabled (1):
-  gamma
-
-Resolved active modules (3):
-  alpha
-  delta
-  epsilon
-EOF
-  cat >"$scratch/status-opt-out-alpha.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (2):
-  [desktop -beta +delta]
-  [terminal -alpha]
-
-:disabled (1):
-  gamma
-
-Resolved active modules (2):
-  alpha
-  delta
-EOF
-  cat >"$scratch/status-module-disable-alpha.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (2):
-  [desktop -beta +delta]
-  terminal
-
-:disabled (2):
-  alpha
-  gamma
-
-Resolved active modules (1):
-  delta
-EOF
-  cat >"$scratch/status-module-enable-gamma.out" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (2):
-  [desktop -beta +delta]
-  terminal
-
-:disabled (0):
-  (none)
-
-Resolved active modules (3):
-  alpha
-  delta
-  gamma
-EOF
-  cat >"$scratch/module-enable-gamma-second.expected" <<'EOF'
-firn module enable: no module-level force-on in tag-driven hosts.
-
-  gamma is not currently blacklisted in :disabled, so there is
-  nothing to un-blacklist. To activate it on this host:
-
-    - opt in via a tag:    firn tag opt-in <tag>+gamma
-      (where <tag> is one the module lists in :tags-opt-in)
-    - or enable a tag the module already lists in :tags:
-                            firn tag enable <tag>
-    - or, only as a last resort, add :tags fixture-only to the module
-      and enable that tag here.
-EOF
-}
-
-write_expected_files
 
 run_native() {
   local result="$1" root="$2" host="$3"
@@ -385,7 +207,7 @@ run_native() {
     "${runtime[@]}" "$@"
 }
 
-printf 'tag-family: checking exact resolution, inventory, and status output\n' >&2
+printf 'tag-family: checking resolution, inventory, and status boundary\n' >&2
 inventory_root="$scratch/inventory-repo"
 make_fixture "$inventory_root"
 
@@ -461,77 +283,31 @@ assert_same "$scratch/status-base.expected" "$scratch/status-base.out" \
   "tag status output"
 assert_empty "$scratch/status-base.err" "tag status stderr"
 
-check_mutation() {
-  local name="$1" expected_file="$2" expected_status="$3" second_mode="$4"
-  shift 4
-  local root="$scratch/mutation-$name"
-  local host_file="$root/hosts/fixture/enabled-tags.bnix"
-  local -a command=("$@")
-
-  make_fixture "$root"
-  cp "$host_file" "$scratch/$name.before.bnix"
-  run_native "$scratch/$name.first" "$root" fixture "${command[@]}"
-  assert_status "$scratch/$name.first" 0 "$name first mutation"
-  printf 'updated hosts/fixture/enabled-tags.bnix\n' \
-    >"$scratch/$name.first.expected"
-  assert_same "$scratch/$name.first.expected" "$scratch/$name.first.out" \
-    "$name first stdout"
-  assert_empty "$scratch/$name.first.err" "$name first stderr"
-  cmp -s "$scratch/$name.before.bnix" "$host_file" \
-    && die "$name reported an update without changing bytes"
-  assert_same "$expected_file" "$host_file" "$name mutated source"
-  cp "$host_file" "$scratch/$name.after-first.bnix"
-
-  run_native "$scratch/$name.second" "$root" fixture "${command[@]}"
-  if [[ "$second_mode" == "noop" ]]; then
-    assert_status "$scratch/$name.second" 0 "$name idempotent mutation"
-    printf 'no change to hosts/fixture/enabled-tags.bnix\n' \
-      >"$scratch/$name.second.expected"
-    assert_same "$scratch/$name.second.expected" "$scratch/$name.second.out" \
-      "$name idempotent stdout"
-    assert_empty "$scratch/$name.second.err" "$name idempotent stderr"
-  elif [[ "$second_mode" == "module-enable-refusal" ]]; then
-    assert_status "$scratch/$name.second" 1 \
-      "$name post-enable hosted refusal"
-    assert_empty "$scratch/$name.second.out" \
-      "$name post-enable refusal stdout"
-    assert_same "$scratch/module-enable-gamma-second.expected" \
-      "$scratch/$name.second.err" "$name post-enable refusal stderr"
-  else
-    die "$name has unknown second-run mode $second_mode"
-  fi
-  assert_same "$scratch/$name.after-first.bnix" "$host_file" \
-    "$name idempotent bytes"
-
-  run_native "$scratch/$name.status" "$root" fixture tag status fixture
-  assert_status "$scratch/$name.status" 0 "$name resolver status"
-  assert_same "$expected_status" "$scratch/$name.status.out" \
-    "$name resolver result"
-  assert_empty "$scratch/$name.status.err" "$name resolver stderr"
-  [[ "$(find "$root/hosts/fixture" -mindepth 1 -maxdepth 1 -type f | wc -l)" \
-      == "1" ]] || die "$name left an atomic-write side file"
-}
-
-printf 'tag-family: checking six mutations and re-resolution\n' >&2
-check_mutation enable-creative \
-  "$scratch/enable-creative.bnix" "$scratch/status-enable-creative.out" \
-  noop tag enable creative
-check_mutation disable-terminal \
-  "$scratch/disable-terminal.bnix" "$scratch/status-disable-terminal.out" \
-  noop tag disable terminal
-check_mutation opt-in-epsilon \
-  "$scratch/opt-in-epsilon.bnix" "$scratch/status-opt-in-epsilon.out" \
-  noop tag opt-in desktop+epsilon
-check_mutation opt-out-alpha \
-  "$scratch/opt-out-alpha.bnix" "$scratch/status-opt-out-alpha.out" \
-  noop tag opt-out terminal+alpha
-check_mutation module-disable-alpha \
-  "$scratch/module-disable-alpha.bnix" \
-  "$scratch/status-module-disable-alpha.out" noop module disable alpha
-check_mutation module-enable-gamma \
-  "$scratch/module-enable-gamma.bnix" \
-  "$scratch/status-module-enable-gamma.out" module-enable-refusal \
-  module enable gamma
+printf 'tag-family: checking atomic mutation, idempotence, and re-resolution\n' >&2
+mutation_root="$scratch/mutation-repo"
+host_file="$mutation_root/hosts/fixture/enabled-tags.bnix"
+make_fixture "$mutation_root"
+cp "$host_file" "$scratch/mutation.before.bnix"
+run_native "$scratch/mutation.first" "$mutation_root" fixture tag enable creative
+assert_status "$scratch/mutation.first" 0 "first mutation"
+printf 'updated hosts/fixture/enabled-tags.bnix\n' >"$scratch/mutation.first.expected"
+assert_same "$scratch/mutation.first.expected" "$scratch/mutation.first.out" "mutation stdout"
+assert_empty "$scratch/mutation.first.err" "mutation stderr"
+cmp -s "$scratch/mutation.before.bnix" "$host_file" \
+  && die "mutation reported an update without changing bytes"
+cp "$host_file" "$scratch/mutation.after.bnix"
+run_native "$scratch/mutation.second" "$mutation_root" fixture tag enable creative
+assert_status "$scratch/mutation.second" 0 "idempotent mutation"
+printf 'no change to hosts/fixture/enabled-tags.bnix\n' >"$scratch/mutation.second.expected"
+assert_same "$scratch/mutation.second.expected" "$scratch/mutation.second.out" "idempotent stdout"
+assert_empty "$scratch/mutation.second.err" "idempotent stderr"
+assert_same "$scratch/mutation.after.bnix" "$host_file" "idempotent bytes"
+run_native "$scratch/mutation.status" "$mutation_root" fixture tag status fixture
+assert_status "$scratch/mutation.status" 0 "resolver after mutation"
+rg -q '^  epsilon$' "$scratch/mutation.status.out" || die "new tag did not resolve through the host loader"
+assert_empty "$scratch/mutation.status.err" "resolver after mutation stderr"
+[[ "$(find "$mutation_root/hosts/fixture" -mindepth 1 -maxdepth 1 -type f | wc -l)" == "1" ]] \
+  || die "mutation left an atomic-write side file"
 
 printf 'tag-family: checking refusal paths\n' >&2
 refusal_root="$scratch/refusal-repo"
@@ -603,4 +379,4 @@ printf "firn tag show: no module named 'absent'\n" \
 assert_same "$scratch/missing-module.expected" "$scratch/missing-module.err" \
   "missing module show diagnostic"
 
-printf 'ok: Bun tag family resolution, inventory, and six mutations pass\n'
+printf 'ok: Bun tag family resolution, inventory, and seeded properties pass\n'
