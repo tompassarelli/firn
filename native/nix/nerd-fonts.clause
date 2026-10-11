@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export nerd-fonts-module()
-  configuration-module(path(myConfig.modules.nerd-fonts.enable),
-    "Nerd Fonts symbols",
-    {fonts: {packages: [package(path(nerd-fonts.symbols-only))]}})

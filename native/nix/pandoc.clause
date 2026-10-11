@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export pandoc-module()
-  module(path(myConfig.modules.pandoc.enable), "Pandoc document converter", package(path(pandoc)))

@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export nautilus-module()
-  configuration-module(path(myConfig.modules.nautilus.enable),
-    "Nautilus file manager",
-    {environment: {systemPackages: [package(path(nautilus))]},
-     services: {gvfs: {enable: true}}})

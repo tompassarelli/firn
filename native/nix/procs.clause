@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export procs-module()
-  module(path(myConfig.modules.procs.enable), "Enable procs (modern ps replacement)", package(path(procs)))

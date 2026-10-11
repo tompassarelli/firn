@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export wl-clipboard-module()
-  module(path(myConfig.modules.wl-clipboard.enable), "Wayland clipboard utilities", package(path(wl-clipboard)))

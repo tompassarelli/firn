@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export pkg-config-module()
-  module(path(myConfig.modules.pkg-config.enable), "pkg-config build tool", package(path(pkg-config)))

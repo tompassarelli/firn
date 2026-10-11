@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export polkit-module()
-  configuration-module(path(myConfig.modules.polkit.enable),
-    "Polkit security configuration",
-    {security: {polkit: {enable: true}}})

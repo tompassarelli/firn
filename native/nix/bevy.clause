@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-bevy-configuration(?libraries: Sequence<Delayed<nix,Package>>)
-  configuration-module(path(myConfig.modules.bevy.enable), "Bevy game engine development libraries",
-    {environment: {systemPackages: ?libraries}, programs: {nix-ld: {libraries: ?libraries}}})
-
-export bevy-module()
-  bevy-configuration([package(path(alsa-lib)), package(path(vulkan-loader)), package(path(vulkan-tools)), package(path(wayland)), package(path(libxkbcommon)), package(path(xorg.libX11)), package(path(xorg.libXcursor)), package(path(xorg.libXrandr)), package(path(xorg.libXi)), package(path(libudev-zero))])

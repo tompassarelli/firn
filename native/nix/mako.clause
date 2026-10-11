@@ -1,9 +1,0 @@
-import "nixpkgs.clause"
-
-export mako-module()
-  configuration-module(path(myConfig.modules.mako.enable), "Mako notification daemon",
-    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {services: {mako: {enable: true,
-        settings: {default-timeout: 0, icons: 0,
-          "app-name=kitty": {default-timeout: 0},
-          "app-name=Spotify": {invisible: 1}}}}})}})

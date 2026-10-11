@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export bc-module()
-  module(path(myConfig.modules.bc.enable), "Enable bc arbitrary-precision calculator language", package(path(bc)))

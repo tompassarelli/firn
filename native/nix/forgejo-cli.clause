@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export forgejo-cli-module()
-  module(path(myConfig.modules.forgejo-cli.enable), "Forgejo CLI for repo / issue / CI ops against codeberg + other Forgejo instances", package(path(forgejo-cli)))

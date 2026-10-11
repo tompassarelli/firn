@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export spotify-module()
-  module(path(myConfig.modules.spotify.enable), "Spotify TUI player", package(path(spotify)))

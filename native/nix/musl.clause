@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export musl-module()
-  module(path(myConfig.modules.musl.enable), "musl C compiler toolchain", package(path(musl.dev)))

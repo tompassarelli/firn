@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export rust-analyzer-module()
-  module(path(myConfig.modules.rust-analyzer.enable), "Rust language server", package(path(unstable.rust-analyzer)))

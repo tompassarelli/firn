@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export zoxide-module()
-  configuration-module(path(myConfig.modules.zoxide.enable), "zoxide smart directory jumper",
-    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {programs: {bash: {shellAliases: {cd: "z"}},
-                  zoxide: {enable: true, enableBashIntegration: true}}})}})

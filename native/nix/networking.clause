@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-export networking-module()
-  configuration-module(path(myConfig.modules.networking.enable),
-    "network configuration",
-    {networking: {networkmanager: {enable: true,
-       unmanaged: ["interface-name:wg*"], wifi: {powersave: false}, logLevel: "DEBUG"}},
-     environment: {systemPackages: [package(path(networkmanagerapplet))]}})

@@ -8,14 +8,6 @@
 (def max-directory-entries Int 16384)
 
 (js/export
-  (defunion ModuleSourceSelection
-  (ModuleSourceSelected
-    [source String
-     metadata String
-     output String])
-  (ModuleSelectionRejected [message String])))
-
-(js/export
   (defunion DirectoryNamesResult
   (DirectoryNamesLoaded [names (Vec String)])
   (DirectoryNamesRejected [message String])))
@@ -99,146 +91,46 @@
                     (errno-message "cannot inspect"
                       (str relative "/" name) kind-errno))))))))))))
 
-(defn clause-delimiter? [character String] Bool
-  (or (= character " ")
-      (= character "\t")
-      (= character "\r")
-      (= character "\n")
-      (= character "[")))
-
-(defn clause-at?
-  [source String
-   offset Int
-   clause String] Bool
-  (let [end Int (+ offset (count clause))]
-    (and (<= end (count source))
-         (= (subs source offset end) clause)
-         (< end (count source))
-         (clause-delimiter? (subs source end (+ end 1))))))
-
-(defn source-has-tag-clause? [source String] Bool
-  (loop [offset Int 0]
-    (if (>= offset (count source))
-      false
-      (if (or (clause-at? source offset ":tags")
-              (clause-at? source offset ":tags-opt-in")
-              (clause-at? source offset ":tag-overrides"))
-        true
-        (recur (+ offset 1))))))
-
-(defn empty-module [name String] r/ModuleTags
-  (r/->ModuleTags name [] [] []))
-
-(js/export
-  (defn module-source
-    [bridge Any
-     root String
-     name String] ModuleSourceSelection
-    (let [directory String (str "modules/" name "/")
-          beagle String (str directory "default.bnix")
-          metadata String (str directory "tags.clause")
-          output String (str directory "default.nix")
-          marker Any (.pathKind bridge (path root metadata))
-          marker-errno Int (.status bridge marker)]
-      (cond
-      [(= marker-errno 2) (->ModuleSourceSelected beagle beagle output)]
-      [(not (= marker-errno 0))
-       (->ModuleSelectionRejected (errno-message "cannot inspect" metadata marker-errno))]
-      [:else
-       (let [prior Any (.pathKind bridge (path root beagle))
-             prior-errno Int (.status bridge prior)
-             clause String (str "native/nix/" name ".clause")
-             source Any (.pathKind bridge (path root clause))
-             source-errno Int (.status bridge source)]
-         (cond
-           [(= prior-errno 0)
-            (->ModuleSelectionRejected
-              (str "firn: competing module sources: " beagle " and " metadata "\n"))]
-           [(not (= prior-errno 2))
-            (->ModuleSelectionRejected (errno-message "cannot inspect" beagle prior-errno))]
-           [(not (= source-errno 0))
-            (->ModuleSelectionRejected (errno-message "cannot inspect" clause source-errno))]
-           [(or (not (or (= (.value bridge marker) 1) (= (.value bridge marker) 3)))
-                (not (or (= (.value bridge source) 1) (= (.value bridge source) 3))))
-            (->ModuleSelectionRejected (str "firn: module source and tag metadata must be files: " clause "\n"))]
-           [:else (->ModuleSourceSelected clause metadata output)]))]))))
-
-(defn load-clause-tags
+(defn override-values
   [bridge Any
-   root String
+   facts Any
    name String
-   relative String] ModulesLoadResult
-  (let [compiler (U String Nil) (.env bridge "FIRN_CLAUSE_WORKBENCH")]
-    (if (nil? compiler)
-      (->ModulesRejected
-        "firn: set FIRN_CLAUSE_WORKBENCH to the compiler built from config/clause-revision\n")
-      (let [result Any (.readModuleMetadataSource bridge compiler
-                         (path root relative)
-                         (path root ".firn-build/clause-tags") max-source-bytes)
-            status Int (.status bridge result)]
-        (if (= status 0)
-          (let [tags (Vec String) (.metadataTags bridge result)
-                opt-in (Vec String) (.metadataOptIn bridge result)]
-            (->ModulesLoaded [(r/->ModuleTags name tags opt-in [])]))
-          (->ModulesRejected
-            (str "firn: cannot load module tags '" relative "': "
-                 (.message bridge result) "\n")))))))
+   tag String] (Vec r/OverrideValue)
+  (loop [paths (Vec String) (.factOverridePaths bridge facts name tag)
+         values (Vec r/OverrideValue) []]
+    (if (= (count paths) 0)
+      values
+      (let [override-path String (first paths)
+            literal String (.factOverrideLiteral bridge facts name tag override-path)]
+        (recur (rest paths) (conj values (r/->OverrideValue override-path literal)))))))
 
-(defn load-beagle-module
+(defn module-overrides
   [bridge Any
-   root String
-   name String] ModulesLoadResult
-  (let [relative String (str "modules/" name "/default.bnix")
-        absolute String (path root relative)
-        kind-result Any (.pathKind bridge absolute)
-        kind-errno Int (.status bridge kind-result)]
-    (if (not (= kind-errno 0))
-      (if (= kind-errno 2)
-        (->ModulesLoaded [(empty-module name)])
-        (->ModulesRejected
-          (errno-message "cannot inspect" relative kind-errno)))
-      (let [kind Int (.value bridge kind-result)]
-        (if (not (or (= kind 1) (= kind 3)))
-          (->ModulesLoaded [(empty-module name)])
-          (let [read-result Any (.readText bridge absolute max-source-bytes)
-                read-errno Int (.status bridge read-result)]
-            (if (not (= read-errno 0))
-              (->ModulesRejected
-                (errno-message "cannot read" relative read-errno))
-              (let [source String (.value bridge read-result)]
-                (if (not (source-has-tag-clause? source))
-                  (->ModulesLoaded [(empty-module name)])
-                  (match (input/module-tags-from-source name source)
-                    [(ModuleSourceParsed value)
-                     (->ModulesLoaded [value])]
-                    [(ModuleSourceRejected message offset)
-                     (->ModulesRejected
-                       (parse-message "module tag source" relative message
-                         offset))]))))))))))
+   facts Any
+   name String] (Vec r/TaggedOverrides)
+  (loop [tags (Vec String) (.factOverrideTags bridge facts name)
+         overrides (Vec r/TaggedOverrides) []]
+    (if (= (count tags) 0)
+      overrides
+      (let [tag String (first tags)]
+        (recur (rest tags)
+          (conj overrides
+            (r/->TaggedOverrides tag (override-values bridge facts name tag))))))))
 
-(defn load-module
+(defn modules-from-facts
   [bridge Any
-   root String
-   name String] ModulesLoadResult
-  (match (module-source bridge root name)
-    [(ModuleSelectionRejected message) (->ModulesRejected message)]
-    [(ModuleSourceSelected source metadata output)
-     (if (= source metadata)
-       (load-beagle-module bridge root name)
-       (load-clause-tags bridge root name metadata))]))
-
-(defn load-modules-from
-  [bridge Any
-   root String
-   names (Vec String)
-   index Int
-   modules (Vec r/ModuleTags)] ModulesLoadResult
-  (if (>= index (count names))
-    (->ModulesLoaded modules)
-    (match (load-module bridge root (nth names index))
-      [(ModulesRejected message) (->ModulesRejected message)]
-      [(ModulesLoaded loaded)
-       (load-modules-from bridge root names (+ index 1) (into modules loaded))])))
+   facts Any
+   names (Vec String)] (Vec r/ModuleTags)
+  (loop [remaining (Vec String) names
+         modules (Vec r/ModuleTags) []]
+    (if (= (count remaining) 0)
+      modules
+      (let [name String (first remaining)
+            tags (Vec String) (.factTags bridge facts name)
+            opt-in (Vec String) (.factOptIn bridge facts name)]
+        (recur (rest remaining)
+          (conj modules
+            (r/->ModuleTags name tags opt-in (module-overrides bridge facts name))))))))
 
 (js/export
  (defn load-modules
@@ -246,7 +138,14 @@
     root String] ModulesLoadResult
    (match (directory-names bridge root "modules")
     [(DirectoryNamesRejected message) (->ModulesRejected message)]
-    [(DirectoryNamesLoaded names) (load-modules-from bridge root names 0 [])])))
+    [(DirectoryNamesLoaded names)
+     (let [result Any (.readModuleFacts bridge root)
+           status Int (.status bridge result)]
+       (if (= status 0)
+         (->ModulesLoaded (modules-from-facts bridge (.value bridge result) names))
+         (->ModulesRejected
+           (str "firn: cannot load module tags through galileo query: "
+                (.moduleFactsMessage bridge result) "\n"))))])))
 
 (js/export
  (defn load-darwin-allowlist

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export promptfoo-module()
-  module(path(myConfig.modules.promptfoo.enable), "promptfoo — local, MIT-licensed LLM eval runner (no lock-in)", package(path(promptfoo)))

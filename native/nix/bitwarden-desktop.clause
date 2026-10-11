@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export bitwarden-desktop-module()
-  module(path(myConfig.modules.bitwarden-desktop.enable), "Bitwarden desktop app", package(path(bitwarden-desktop)))

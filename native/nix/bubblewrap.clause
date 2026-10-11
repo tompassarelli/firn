@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export bubblewrap-module()
-  module(path(myConfig.modules.bubblewrap.enable), "Enable bubblewrap sandbox (north readonly-shell requires bwrap)", package(path(bubblewrap)))

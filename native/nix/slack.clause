@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export slack-module()
-  module(path(myConfig.modules.slack.enable), "Slack messaging", package(path(slack)))

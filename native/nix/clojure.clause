@@ -1,5 +1,0 @@
-import "nixpkgs.clause"
-
-export clojure-module()
-  configuration-module(path(myConfig.modules.clojure.enable), "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)",
-    {environment: {systemPackages: [package(path(unstable.clj-kondo)), package(path(unstable.clojure-lsp)), package(path(unstable.jet)), package(path(unstable.cljfmt))]}})

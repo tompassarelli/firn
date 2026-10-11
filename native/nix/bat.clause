@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export bat-module()
-  module(path(myConfig.modules.bat.enable), "bat syntax-highlighting cat", package(path(bat)))

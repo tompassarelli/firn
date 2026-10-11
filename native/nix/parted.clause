@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export parted-module()
-  module(path(myConfig.modules.parted.enable), "disk partitioning tool", package(path(parted)))

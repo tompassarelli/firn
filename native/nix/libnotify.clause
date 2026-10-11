@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export libnotify-module()
-  module(path(myConfig.modules.libnotify.enable), "libnotify notification client", package(path(libnotify)))

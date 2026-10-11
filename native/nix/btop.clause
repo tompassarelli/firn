@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export btop-module()
-  module(path(myConfig.modules.btop.enable), "Enable btop system monitor", package(path(btop)))

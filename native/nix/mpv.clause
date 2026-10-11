@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export mpv-module()
-  module(path(myConfig.modules.mpv.enable), "mpv media player", package(path(mpv)))

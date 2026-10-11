@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export ghostscript-module()
-  module(path(myConfig.modules.ghostscript.enable), "Ghostscript PostScript interpreter", package(path(ghostscript)))

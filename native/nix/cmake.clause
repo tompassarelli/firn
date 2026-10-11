@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export cmake-module()
-  module(path(myConfig.modules.cmake.enable), "CMake build system", package(path(cmake)))

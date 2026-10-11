@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export azure-cli-module()
-  module(path(myConfig.modules.azure-cli.enable), "Azure CLI (az) for Entra / Microsoft Graph admin", package(path(azure-cli)))

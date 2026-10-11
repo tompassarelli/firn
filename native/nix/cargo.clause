@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export cargo-module()
-  module(path(myConfig.modules.cargo.enable), "Rust package manager", package(path(unstable.cargo)))

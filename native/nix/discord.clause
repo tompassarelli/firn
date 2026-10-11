@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export discord-module()
-  module(path(myConfig.modules.discord.enable), "Discord chat client", package(path(discord)))

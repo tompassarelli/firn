@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export jq-module()
-  module(path(myConfig.modules.jq.enable), "jq command-line JSON processor", package(path(jq)))

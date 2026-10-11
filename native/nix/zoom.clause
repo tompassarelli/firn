@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export zoom-module()
-  module(path(myConfig.modules.zoom.enable), "Zoom video conferencing", package(path(zoom-us)))

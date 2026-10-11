@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export blender-module()
-  module(path(myConfig.modules.blender.enable), "Blender 3D editor", package(path(blender)))

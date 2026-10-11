@@ -95,7 +95,7 @@ tag_sources=(
   "$firn_repo/native/firn_tag_family.bjs"
 )
 tag_bridge="$firn_repo/native/firn_tag_host.mjs"
-clause_source_bridge="$firn_repo/native/clause_source_host.mjs"
+module_facts_bridge="$firn_repo/native/module_facts_host.mjs"
 flake_input_sources=(
   "$datum_reader"
   "$firn_repo/native/flake_input.bjs"
@@ -381,9 +381,9 @@ materialize_js() {
   cp -- "$bridge" "$host"
   case "$component" in
     tag|inventory|repo-build)
-      cp -- "$clause_source_bridge" "$output_root/clause_source_host.mjs"
-      record_artifact "$component-clause-source-host" \
-        "lib/$component/clause_source_host.mjs" "$clause_source_bridge"
+      cp -- "$module_facts_bridge" "$output_root/module_facts_host.mjs"
+      record_artifact "$component-module-facts-host" \
+        "lib/$component/module_facts_host.mjs" "$module_facts_bridge"
       ;;
   esac
   cat >"$launcher" <<EOF

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { readModuleMetadataSource } from './clause_source_host.mjs';
+import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_TAG_MODULE
   ?? new URL('../lib/firn-tag.js', import.meta.url).pathname;
@@ -25,10 +25,7 @@ const failed = (error) => Object.freeze({ status: errno(error), value: null });
 let temporaryId = 0;
 
 const bridge = Object.freeze({
-  readModuleMetadataSource,
-  metadataTags(result) { return result.value.tags; },
-  metadataOptIn(result) { return result.value.optIn; },
-  message(result) { return result.message; },
+  ...moduleFactsBridge,
   status(result) { return result.status; },
   value(result) { return result.value; },
   env(name) { return process.env[name] ?? null; },

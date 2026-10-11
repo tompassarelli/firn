@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export dbeaver-module()
-  module(path(myConfig.modules.dbeaver.enable), "DBeaver database GUI", package(path(dbeaver-bin)))

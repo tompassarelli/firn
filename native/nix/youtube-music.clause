@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export youtube-music-module()
-  module(path(myConfig.modules.youtube-music.enable), "YouTube Music client", package(path(youtube-music)))

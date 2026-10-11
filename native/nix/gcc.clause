@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export gcc-module()
-  module(path(myConfig.modules.gcc.enable), "GNU C compiler", package(path(gcc)))

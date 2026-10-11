@@ -1,6 +1,0 @@
-ModuleMetadata:
-  tags: Sequence<Text>
-  optIn: Sequence<Text>
-
-export module-metadata(?tags: Sequence<Text>, ?opt-in: Sequence<Text>): ModuleMetadata
-  {tags: ?tags, optIn: ?opt-in}

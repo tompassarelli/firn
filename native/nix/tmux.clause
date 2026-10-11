@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export tmux-module()
-  module(path(myConfig.modules.tmux.enable), "tmux terminal multiplexer", package(path(tmux)))

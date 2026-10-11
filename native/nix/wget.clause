@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export wget-module()
-  module(path(myConfig.modules.wget.enable), "wget download tool", package(path(wget)))

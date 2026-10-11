@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-export timezone-module()
-  enabled-module(path(myConfig.modules.timezone.enable), "timezone configuration",
-    text-setting(path(myConfig.modules.timezone.zone),
-      {type: string-type(), default: "UTC",
-       description: "IANA timezone — instance overrides per-host"},
-      path(time.timeZone)))

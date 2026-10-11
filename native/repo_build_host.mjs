@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { extname } from 'node:path';
-import { readModuleMetadataSource } from './clause_source_host.mjs';
+import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_REPO_BUILD_MODULE
   ?? new URL('../lib/firn-repo-build.js', import.meta.url).pathname;
@@ -26,10 +26,7 @@ function result(status, value = null) {
 }
 
 const bridge = Object.freeze({
-  readModuleMetadataSource,
-  metadataTags(result) { return result.value.tags; },
-  metadataOptIn(result) { return result.value.optIn; },
-  message(result) { return result.message; },
+  ...moduleFactsBridge,
   env(name) { return process.env[name] ?? null; },
   out(text) { process.stdout.write(text); },
   err(text) { process.stderr.write(text); },

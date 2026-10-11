@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export rustdesk-module()
-  module(path(myConfig.modules.rustdesk.enable), "RustDesk remote desktop", package(path(rustdesk-flutter)))

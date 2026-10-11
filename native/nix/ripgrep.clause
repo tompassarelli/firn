@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export ripgrep-module()
-  module(path(myConfig.modules.ripgrep.enable), "ripgrep search tool", package(path(ripgrep)))

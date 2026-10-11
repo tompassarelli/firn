@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export fd-module()
-  module(path(myConfig.modules.fd.enable), "fd file finder", package(path(fd)))

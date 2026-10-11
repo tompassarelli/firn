@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-export via-module()
-  configuration-module(path(myConfig.modules.via.enable), "VIA keyboard configurator support",
-    {services: {udev: {extraRules: "# VIA keyboard access rules\nKERNEL==\"hidraw*\", SUBSYSTEM==\"hidraw\", MODE=\"0660\", GROUP=\"plugdev\", TAG+=\"uaccess\"\n\n# Additional rules for QMK/VIA keyboards\nSUBSYSTEMS==\"usb\", ATTRS\u{7b}idVendor}==\"c2ab\", ATTRS\u{7b}idProduct}==\"3939\", TAG+=\"uaccess\"\n\n"}},
-     users: {groups: {plugdev: {}},
-             users: dictionary(configured-text(path(myConfig.modules.users.username)),
-               {extraGroups: ["plugdev"]})}})

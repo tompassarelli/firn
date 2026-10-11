@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export gnumake-module()
-  module(path(myConfig.modules.gnumake.enable), "GNU Make build tool", package(path(gnumake)))

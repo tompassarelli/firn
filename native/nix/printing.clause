@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export printing-module()
-  configuration-module(path(myConfig.modules.printing.enable),
-    "CUPS printing service with network discovery",
-    {services: {printing: {enable: true},
-     avahi: {enable: true, nssmdns4: true, openFirewall: true}}})

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { readModuleMetadataSource } from './clause_source_host.mjs';
+import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_INVENTORY_MODULE
   ?? new URL('../lib/firn-inventory.js', import.meta.url).pathname;
@@ -16,10 +16,7 @@ function result(status, value = null) {
 }
 
 const bridge = Object.freeze({
-  readModuleMetadataSource,
-  metadataTags(result) { return result.value.tags; },
-  metadataOptIn(result) { return result.value.optIn; },
-  message(result) { return result.message; },
+  ...moduleFactsBridge,
   env(name) { return process.env[name] ?? null; },
   out(text) { process.stdout.write(text); },
   err(text) { process.stderr.write(text); },

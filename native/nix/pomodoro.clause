@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export pomodoro-module()
-  module(path(myConfig.modules.pomodoro.enable), "Pomodoro timer", package(path(pomodoro-gtk)))

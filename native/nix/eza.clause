@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export eza-module()
-  module(path(myConfig.modules.eza.enable), "Enable eza (modern ls replacement)", package(path(eza)))

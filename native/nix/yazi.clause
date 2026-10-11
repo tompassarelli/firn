@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export yazi-module()
-  configuration-module(path(myConfig.modules.yazi.enable), "Yazi file manager",
-    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {programs: {yazi: {enable: true, shellWrapperName: "yy",
-        settings: {opener: {edit: [{run: "nvim \"$@\"", block: true, for: "unix"}]}}}}})}})

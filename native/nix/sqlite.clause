@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export sqlite-module()
-  module(path(myConfig.modules.sqlite.enable), "SQLite database", package(path(sqlite)))
