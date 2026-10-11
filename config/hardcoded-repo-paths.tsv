@@ -6,6 +6,7 @@
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/theme-switcher/default.bnix	1
+nixos-config/modules/theme-switcher/default.gal	1
 nixos-config/native/rebuild.bjs	1
 north/bin/north-runtime-update	2
 north/socrates/hooks/launch-critical-worktree-guard.test.py	8

@@ -1,0 +1,10 @@
+use firn/tags
+
+procps is a Module
+procps can opt into development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.procps.enable: enable "procps"
+  config when config.myConfig.modules.procps.enable
+    environment.systemPackages: [pkgs.procps]

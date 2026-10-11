@@ -1,0 +1,11 @@
+use firn/tags
+
+procs is a Module
+procs is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.procs.enable
+    "environment"
+      "systemPackages": [pkgs.procs]
+  option "myConfig"."modules"."procs"."enable": enable "Enable procs (modern ps replacement)"

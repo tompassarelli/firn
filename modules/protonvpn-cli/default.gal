@@ -1,0 +1,11 @@
+use firn/tags
+
+protonvpn-cli is a Module
+protonvpn-cli is tagged vpn
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.protonvpn-cli.enable
+    "environment"
+      "systemPackages": [pkgs.protonvpn-cli]
+  option "myConfig"."modules"."protonvpn-cli"."enable": enable "ProtonVPN CLI client"

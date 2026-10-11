@@ -1,0 +1,11 @@
+use firn/tags
+
+wget is a Module
+wget is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.wget.enable
+    "environment"
+      "systemPackages": [pkgs.wget]
+  option "myConfig"."modules"."wget"."enable": enable "wget download tool"

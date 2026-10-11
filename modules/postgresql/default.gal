@@ -1,0 +1,18 @@
+use firn/tags
+
+postgresql is a Module
+postgresql is tagged database
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.postgresql.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.postgresql_18]
+    "services"
+      "postgresql"
+        "authentication": pkgs.lib.mkOverride(10, "# TYPE  DATABASE        USER            ADDRESS                 METHOD\nlocal   all             all                                     trust\nhost    all             all             127.0.0.1/32            trust\nhost    all             all             ::1/128                 trust\n\n")
+        "enable": true
+        "ensureDatabases": ["postgres"]
+        "ensureUsers": [{"ensureClauses": {"superuser": true}, "name": "postgres"}]
+        "package": pkgs.unstable.postgresql_18
+  option "myConfig"."modules"."postgresql"."enable": enable "PostgreSQL database server for local development"

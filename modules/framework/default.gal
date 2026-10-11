@@ -1,0 +1,16 @@
+use firn/tags
+
+framework is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.framework.enable
+    "boot"
+      "extraModprobeConfig": "options mt7925_common disable_clc=1\noptions mt7925e disable_aspm=1\n\n"
+    "services"
+      "logind"
+        "settings"
+          "Login"
+            "HandleLidSwitch": "ignore"
+            "HandleLidSwitchExternalPower": "ignore"
+  option "myConfig"."modules"."framework"."enable": enable "Framework Computer specific tools"

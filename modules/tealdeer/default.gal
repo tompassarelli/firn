@@ -1,0 +1,14 @@
+use firn/tags
+
+tealdeer is a Module
+tealdeer is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.tealdeer.enable
+    "environment"
+      "systemPackages": [pkgs.tealdeer]
+    "home-manager"
+      "users"
+        {config.myConfig.modules.users.username}: (__clause_argument_0) => {"xdg": {"configFile": {"tealdeer/config.toml": {"source": (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink(("" ++ ((__clause_argument_0.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/tealdeer/config.toml")}}}}
+  option "myConfig"."modules"."tealdeer"."enable": enable "Enable tealdeer (tldr client)"

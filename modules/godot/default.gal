@@ -1,0 +1,11 @@
+use firn/tags
+
+godot is a Module
+godot is tagged creative
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.godot.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.godot_4]
+  option "myConfig"."modules"."godot"."enable": enable "Godot game engine"

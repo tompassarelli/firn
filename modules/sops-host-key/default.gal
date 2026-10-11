@@ -1,0 +1,11 @@
+use firn/tags
+
+sops-host-key is a Module
+sops-host-key is tagged server
+
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.sops-host-key.enable: enable "sops-nix identity from the SSH ed25519 host key instead of /var/lib/sops-nix/key.txt"
+  config when config.myConfig.modules.sops-host-key.enable
+    sops.age.sshKeyPaths: ["/etc/ssh/ssh_host_ed25519_key"]
+    sops.gnupg.sshKeyPaths: []

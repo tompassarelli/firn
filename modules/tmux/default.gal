@@ -1,0 +1,11 @@
+use firn/tags
+
+tmux is a Module
+tmux can opt into cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.tmux.enable
+    "environment"
+      "systemPackages": [pkgs.tmux]
+  option "myConfig"."modules"."tmux"."enable": enable "tmux terminal multiplexer"

@@ -1,0 +1,12 @@
+use firn/tags
+
+fd is a Module
+fd is tagged development
+fd is tagged doom-emacs
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.fd.enable
+    "environment"
+      "systemPackages": [pkgs.fd]
+  option "myConfig"."modules"."fd"."enable": enable "fd file finder"

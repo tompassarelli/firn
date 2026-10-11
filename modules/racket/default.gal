@@ -1,0 +1,12 @@
+use firn/tags
+
+racket is a Tag
+racket is a Module
+racket is tagged racket
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.racket.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.racket]
+  option "myConfig"."modules"."racket"."enable": enable "Racket programming language"

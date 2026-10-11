@@ -1,0 +1,21 @@
+use firn/tags
+
+bluetooth is a Module
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.bluetooth.enable
+    "environment"
+      "systemPackages": [pkgs.bluez]
+    "hardware"
+      "bluetooth"
+        "enable": true
+        "powerOnBoot": true
+        "settings"
+          "General"
+            "Enable": "Source,Sink,Media,Socket"
+            "Experimental": true
+    "services"
+      "blueman"
+        "enable": true
+  option "myConfig"."modules"."bluetooth"."enable": enable "Enable Bluetooth configuration"

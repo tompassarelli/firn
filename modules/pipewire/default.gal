@@ -1,0 +1,16 @@
+use firn/tags
+
+pipewire is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.pipewire.enable
+    "services"
+      "pipewire"
+        "alsa"
+          "enable": true
+          "support32Bit": true
+        "enable": true
+        "pulse"
+          "enable": true
+  option "myConfig"."modules"."pipewire"."enable": enable "PipeWire audio configuration"

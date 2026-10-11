@@ -1,0 +1,11 @@
+use firn/tags
+
+protonvpn-gui is a Module
+protonvpn-gui is tagged vpn
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.protonvpn-gui.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.proton-vpn]
+  option "myConfig"."modules"."protonvpn-gui"."enable": enable "ProtonVPN GUI client"

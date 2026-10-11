@@ -1,0 +1,11 @@
+use firn/tags
+
+clippy is a Module
+clippy is tagged rust
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.clippy.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.clippy]
+  option "myConfig"."modules"."clippy"."enable": enable "Rust linter"

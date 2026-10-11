@@ -1,0 +1,13 @@
+use firn/tags
+
+zen-browser is a Module
+zen-browser can opt into browsers
+zen-browser needs flake input "zen-browser" from "github:0xc000022070/zen-browser-flake"
+
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.zen-browser.enable: enable "Enable Zen Browser"
+  option myConfig.modules.zen-browser.default: Bool
+    default: false
+    description: "Set Zen Browser as the default browser via MIME types"
+  imports: [./zen-browser.nix]

@@ -1,0 +1,16 @@
+use firn/tags
+
+containers is a Module
+containers is tagged development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  let username = config.myConfig.modules.users.username
+  option myConfig.modules.containers.enable: enable "Podman containers with Distrobox"
+  config when config.myConfig.modules.containers.enable
+    virtualisation.podman
+      enable: true
+      dockerCompat: true
+      defaultNetwork.settings.dns_enabled: true
+    users.users.{username}.extraGroups: ["podman"]
+    environment.systemPackages: with pkgs: [distrobox, podman-compose]

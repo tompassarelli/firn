@@ -1,0 +1,20 @@
+use firn/tags
+
+atuin is a Module
+atuin is tagged terminal
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.atuin.enable
+    "home-manager"
+      "users"
+        {config.myConfig.modules.users.username}
+          "programs"
+            "atuin"
+              "enable": true
+              "enableFishIntegration": true
+              "settings"
+                "auto_sync": true
+                "search_mode": "fuzzy"
+                "sync_frequency": "5m"
+  option "myConfig"."modules"."atuin"."enable": enable "atuin shell history sync"

@@ -1,0 +1,11 @@
+use firn/tags
+
+gpu-screen-recorder is a Module
+gpu-screen-recorder is tagged desktop
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gpu-screen-recorder.enable
+    "environment"
+      "systemPackages": [pkgs.gpu-screen-recorder]
+  option "myConfig"."modules"."gpu-screen-recorder"."enable": enable "GPU-accelerated screen recorder (X11 + Wayland; NVENC/VAAPI/V4L2)"

@@ -1,0 +1,11 @@
+use firn/tags
+
+job-run is a Module
+
+nix file
+  arguments: config, lib, pkgs, ...
+  let homeDir = config.myConfig.modules.users.homeDir
+  let username = config.myConfig.modules.users.username
+  let recordPath = lib.makeBinPath([pkgs.python3, pkgs.openssh, pkgs.coreutils, pkgs.util-linux, pkgs.hostname])
+  value
+    _module.args.jobRun: (name) => (cmd) => "{pkgs.bash}/bin/bash {homeDir}/.local/share/north/bin/job-run --path {recordPath} --user {username} {name} -- {cmd}"

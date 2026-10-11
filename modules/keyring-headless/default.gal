@@ -1,0 +1,24 @@
+use firn/tags
+
+keyring-headless is a Module
+
+nix module
+  arguments: config, lib, pkgs, ...
+  let cfg = config.myConfig.modules.keyring-headless
+  let username = config.myConfig.modules.users.username
+  let passwordFile = config.sops.secrets.keyring-password.path
+  let start = pkgs.writeShellApplication({name: "keyring-headless-start", runtimeInputs: [pkgs.gnome-keyring, pkgs.coreutils], text: '''
+    password=$(cat {{passwordFile}})
+    exec gnome-keyring-daemon --foreground --unlock --components=secrets < <(printf %s "$password")
+    '''})
+  option myConfig.modules.keyring-headless.enable: enable "headless GNOME Keyring Secret Service for a lingering user, unlocked from sops"
+  option myConfig.modules.keyring-headless.sopsFile: Path
+    description: "sops file whose keyring-password key unlocks the login keyring"
+  config when cfg.enable
+    sops.secrets.keyring-password
+      sopsFile: cfg.sopsFile
+      owner: username
+      mode: "0400"
+    users.users.{username}.linger: true
+    environment.systemPackages: [pkgs.gnome-keyring, pkgs.libsecret]
+    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.gnome-keyring: {Unit: {Description: "GNOME Keyring Secret Service, unlocked from sops"}, Service: {Type: "dbus", BusName: "org.freedesktop.secrets", ExecStart: "{start}/bin/keyring-headless-start", Restart: "on-failure"}, Install: {WantedBy: ["default.target"]}}}

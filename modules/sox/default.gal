@@ -1,0 +1,11 @@
+use firn/tags
+
+sox is a Module
+sox is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.sox.enable
+    "environment"
+      "systemPackages": [pkgs.sox]
+  option "myConfig"."modules"."sox"."enable": enable "Enable SoX audio recording for Claude Code voice mode"

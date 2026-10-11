@@ -1,0 +1,22 @@
+use firn/tags
+
+qutebrowser is a Module
+qutebrowser can opt into browsers
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.qutebrowser.enable
+    "environment"
+      "systemPackages": [pkgs.qutebrowser]
+    "xdg"
+      "mime"
+        "defaultApplications" when config.myConfig.modules.qutebrowser.default
+          "text/html": "org.qutebrowser.qutebrowser.desktop"
+          "x-scheme-handler/about": "org.qutebrowser.qutebrowser.desktop"
+          "x-scheme-handler/http": "org.qutebrowser.qutebrowser.desktop"
+          "x-scheme-handler/https": "org.qutebrowser.qutebrowser.desktop"
+          "x-scheme-handler/unknown": "org.qutebrowser.qutebrowser.desktop"
+  option "myConfig"."modules"."qutebrowser"."default": Bool
+    default: false
+    description: "Set Qutebrowser as the default browser via MIME types"
+  option "myConfig"."modules"."qutebrowser"."enable": enable "Enable Qutebrowser"

@@ -1,0 +1,17 @@
+use firn/tags
+
+via is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.via.enable
+    "services"
+      "udev"
+        "extraRules": "# VIA keyboard access rules\nKERNEL==\"hidraw*\", SUBSYSTEM==\"hidraw\", MODE=\"0660\", GROUP=\"plugdev\", TAG+=\"uaccess\"\n\n# Additional rules for QMK/VIA keyboards\nSUBSYSTEMS==\"usb\", ATTRS\{idVendor}==\"c2ab\", ATTRS\{idProduct}==\"3939\", TAG+=\"uaccess\"\n\n"
+    "users"
+      "groups"
+        "plugdev": {}
+      "users"
+        {config.myConfig.modules.users.username}
+          "extraGroups": ["plugdev"]
+  option "myConfig"."modules"."via"."enable": enable "VIA keyboard configurator support"

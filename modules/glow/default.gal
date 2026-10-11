@@ -1,0 +1,11 @@
+use firn/tags
+
+glow is a Module
+glow is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.glow.enable
+    "environment"
+      "systemPackages": [pkgs.glow]
+  option "myConfig"."modules"."glow"."enable": enable "glow — terminal markdown renderer (tables, pager, dir browser)"

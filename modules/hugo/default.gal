@@ -1,0 +1,11 @@
+use firn/tags
+
+hugo is a Module
+hugo is tagged writing
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.hugo.enable
+    "environment"
+      "systemPackages": [pkgs.hugo]
+  option "myConfig"."modules"."hugo"."enable": enable "Hugo static site generator"

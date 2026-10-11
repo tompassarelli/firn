@@ -1,0 +1,11 @@
+use firn/tags
+
+spotify is a Module
+spotify is tagged media
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.spotify.enable
+    "environment"
+      "systemPackages": [pkgs.spotify]
+  option "myConfig"."modules"."spotify"."enable": enable "Spotify TUI player"

@@ -1,0 +1,11 @@
+use firn/tags
+
+nix-ld is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.nix-ld.enable
+    "programs"
+      "nix-ld"
+        "enable": true
+  option "myConfig"."modules"."nix-ld"."enable": enable "nix-ld dynamic library shim"

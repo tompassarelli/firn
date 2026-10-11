@@ -1,0 +1,11 @@
+use firn/tags
+
+gnumeric is a Module
+gnumeric is tagged office
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gnumeric.enable
+    "environment"
+      "systemPackages": [pkgs.gnumeric]
+  option "myConfig"."modules"."gnumeric"."enable": enable "Gnumeric lightweight spreadsheet (xlsx/ods/csv viewer)"

@@ -1,0 +1,11 @@
+use firn/tags
+
+lutris is a Module
+lutris is tagged gaming
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.lutris.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.lutris]
+  option "myConfig"."modules"."lutris"."enable": enable "Lutris gaming platform"

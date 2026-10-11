@@ -1,0 +1,11 @@
+use firn/tags
+
+sd is a Module
+sd is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.sd.enable
+    "environment"
+      "systemPackages": [pkgs.sd]
+  option "myConfig"."modules"."sd"."enable": enable "sd find-and-replace tool"

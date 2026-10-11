@@ -1,0 +1,12 @@
+use firn/tags
+
+gutenprint is a Module
+gutenprint is tagged printing
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gutenprint.enable
+    "services"
+      "printing"
+        "drivers": [pkgs.gutenprint]
+  option "myConfig"."modules"."gutenprint"."enable": enable "Gutenprint printer drivers"

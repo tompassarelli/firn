@@ -1,0 +1,23 @@
+use firn/tags
+
+glide is a Module
+
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.glide.enable: enable "Glide touchpad motion detection daemon"
+  option myConfig.modules.glide.device: Text
+    default: "/dev/input/by-path/platform-AMDI0010:03-event-mouse"
+    description: "Touchpad evdev device path"
+  option myConfig.modules.glide.kanataAddress: Text
+    default: "127.0.0.1:7070"
+    description: "Kanata TCP server address (ip:port)"
+  option myConfig.modules.glide.virtualKey: Text
+    default: "pad-touch"
+    description: "Kanata virtual key name to press/release on activation"
+  option myConfig.modules.glide.motionThreshold: Int
+    default: 2
+    description: "Min Euclidean displacement (device abs units) per evdev report to count as motion"
+  option myConfig.modules.glide.minStreak: Int
+    default: 16
+    description: "Consecutive motion-positive samples required to activate (~7ms each, 16 ≈ 112ms)"
+  imports: [./glide.nix]

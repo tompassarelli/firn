@@ -1,0 +1,12 @@
+use firn/tags
+
+sbcl is a Module
+sbcl is tagged doom-emacs
+sbcl is tagged lisp
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.sbcl.enable
+    "environment"
+      "systemPackages": [pkgs.sbcl]
+  option "myConfig"."modules"."sbcl"."enable": enable "Steel Bank Common Lisp compiler"

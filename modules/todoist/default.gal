@@ -1,0 +1,11 @@
+use firn/tags
+
+todoist is a Module
+todoist is tagged tasks
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.todoist.enable
+    "environment"
+      "systemPackages": [pkgs.todoist-electron]
+  option "myConfig"."modules"."todoist"."enable": enable "Todoist task manager"

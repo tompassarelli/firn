@@ -1,0 +1,11 @@
+use firn/tags
+
+slack is a Module
+slack is tagged communication
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.slack.enable
+    "environment"
+      "systemPackages": [pkgs.slack]
+  option "myConfig"."modules"."slack"."enable": enable "Slack messaging"

@@ -1,0 +1,11 @@
+use firn/tags
+
+mail is a Module
+mail is tagged communication
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.mail.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.protonmail-desktop]
+  option "myConfig"."modules"."mail"."enable": enable "email applications"

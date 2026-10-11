@@ -1,0 +1,11 @@
+use firn/tags
+
+bc is a Module
+bc is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.bc.enable
+    "environment"
+      "systemPackages": [pkgs.bc]
+  option "myConfig"."modules"."bc"."enable": enable "Enable bc arbitrary-precision calculator language"

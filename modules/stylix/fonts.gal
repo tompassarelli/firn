@@ -1,0 +1,4 @@
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.stylix.enable
+    fonts.fontconfig.enable: true

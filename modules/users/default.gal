@@ -1,0 +1,7 @@
+use firn/tags
+
+users is a Module
+
+nix module
+  arguments: lib, ...
+  imports: [./users.nix]

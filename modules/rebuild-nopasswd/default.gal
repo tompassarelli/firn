@@ -1,0 +1,12 @@
+use firn/tags
+
+rebuild-nopasswd is a Module
+rebuild-nopasswd is tagged cli-tools
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.rebuild-nopasswd.enable
+    "security"
+      "sudo"
+        "wheelNeedsPassword": false
+  option "myConfig"."modules"."rebuild-nopasswd"."enable": enable "Passwordless sudo for nixos-rebuild (agent-autonomous firn rebuild)"

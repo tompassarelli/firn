@@ -1,0 +1,11 @@
+use firn/tags
+
+gh is a Module
+gh is tagged development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.gh.enable
+    "environment"
+      "systemPackages": [pkgs.gh]
+  option "myConfig"."modules"."gh"."enable": enable "GitHub CLI"

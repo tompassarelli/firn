@@ -1,0 +1,12 @@
+use firn/tags
+
+nerd-fonts is a Module
+nerd-fonts is tagged doom-emacs
+nerd-fonts is tagged theming
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.nerd-fonts.enable
+    "fonts"
+      "packages": [pkgs.nerd-fonts.symbols-only]
+  option "myConfig"."modules"."nerd-fonts"."enable": enable "Nerd Fonts symbols"

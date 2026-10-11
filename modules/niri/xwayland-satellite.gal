@@ -1,0 +1,4 @@
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.niri.enable
+    environment.systemPackages: [pkgs.unstable.xwayland-satellite]

@@ -1,0 +1,19 @@
+use firn/tags
+
+yazi is a Module
+yazi is tagged cli-tools
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.yazi.enable
+    "home-manager"
+      "users"
+        {config.myConfig.modules.users.username}
+          "programs"
+            "yazi"
+              "enable": true
+              "settings"
+                "opener"
+                  "edit": [{"block": true, "for": "unix", "run": "nvim \"$@\""}]
+              "shellWrapperName": "yy"
+  option "myConfig"."modules"."yazi"."enable": enable "Yazi file manager"

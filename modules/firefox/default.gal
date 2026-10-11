@@ -1,0 +1,13 @@
+use firn/tags
+
+firefox is a Module
+firefox is tagged browsers
+firefox needs flake input "nur" from "github:nix-community/NUR"
+
+nix module
+  arguments: config, lib, pkgs, ...
+  option myConfig.modules.firefox.enable: enable "Enable Firefox browser"
+  option myConfig.modules.firefox.default: Bool
+    default: false
+    description: "Set Firefox as the default browser via MIME types"
+  imports: [./firefox.nix]

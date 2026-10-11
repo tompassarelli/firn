@@ -1,0 +1,11 @@
+use firn/tags
+
+cargo is a Module
+cargo is tagged rust
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.cargo.enable
+    "environment"
+      "systemPackages": [pkgs.unstable.cargo]
+  option "myConfig"."modules"."cargo"."enable": enable "Rust package manager"

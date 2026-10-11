@@ -1,0 +1,11 @@
+use firn/tags
+
+claude is a Module
+claude can opt into development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  let username = config.myConfig.modules.users.username
+  option myConfig.modules.claude.enable: enable "Claude Code fallback coding agent"
+  config when config.myConfig.modules.claude.enable
+    home-manager.users.{username}: ({config, ...}) => {home.file: {".claude/CLAUDE.md".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md"), ".claude/agents".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/north/main/socrates/claude/agents")}}

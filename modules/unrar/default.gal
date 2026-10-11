@@ -1,0 +1,11 @@
+use firn/tags
+
+unrar is a Module
+unrar is tagged cli-tools
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.unrar.enable
+    "environment"
+      "systemPackages": [pkgs.unrar]
+  option "myConfig"."modules"."unrar"."enable": enable "unrar archive tool"

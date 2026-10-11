@@ -1,0 +1,11 @@
+use firn/tags
+
+shellcheck is a Module
+shellcheck is tagged doom-emacs
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.shellcheck.enable
+    "environment"
+      "systemPackages": [pkgs.shellcheck]
+  option "myConfig"."modules"."shellcheck"."enable": enable "ShellCheck shell script linter"

@@ -1,0 +1,11 @@
+use firn/tags
+
+delta is a Module
+delta is tagged development
+
+nix module
+  arguments: config, lib, pkgs, ...
+  config when config.myConfig.modules.delta.enable
+    "environment"
+      "systemPackages": [pkgs.delta]
+  option "myConfig"."modules"."delta"."enable": enable "delta git diff viewer"

@@ -1,0 +1,11 @@
+use firn/tags
+
+tmp-retention is a Module
+
+nix module
+  arguments: config, lib, ...
+  config when config.myConfig.modules.tmp-retention.enable
+    "systemd"
+      "tmpfiles"
+        "rules": ["q /tmp 1777 root root mM:7d", "q /var/tmp 1777 root root mM:30d"]
+  option "myConfig"."modules"."tmp-retention"."enable": enable "mtime-pinned /tmp and /var/tmp retention (systemd-tmpfiles age-by override)"
