@@ -1,12 +1,11 @@
 # Schema introspection
 
-Before adding/changing options, query the schema:
+Before adding or changing options, ask the schema:
 
 ```bash
-beagle-schema services.openssh.enable               # exact lookup: type, default, enum
-beagle-schema --children services.openssh           # list all sub-options under a prefix
-beagle-schema --search ssh                          # fuzzy substring search
-beagle-schema --json services.openssh.enable        # machine-readable
+galileo schema explain services.openssh.enable      # path, type and default
+firn schema explain <path-or-validator-error>       # the same through firn
 ```
 
-This is the right way to answer "does option X exist?" or "what type does X want?" — far better than `grep schema.json`.
+This answers "does option X exist?" and "what type does X want?" better than
+grepping `schema.json`.
