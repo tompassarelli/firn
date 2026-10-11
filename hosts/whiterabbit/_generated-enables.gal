@@ -13,7 +13,6 @@ whiterabbit adds river to desktop
 whiterabbit enables theming
 whiterabbit enables auth
 whiterabbit enables development
-whiterabbit drops beagle from development
 whiterabbit adds claude to development
 whiterabbit adds machine-update to development
 whiterabbit adds agent-runtime-update to development

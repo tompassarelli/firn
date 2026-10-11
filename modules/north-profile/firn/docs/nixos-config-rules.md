@@ -133,29 +133,15 @@ global/system edit, say so and commit it — don't leave it dangling in `~`.
 ## Configuration source and module authoring
 
 
-The write interface is beagle/nix: edit `#lang beagle/nix` `.bnix` sources and
-run `firn repo build` to regenerate their sibling `.nix` targets. Never edit a
+The write interface is Galileo: edit `.gal` sources and run `firn repo build`
+(`galileo build`) to regenerate their sibling `.nix` targets. Never edit a
 generated `.nix`. Both files are committed because the flake reads the Git
-tree. Run `firn repo build` before any Nix build after a `.bnix` change.
+tree. Run `firn repo build` before any Nix build after a `.gal` change.
 
-Selected Clause modules instead use `nixos-config:modules/<name>/tags.clause`
-for tag membership and `nixos-config:native/nix/<name>.clause` for the module.
-The metadata file explicitly selects Clause and cannot coexist with
-`nixos-config:modules/<name>/default.bnix`. Compile its `<name>-module` export
-through `firn repo build`, using the runtime's compiler built from
-`nixos-config:config/clause-revision`; the generated output remains
-`nixos-config:modules/<name>/default.nix`. Shared declarations remain Clause
-source. See `nixos-config:native/nix/README.md` for the focused check.
-The metadata imports `nixos-config:native/module_metadata.clause` and exports
-`metadata(): ModuleMetadata`, supplying automatic tags and opt-in tags once.
-The resolver compiles each source once and calls that checked export with the
-same pinned compiler. `firn-runtime-update`
-produces and binds that compiler for tag, inventory, and build commands. It does not
-parse Clause text or read the generated Nix for tags.
-
-Beagle lives at `~/code/beagle/main`. Override `BEAGLE_PATH` only for an
-explicit alternate checkout. Query the compiler for forms, signatures, option
-paths, types, callers, exports, and targets; never trust a copied inventory.
+`firn-runtime-update` builds the runtime's `galileo` from the commit in
+`nixos-config:config/galileo-revision`. Ask it for forms, option paths, types
+and users (`galileo help`, `galileo schema explain`, `galileo refs`,
+`galileo query`); never trust a copied inventory.
 
 ## Configuration architecture
 

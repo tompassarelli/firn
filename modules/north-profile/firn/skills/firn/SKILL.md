@@ -15,9 +15,10 @@ installation; do not audit unrelated configuration.
 ## Configuration changes
 
 1. Read `nixos-config:AGENTS.md` and edit an owned worktree.
-2. Query uncertain package, schema, or compiler facts. Edit authoritative
-   Beagle/Nix `.bnix`, never generated `.nix`.
-3. After `.bnix` changes, run `firn repo build` then `firn repo validate`.
+2. Query uncertain package, schema, or compiler facts with the runtime's
+   `galileo help`, `galileo refs` and `galileo schema explain`. Edit
+   authoritative Galileo `.gal`, never generated `.nix`.
+3. After `.gal` changes, run `firn repo build` then `firn repo validate`.
    Stage exact source/target pairs, including new files, and commit.
 4. When switching is requested, run `firn rebuild` from the committed lane, outside the command sandbox (it strips sudo's setuid bit; sudo needs no password).
    It builds exact `HEAD`; unrelated uncommitted work is not included.

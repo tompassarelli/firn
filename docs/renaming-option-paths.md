@@ -1,11 +1,10 @@
 # Renaming option paths
 
-To rename an option path across all `.bnix` files (e.g., refactoring `myConfig.modules.foo` → `myConfig.modules.bar`):
+To rename an option path across all `.gal` sources (for example
+`myConfig.modules.foo` to `myConfig.modules.bar`):
 
 ```bash
-beagle-rename --dry-run myConfig.modules.foo myConfig.modules.bar   # preview
-beagle-rename myConfig.modules.foo myConfig.modules.bar             # apply
-firn repo validate                                                   # verify clean
+galileo refs myConfig.modules.foo                                   # preview the users
+galileo rename option myConfig.modules.foo myConfig.modules.bar     # apply
+firn repo build && firn repo validate                               # regenerate and verify
 ```
-
-Word-boundary matching prevents partial collisions; string literals are skipped. After applying, always re-run `firn repo validate`.

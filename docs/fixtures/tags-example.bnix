@@ -7,10 +7,6 @@
 ;;   - module-side :tags / :tags-opt-in / :tag-overrides clauses
 ;;   - host-side :enabled vector with bare-tag and edited-tag entries
 ;;   - host-side :disabled vector
-;;
-;; To validate by hand:
-;;   beagle-syntax   docs/fixtures/tags-example.bnix
-;;   beagle-validate docs/fixtures/tags-example.bnix
 
 (ns docs.fixtures.tags-example)
 
