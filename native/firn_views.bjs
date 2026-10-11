@@ -44,9 +44,10 @@
   [name String
    documents (Vec paths/SourceDocument)]))
 
-(defunion ModulePathsResult
-  (ModulePaths [paths (Vec String)])
-  (ModulePathsRejected [message String]))
+(js/export
+  (defrecord PlatformRow
+  [module String
+   platform String]))
 
 (js/export
   (defrecord PlatformVerdict
@@ -54,14 +55,15 @@
    verdict Keyword
    blockers (Vec String)]))
 
-(defunion PlatformVerdictResult
-  (PlatformVerdictLoaded [value PlatformVerdict])
-  (PlatformVerdictRejected [message String]))
+(js/export
+  (defunion QueryNamesResult
+  (QueryNames [names (Vec String)])
+  (QueryNamesRejected [message String])))
 
 (js/export
-  (defunion PlatformResult
-  (PlatformLoaded [verdicts (Vec PlatformVerdict)])
-  (PlatformRejected [message String])))
+  (defunion QueryRowsResult
+  (QueryRows [rows (Vec PlatformRow)])
+  (QueryRowsRejected [message String])))
 
 (js/export
   (defrecord ChildResult
@@ -726,112 +728,6 @@
           entry
           (recur (rest remaining))))))))
 
-(defn freeform-type? [type String] Bool
-  (or (= type "attrsOf")
-      (= type "lazyAttrsOf")
-      (= type "anything")
-      (= type "unspecified")
-      (= type "freeform")))
-
-(defn path-at-or-under?
-  [path String
-   root String] Bool
-  (or (= path root)
-      (and (> (count path) (count root))
-           (starts-with? path root)
-           (= "." (subs path (count root) (+ (count root) 1))))))
-
-(defn schema-prefix?
-  [entries (Vec SchemaEntry)
-   path String] Bool
-  (loop [remaining (Vec SchemaEntry) entries]
-    (if (= (count remaining) 0)
-      false
-      (let [candidate String (schemaentry-path (first remaining))]
-        (if (path-at-or-under? candidate path)
-          true
-          (recur (rest remaining)))))))
-
-(defn replace-segment
-  [segments (Vec String)
-   index Int
-   replacement String] String
-  (loop [cursor Int 0
-         result (Vec String) []]
-    (if (>= cursor (count segments))
-      (join-with result ".")
-      (recur (+ cursor 1)
-        (conj result
-          (if (= cursor index) replacement (nth segments cursor)))))))
-
-(defn wildcard-hit?
-  [entries (Vec SchemaEntry)
-   path String] Bool
-  (let [segments (Vec String) (split-on path ".")]
-    (loop [index Int 0]
-      (if (>= index (count segments))
-        false
-        (if (schema-prefix? entries
-              (replace-segment segments index "<name>"))
-          true
-          (recur (+ index 1)))))))
-
-(defn freeform-hit?
-  [entries (Vec SchemaEntry)
-   path String] Bool
-  (loop [remaining (Vec SchemaEntry) entries]
-    (if (= (count remaining) 0)
-      false
-      (let [entry SchemaEntry (first remaining)]
-        (if (and (freeform-type? (schemaentry-type entry))
-                 (path-at-or-under? path (schemaentry-path entry)))
-          true
-          (recur (rest remaining)))))))
-
-(defn path-in-schema?
-  [entries (Vec SchemaEntry)
-   path String] Bool
-  (or (schema-prefix? entries path)
-      (wildcard-hit? entries path)
-      (freeform-hit? entries path)))
-
-(defn append-occurrence-paths
-  [occurrences (Vec paths/OptionPathOccurrence)
-   result (Vec String)] (Vec String)
-  (loop [remaining (Vec paths/OptionPathOccurrence) occurrences
-         combined (Vec String) result]
-    (if (= (count remaining) 0)
-      combined
-      (recur (rest remaining)
-        (append-unique combined
-          (paths/optionpathoccurrence-path (first remaining)))))))
-
-(defn module-paths [module ModuleSource] ModulePathsResult
-  (loop [remaining (Vec paths/SourceDocument) (modulesource-documents module)
-         result (Vec String) []]
-    (if (= (count remaining) 0)
-      (->ModulePaths result)
-      (let [document paths/SourceDocument (first remaining)]
-        (match (paths/extract-nix-option-paths document
-                 ["cfg" "config" "myConfig" "home-manager"])
-          [(OptionPathError source-id offset message)
-           (->ModulePathsRejected (str source-id ":" offset ": " message))]
-          [(OptionPaths occurrences)
-           (recur (rest remaining)
-             (append-occurrence-paths occurrences result))])))))
-
-(defn missing-paths
-  [paths (Vec String)
-   schema (Vec SchemaEntry)] (Vec String)
-  (loop [remaining (Vec String) paths
-         missing (Vec String) []]
-    (if (= (count remaining) 0)
-      (sort missing)
-      (recur (rest remaining)
-        (if (path-in-schema? schema (first remaining))
-          missing
-          (conj missing (first remaining)))))))
-
 (defn combine-unique
   [left (Vec String)
    right (Vec String)] (Vec String)
@@ -842,58 +738,100 @@
       (recur (rest remaining)
         (append-unique result (first remaining))))))
 
+(defn array-elements
+  [events (Vec json/JsonEvent)] (U (Vec Int) Nil)
+  (if (or (= (count events) 0)
+          (not (instance? json/JsonArrayStart (nth events 0))))
+    nil
+    (let [end Int (json-value-end events 0)]
+      (if (not= end (count events))
+        nil
+        (loop [index Int 1
+               starts (Vec Int) []]
+          (if (>= index (- end 1))
+            starts
+            (let [next Int (json-value-end events index)]
+              (if (< next 0)
+                nil
+                (recur next (conj starts index))))))))))
+
+(js/export
+  (defn query-names-from-json [source String] QueryNamesResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message) (->QueryNamesRejected message)]
+    [(JsonDecoded events)
+     (let [starts (U (Vec Int) Nil) (array-elements events)]
+       (if (nil? starts)
+         (->QueryNamesRejected "expected an array of names")
+         (loop [remaining (Vec Int) starts
+                names (Vec String) []]
+           (if (= (count remaining) 0)
+             (->QueryNames names)
+             (let [name (U String Nil) (string-at events (first remaining))]
+               (if (nil? name)
+                 (->QueryNamesRejected "expected an array of names")
+                 (recur (rest remaining) (conj names name))))))))])))
+
+(js/export
+  (defn query-rows-from-json [source String] QueryRowsResult
+  (match (json/decode source)
+    [(JsonDecodeError offset message) (->QueryRowsRejected message)]
+    [(JsonDecoded events)
+     (let [starts (U (Vec Int) Nil) (array-elements events)]
+       (if (nil? starts)
+         (->QueryRowsRejected "expected an array of rows")
+         (loop [remaining (Vec Int) starts
+                rows (Vec PlatformRow) []]
+           (if (= (count remaining) 0)
+             (->QueryRows rows)
+             (let [module (U String Nil) (object-string events (first remaining) "m")
+                   platform (U String Nil) (object-string events (first remaining) "p")]
+               (if (or (nil? module) (nil? platform))
+                 (->QueryRowsRejected "expected rows with m and p")
+                 (recur (rest remaining)
+                   (conj rows (->PlatformRow module platform)))))))))])))
+
+(defn supported?
+  [rows (Vec PlatformRow)
+   module String
+   platform String] Bool
+  (loop [remaining (Vec PlatformRow) rows]
+    (if (= (count remaining) 0)
+      false
+      (let [row PlatformRow (first remaining)]
+        (if (and (= module (platformrow-module row))
+                 (= platform (platformrow-platform row)))
+          true
+          (recur (rest remaining)))))))
+
 (defn platform-verdict
-  [module ModuleSource
-   nixos (Vec SchemaEntry)
-   darwin (Vec SchemaEntry)] PlatformVerdictResult
-  (match (module-paths module)
-    [(ModulePathsRejected message) (->PlatformVerdictRejected message)]
-    [(ModulePaths system-paths)
-     (let [linux-missing (Vec String) (missing-paths system-paths nixos)
-           darwin-missing (Vec String) (missing-paths system-paths darwin)
-           linux-ok Bool (= (count linux-missing) 0)
-           darwin-ok Bool (= (count darwin-missing) 0)]
-       (cond
-         (and linux-ok darwin-ok)
-         (->PlatformVerdictLoaded
-           (->PlatformVerdict (modulesource-name module) :both []))
-
-         linux-ok
-         (->PlatformVerdictLoaded
-           (->PlatformVerdict
-             (modulesource-name module) :linux-only darwin-missing))
-
-         darwin-ok
-         (->PlatformVerdictLoaded
-           (->PlatformVerdict
-             (modulesource-name module) :darwin-only linux-missing))
-
-         :else
-         (->PlatformVerdictLoaded
-           (->PlatformVerdict
-             (modulesource-name module) :no-data
-             (combine-unique linux-missing darwin-missing)))))]))
+  [module String
+   rows (Vec PlatformRow)] PlatformVerdict
+  (let [linux-ok Bool (supported? rows module "linux")
+        darwin-ok Bool (supported? rows module "darwin")]
+    (cond
+      (and linux-ok darwin-ok) (->PlatformVerdict module :both [])
+      linux-ok (->PlatformVerdict module :linux-only ["darwin"])
+      darwin-ok (->PlatformVerdict module :darwin-only ["linux"])
+      :else (->PlatformVerdict module :neither ["darwin" "linux"]))))
 
 (js/export
   (defn platform-matrix
-  [modules (Vec ModuleSource)
-   nixos (Vec SchemaEntry)
-   darwin (Vec SchemaEntry)] PlatformResult
-  (loop [remaining (Vec ModuleSource) modules
+  [modules (Vec String)
+   rows (Vec PlatformRow)] (Vec PlatformVerdict)
+  (loop [remaining (Vec String) modules
          verdicts (Vec PlatformVerdict) []]
     (if (= (count remaining) 0)
-      (->PlatformLoaded verdicts)
-      (match (platform-verdict (first remaining) nixos darwin)
-        [(PlatformVerdictRejected message) (->PlatformRejected message)]
-        [(PlatformVerdictLoaded verdict)
-         (recur (rest remaining) (conj verdicts verdict))])))))
+      verdicts
+      (recur (rest remaining)
+        (conj verdicts (platform-verdict (first remaining) rows)))))))
 
 (defn verdict-label [verdict Keyword] String
   (cond
     (= verdict :both) "both"
     (= verdict :linux-only) "linux-only"
     (= verdict :darwin-only) "darwin-only"
-    :else "no-data"))
+    :else "neither"))
 
 (defn modules-with
   [verdicts (Vec PlatformVerdict)
@@ -921,14 +859,12 @@
 (js/export
   (defn render-platform-list
   [selection String
-   verdicts (Vec PlatformVerdict)
-   nixos-count Int
-   darwin-count Int] CommandResult
+   verdicts (Vec PlatformVerdict)] CommandResult
   (let [both (Vec String) (modules-with verdicts :both)
         linux (Vec String) (modules-with verdicts :linux-only)
         darwin-only (Vec String) (modules-with verdicts :darwin-only)
         darwin (Vec String) (combine-unique both darwin-only)
-        no-data (Vec String) (modules-with verdicts :no-data)]
+        neither (Vec String) (modules-with verdicts :neither)]
     (cond
       (= selection "darwin")
       (->CommandResult 0 (render-list "darwin-compatible modules" darwin) "")
@@ -936,26 +872,22 @@
       (= selection "linux")
       (->CommandResult 0
         (str (render-list "NixOS-only modules" linux)
-          (if (= (count no-data) 0)
+          (if (= (count neither) 0)
             ""
-            (str "\n"
-              (render-list "modules with no detectable paths" no-data))))
+            (str "\n" (render-list "modules supported nowhere" neither))))
         "")
 
       (= selection "all")
       (->CommandResult 0
-        (str "Platform compatibility matrix (" (count verdicts) " modules)\n"
-          "Sources: NixOS schema (" nixos-count
-          " paths), darwin schema (" darwin-count " paths)\n\n"
+        (str "Platform compatibility matrix (" (count verdicts) " modules)\n\n"
           (render-list "darwin-compatible modules" both) "\n"
           (render-list "NixOS-only modules" linux)
           (if (= (count darwin-only) 0)
             ""
             (str "\n" (render-list "darwin-only modules" darwin-only)))
-          (if (= (count no-data) 0)
+          (if (= (count neither) 0)
             ""
-            (str "\n" (render-list "no-data" no-data)))
-          "\nThis checks option-path schema compatibility, not package builds.\n")
+            (str "\n" (render-list "modules supported nowhere" neither))))
         "")
 
       :else
@@ -995,7 +927,7 @@
           "verdict: " (verdict-label (platformverdict-verdict verdict)) "\n"
           (if (= (count (platformverdict-blockers verdict)) 0)
             ""
-            (str "blocking paths:\n"
+            (str "unsupported on:\n"
               (blocker-lines (platformverdict-blockers verdict)))))
         "")))))
 
