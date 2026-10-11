@@ -5,5 +5,5 @@ const driver = await import(
   new URL('./firn/flake-input-driver-test.js', import.meta.url)
 );
 
-const results = [pure["run-properties"](process.env.CI ? 512 : 128), driver["run-properties"](process.env.CI ? 512 : 128)];
+const results = [pure["run-scenarios"](), driver["run-scenarios"]()];
 process.exitCode = results.every((status) => status === 0) ? 0 : 1;

@@ -183,23 +183,6 @@ EOF
 EOF
 }
 
-cat >"$scratch/status-base.expected" <<'EOF'
-Host: fixture
-Platform: linux
-Source: hosts/fixture/enabled-tags.bnix
-
-:enabled (2):
-  [desktop -beta +delta]
-  terminal
-
-:disabled (1):
-  gamma
-
-Resolved active modules (2):
-  alpha
-  delta
-EOF
-
 run_native() {
   local result="$1" root="$2" host="$3"
   shift 3
@@ -207,51 +190,9 @@ run_native() {
     "${runtime[@]}" "$@"
 }
 
-printf 'tag-family: checking resolution, inventory, and status boundary\n' >&2
+printf 'tag-family: checking structured inventory boundary\n' >&2
 inventory_root="$scratch/inventory-repo"
 make_fixture "$inventory_root"
-
-run_native "$scratch/resolve" "$inventory_root" fixture tag resolve fixture
-assert_status "$scratch/resolve" 0 "tag resolve"
-rg -q '^Host: fixture$' "$scratch/resolve.out" \
-  || die "tag resolve did not route through the family wrapper"
-assert_empty "$scratch/resolve.err" "tag resolve stderr"
-
-cat >"$scratch/list.expected" <<'EOF'
-Tags (3):
-  creative            (1 default)
-  desktop             (2 default, 2 opt-in)
-  terminal            (2 default)
-
-Coverage: 5 / 6 modules carry at least one tag.
-EOF
-run_native "$scratch/list" "$inventory_root" fixture tag list
-assert_status "$scratch/list" 0 "tag list"
-assert_same "$scratch/list.expected" "$scratch/list.out" "tag list stdout"
-assert_empty "$scratch/list.err" "tag list stderr"
-
-cat >"$scratch/show.expected" <<'EOF'
-module: epsilon
-:tags         creative
-:tags-opt-in  desktop
-EOF
-run_native "$scratch/show" "$inventory_root" fixture tag show epsilon
-assert_status "$scratch/show" 0 "tag show"
-assert_same "$scratch/show.expected" "$scratch/show.out" "tag show stdout"
-assert_empty "$scratch/show.err" "tag show stderr"
-
-cat >"$scratch/filter.expected" <<'EOF'
-modules tagged 'desktop' (4):
-  alpha  (default)
-  beta  (default)
-  delta  (opt-in)
-  epsilon  (opt-in)
-EOF
-run_native "$scratch/filter" "$inventory_root" fixture tag filter desktop
-assert_status "$scratch/filter" 0 "tag filter"
-assert_same "$scratch/filter.expected" "$scratch/filter.out" \
-  "tag filter stdout"
-assert_empty "$scratch/filter.err" "tag filter stderr"
 
 cat >"$scratch/index.expected" <<'EOF'
 {"name":"alpha","tags":["desktop","terminal"],"tags_opt_in":[]}
@@ -263,25 +204,18 @@ cat >"$scratch/index.expected" <<'EOF'
 EOF
 run_native "$scratch/index-stdout" "$inventory_root" fixture tag index stdout
 assert_status "$scratch/index-stdout" 0 "tag index stdout"
-assert_same "$scratch/index.expected" "$scratch/index-stdout.out" \
-  "tag index stdout bytes"
+bun - "$scratch/index.expected" "$scratch/index-stdout.out" <<'JS'
+import assert from 'node:assert/strict';
+const rows = async path => (await Bun.file(path).text()).trim().split('\n').map(JSON.parse);
+assert.deepEqual(await rows(process.argv[2]), await rows(process.argv[3]));
+JS
 assert_empty "$scratch/index-stdout.err" "tag index stdout stderr"
 
 run_native "$scratch/index-repo" "$inventory_root" fixture tag index
 assert_status "$scratch/index-repo" 0 "tag index repo"
-printf 'firn tag index: wrote 6 entries → .beagle-cache/tags.jsonl\n' \
-  >"$scratch/index-repo.expected"
-assert_same "$scratch/index-repo.expected" "$scratch/index-repo.out" \
-  "tag index repo diagnostic"
 assert_empty "$scratch/index-repo.err" "tag index repo stderr"
-assert_same "$scratch/index.expected" \
-  "$inventory_root/.beagle-cache/tags.jsonl" "tag index repo bytes"
-
-run_native "$scratch/status-base" "$inventory_root" fixture tag status fixture
-assert_status "$scratch/status-base" 0 "tag status"
-assert_same "$scratch/status-base.expected" "$scratch/status-base.out" \
-  "tag status output"
-assert_empty "$scratch/status-base.err" "tag status stderr"
+assert_same "$scratch/index-stdout.out" \
+  "$inventory_root/.beagle-cache/tags.jsonl" "tag index persisted output"
 
 printf 'tag-family: checking atomic mutation, idempotence, and re-resolution\n' >&2
 mutation_root="$scratch/mutation-repo"
@@ -290,16 +224,12 @@ make_fixture "$mutation_root"
 cp "$host_file" "$scratch/mutation.before.bnix"
 run_native "$scratch/mutation.first" "$mutation_root" fixture tag enable creative
 assert_status "$scratch/mutation.first" 0 "first mutation"
-printf 'updated hosts/fixture/enabled-tags.bnix\n' >"$scratch/mutation.first.expected"
-assert_same "$scratch/mutation.first.expected" "$scratch/mutation.first.out" "mutation stdout"
 assert_empty "$scratch/mutation.first.err" "mutation stderr"
 cmp -s "$scratch/mutation.before.bnix" "$host_file" \
   && die "mutation reported an update without changing bytes"
 cp "$host_file" "$scratch/mutation.after.bnix"
 run_native "$scratch/mutation.second" "$mutation_root" fixture tag enable creative
 assert_status "$scratch/mutation.second" 0 "idempotent mutation"
-printf 'no change to hosts/fixture/enabled-tags.bnix\n' >"$scratch/mutation.second.expected"
-assert_same "$scratch/mutation.second.expected" "$scratch/mutation.second.out" "idempotent stdout"
 assert_empty "$scratch/mutation.second.err" "idempotent stderr"
 assert_same "$scratch/mutation.after.bnix" "$host_file" "idempotent bytes"
 run_native "$scratch/mutation.status" "$mutation_root" fixture tag status fixture

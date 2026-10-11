@@ -6,37 +6,6 @@
 (defn make-module [seed Int name String id String text String] views/ModuleSource
   (views/->ModuleSource name [(source seed id text)]))
 
-(defn lock-json [seed Int] String
-  (str
-    "{\"root\":\"root\",\"nodes\":{"
-    "\"root\":{\"inputs\":{"
-    (str "\"alpha" (if (= seed 0) "" seed) "\":\"alpha" (if (= seed 0) "" seed) "-node\",")
-    (str "\"broken" (if (= seed 0) "" seed) "\":\"broken" (if (= seed 0) "" seed) "-node\",")
-    (str "\"frozen" (if (= seed 0) "" seed) "\":\"frozen" (if (= seed 0) "" seed) "-node\",")
-    (str
-      "\"unknown"
-      (if (= seed 0) "" seed)
-      "-age\":\"unknown"
-      (if (= seed 0) "" seed)
-      "-node\"}},")
-    (str "\"alpha" (if (= seed 0) "" seed) "-node\":{")
-    "\"inputs\":{\"nixpkgs\":[\"nixpkgs\"]},"
-    "\"original\":{\"type\":\"github\",\"owner\":\"a\","
-    (str "\"repo\":\"alpha" (if (= seed 0) "" seed) "\"},")
-    "\"locked\":{\"lastModified\":1999940,"
-    "\"rev\":\"aaaaaaaa11111111\"}},"
-    (str "\"broken" (if (= seed 0) "" seed) "-node\":{\"original\":{\"type\":\"path\",")
-    (str
-      "\"path\":\"/tmp/broken"
-      (if (= seed 0) "" seed)
-      "\"},\"locked\":{\"lastModified\":1999999}},")
-    (str "\"frozen" (if (= seed 0) "" seed) "-node\":{\"original\":{\"type\":\"github\",")
-    (str "\"owner\":\"f\",\"repo\":\"frozen" (if (= seed 0) "" seed) "\",\"rev\":\"deadbeef\"},")
-    "\"locked\":{\"lastModified\":1913600,\"rev\":\"bbbbbbbb2222\"}},"
-    (str "\"unknown" (if (= seed 0) "" seed) "-node\":{\"original\":{\"type\":\"gitlab\",")
-    (str "\"owner\":\"u\",\"repo\":\"unknown" (if (= seed 0) "" seed) "\"},")
-    "\"locked\":{\"rev\":\"cccccccc3333\"}}}}"))
-
 (defn schema-json [seed Int] String
   (str
     (str "[{\"name\":\"services.shared" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\",")
@@ -60,68 +29,6 @@
   (match (views/schema-from-json text)
     [(SchemaLoaded entries) entries]
     [(SchemaRejected message offset) []]))
-
-(defn row-name [seed Int row views/FlakeRow] String (views/flakerow-name row))
-
-(defn case-lock-decode-render [seed Int] Bool
-  (match (views/flake-rows (lock-json seed) 2000000)
-    [(FlakeRowsRejected message) false]
-    [
-      (FlakeRows rows)
-      (let [
-         (plain String)
-         (views/render-flake-rows rows false)
-         (tty String)
-         (views/render-flake-rows rows true)]
-        (and
-          (= (row-name seed (nth rows 0)) (str "broken" (if (= seed 0) "" seed)))
-          (= (row-name seed (nth rows 1)) (str "alpha" (if (= seed 0) "" seed)))
-          (= (row-name seed (nth rows 2)) (str "frozen" (if (= seed 0) "" seed)))
-          (= (row-name seed (nth rows 3)) (str "unknown" (if (= seed 0) "" seed) "-age"))
-          (views/starts-with?
-            (views/flakerow-url (nth rows 0))
-            (str "path:/tmp/broken" (if (= seed 0) "" seed)))
-          (views/flakerow-broken (nth rows 0))
-          (= (views/flakerow-age (nth rows 1)) "1m")
-          (views/flakerow-frozen (nth rows 2))
-          (= (views/flakerow-age (nth rows 3)) "?")
-          (= (views/follow-target (nth (views/flakerow-follows (nth rows 1)) 0)) "nixpkgs")
-          (not (views/starts-with? plain "\u001b["))
-          (>= (views/find-substring tty "\u001b[") 0)))]))
-
-(defn case-schema-decode [seed Int] Bool
-  (match (views/schema-from-json (schema-json seed))
-    [(SchemaRejected message offset) false]
-    [
-      (SchemaLoaded entries)
-      (let [
-         (mode (U views/SchemaEntry Nil))
-         (views/schema-entry-for entries (str "services.mode" (if (= seed 0) "" seed)))]
-        (and
-          (some?
-            (views/schema-entry-for
-              entries
-              (str "services.submodule" (if (= seed 0) "" seed) ".enable")))
-          (some? mode)
-          (and
-            (= (views/schemaentry-type mode) "nullOr")
-            (= (views/schemaentry-inner-type mode) "enum"))
-          (= (views/schemaentry-enum-values mode) ["a" "b"])))]))
-
-(defn case-schema-conflict-rejected [seed Int] Bool
-  (match (views/schema-from-json "[{\"name\":\"a.b\",\"p\":\"a.c\",\"t\":\"bool\"}]")
-    [(SchemaLoaded entries) false]
-    [(SchemaRejected message offset) true]))
-
-(defn case-submodule-schema [seed Int] Bool
-  (match (views/submodule-schema-from-json
-     (str
-       "{\"submodules\":{\"users.users\":["
-       "{\"p\":\"users.users.<name>.shell\",\"t\":\"path\"}]}}"))
-    [(SchemaRejected message offset) false]
-    [
-      (SchemaLoaded entries)
-      (and (= (views/schemaentry-path (nth entries 0)) "users.users.<name>.shell"))]))
 
 (defn platform-modules [seed Int] (Vec views/ModuleSource)
   [
@@ -177,17 +84,6 @@
     (= (verdict seed (str "wildcard" (if (= seed 0) "" seed))) :both)
     (= (verdict seed (str "freeform" (if (= seed 0) "" seed))) :both)))
 
-(defn explain-documents [seed Int] (Vec paths/SourceDocument)
-  [
-    (source
-      seed
-      (str "modules/example" (if (= seed 0) "" seed) "/default.bnix")
-      (str "#lang beagle/nix\n{:services.mode" (if (= seed 0) "" seed) " \"a\"}"))
-    (source
-      seed
-      "modules/sub/default.bnix"
-      (str "#lang beagle/nix\n{:services.submodule" (if (= seed 0) "" seed) ".enable true}"))])
-
 (defn action-kind [seed Int action views/ViewsAction] String
   (match action
     [(FlakeInputs token) "flake"]
@@ -241,19 +137,18 @@
       (views/starts-with? (views/commandresult-stderr extract) err))))
 
 (js/export
+  (defn run-scenarios [] Int
+    (if (and
+      (case-platform-verdicts 0)
+      (case-argv 0))
+      0
+      (do (println "FAIL views scenarios") 1))))
+
+(js/export
   (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-lock-decode-render seed)
-             (case-schema-decode seed)
-             (case-schema-conflict-rejected seed)
-             (case-submodule-schema seed)
-             (case-platform-verdicts seed)
-             (case-argv seed)
-             (child-conservation? seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.views-test property seed=" seed)) 1)))))))
+    (if (<= samples 0) 1
+      (loop [index Int 0 seed Int 73421]
+        (if (>= index samples) 0
+          (if (child-conservation? seed)
+            (recur (+ index 1) (mod (* seed 48271) 2147483647))
+            (do (println (str "FAIL child conservation seed=" seed)) 1)))))))

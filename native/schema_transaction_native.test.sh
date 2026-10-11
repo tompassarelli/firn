@@ -95,4 +95,4 @@ timeout --foreground 30 bun --eval '
 [[ ! -s "$scratch/real-lock.err" ]] \
   || die "real flake.lock fingerprint wrote stderr"
 
-printf 'ok: Beagle/JS schema authority policy and Bun transaction boundary are checked\n'
+printf 'ok: schema fingerprint, cache policy and input selection properties pass\n'

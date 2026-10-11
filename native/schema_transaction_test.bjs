@@ -269,7 +269,12 @@
   (defn run-properties [samples Int] Int
     (if (<= samples 0)
       1
-      (if (not (rfc6234-section8-5-sha256-abc-reference?))
+      (if (not (and (rfc6234-section8-5-sha256-abc-reference?)
+          (case-fingerprint-refusals 0)
+          (case-schema-and-policy-validation 0)
+          (case-cache-authority 0)
+          (case-exact-input-selection 0)
+          (case-argv-grammar 0)))
         1
         (loop [index Int 0 seed Int 0]
           (if (>= index samples)
@@ -277,11 +282,6 @@
             (if (and
                (case-sha256-and-canonical-json seed)
                (case-fingerprint-input-authority seed)
-               (case-fingerprint-tool-authority seed)
-               (case-fingerprint-refusals seed)
-               (case-schema-and-policy-validation seed)
-               (case-cache-authority seed)
-               (case-exact-input-selection seed)
-               (case-argv-grammar seed))
+               (case-fingerprint-tool-authority seed))
               (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
               (do (println (str "FAIL firn.schema-transaction-test property seed=" seed)) 1))))))))

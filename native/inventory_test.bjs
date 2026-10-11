@@ -153,15 +153,10 @@
       [(InvalidInventoryArgv argv) true])))
 
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-canonical-paths-and-states seed)
-             (case-live-closure seed)
-             (case-argv-grammar seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.inventory-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (case-canonical-paths-and-states 0)
+      (case-live-closure 0)
+      (case-argv-grammar 0))
+      0
+      (do (println "FAIL inventory scenarios") 1))))

@@ -21,10 +21,28 @@
                        (r/activation-effects value "fixture" platform path))
                   (into [(r/generation-query-effect platform)] (r/generation-tag-effects value "42"))))))
 
+(defn operation [argv (Vec String)] String
+  (let [text String (str argv)]
+    (cond
+      (> (token-count argv "cat-file") 0) "pin committed snapshot"
+      (and (> (token-count argv "worktree") 0) (> (token-count argv "add") 0)) "materialize committed snapshot"
+      (> (token-count argv "validate") 0) "validate committed snapshot"
+      (and (> (token-count argv "worktree") 0) (> (token-count argv "remove") 0)) "retire validation snapshot"
+      (and (= (first argv) "nix") (> (token-count argv "build") 0)) "build committed snapshot"
+      (= argv ["sudo" "-v"]) "activation preflight"
+      (> (token-count argv "--set") 0) "select system profile"
+      (> (token-count argv "--switch-generation") 0) "select rollback generation"
+      (and (= (first argv) "sudo") (> (token-count argv "switch") 0)) "activate verified closure"
+      (or (> (token-count argv "list-generations") 0) (> (token-count argv "--list-generations") 0)) "read active generation"
+      (> (token-count argv "tag") 0) "tag active generation"
+      (= (first argv) "readlink") (if (str/includes? text "system-") "resolve rollback generation" "verify persistent system profile")
+      (= (first argv) "test") "validate rollback closure"
+      :else "unknown")))
+
 (defn phase-index [effects (Vec r/ArgvEffect) phase String] Int
   (loop [index Int 0]
     (if (>= index (count effects)) -1
-      (if (= (r/argveffect-phase (nth effects index)) phase) index (recur (+ index 1))))))
+      (if (= (operation (r/argveffect-argv (nth effects index))) phase) index (recur (+ index 1))))))
 
 (defn ordered? [effects (Vec r/ArgvEffect) before String after String] Bool
   (and (>= (phase-index effects before) 0)
@@ -38,8 +56,8 @@
 (defn order-rule? [effects (Vec r/ArgvEffect) linux Bool mode Int] Bool
   (cond
     (= mode 1) (and
-      (ordered? effects "activation preflight" "select persistent system profile")
-      (ordered? effects "select persistent system profile" "verify persistent system profile")
+      (ordered? effects "activation preflight" "select system profile")
+      (ordered? effects "select system profile" "verify persistent system profile")
       (ordered? effects "verify persistent system profile" "activate verified closure"))
     (= mode 2) (and
       (ordered? effects "resolve rollback generation" "validate rollback closure")
@@ -54,16 +72,17 @@
       (ordered? effects "build committed snapshot" "activation preflight")
       (ordered? effects "activation preflight" "activate verified closure")
       (or (not linux) (and
-        (ordered? effects "activation preflight" "activate system profile")
-        (ordered? effects "activate system profile" "activate verified closure")))
+        (ordered? effects "activation preflight" "select system profile")
+        (ordered? effects "select system profile" "activate verified closure")))
       (ordered? effects "activate verified closure" "read active generation")
       (ordered? effects "read active generation" "tag active generation"))))
 
+;; Git, Nix, sudo and closure activation consume these argument tokens.
 (defn platform-rule? [effects (Vec r/ArgvEffect) linux Bool overridden Bool mode Int] Bool
   (loop [index Int 0]
     (if (>= index (count effects)) true
       (let [effect r/ArgvEffect (nth effects index) argv (Vec String) (r/argveffect-argv effect)
-            phase String (r/argveffect-phase effect) text String (str argv)]
+            phase String (operation argv) text String (str argv)]
         (and
           (if linux (not (str/includes? text "darwin-rebuild"))
             (and (not (str/includes? text "nix-env"))
@@ -75,7 +94,7 @@
                        (str "git+file:///repo?rev=" revision "&ref=native-rebuild-workflow"))
                   (if linux "#nixosConfigurations.fixture.config.system.build.toplevel"
                     "#darwinConfigurations.fixture.system")))) true)
-          (if (or (= phase "activate system profile") (= phase "select persistent system profile"))
+          (if (= phase "select system profile")
             (= argv ["sudo" "nix-env" "--profile" "/nix/var/nix/profiles/system" "--set" "/nix/store/system"]) true)
           (if (and linux (= phase "activate verified closure"))
             (= argv ["sudo" "/nix/store/system/bin/switch-to-configuration" "switch"]) true)

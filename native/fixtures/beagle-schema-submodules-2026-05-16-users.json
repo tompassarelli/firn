@@ -1,0 +1,209 @@
+{
+  "submodules": {
+    "users.users": [
+      {
+        "inner": {
+          "t": "raw"
+        },
+        "p": "users.users.<name>._module.args",
+        "t": "lazyAttrsOf"
+      },
+      {
+        "p": "users.users.<name>._module.check",
+        "t": "bool"
+      },
+      {
+        "inner": {
+          "t": "optionType"
+        },
+        "p": "users.users.<name>._module.freeformType",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>._module.specialArgs",
+        "t": "unspecified"
+      },
+      {
+        "p": "users.users.<name>.autoSubUidGidRange",
+        "t": "bool"
+      },
+      {
+        "p": "users.users.<name>.createHome",
+        "t": "bool"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.cryptHomeLuks",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>.description",
+        "t": "passwdEntry str"
+      },
+      {
+        "p": "users.users.<name>.enable",
+        "t": "bool"
+      },
+      {
+        "inner": {
+          "t": "strMatching \"[[:digit:]]{4}-[[:digit:]]{2}-[[:digit:]]{2}\""
+        },
+        "p": "users.users.<name>.expires",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.extraGroups",
+        "t": "listOf"
+      },
+      {
+        "p": "users.users.<name>.group",
+        "t": "str"
+      },
+      {
+        "inner": {
+          "t": "passwdEntry str"
+        },
+        "p": "users.users.<name>.hashedPassword",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.hashedPasswordFile",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>.home",
+        "t": "passwdEntry path"
+      },
+      {
+        "p": "users.users.<name>.homeMode",
+        "t": "strMatching \"[0-7]{1,5}\""
+      },
+      {
+        "p": "users.users.<name>.ignoreShellProgramCheck",
+        "t": "bool"
+      },
+      {
+        "inner": {
+          "t": "passwdEntry str"
+        },
+        "p": "users.users.<name>.initialHashedPassword",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.initialPassword",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>.isNormalUser",
+        "t": "bool"
+      },
+      {
+        "p": "users.users.<name>.isSystemUser",
+        "t": "bool"
+      },
+      {
+        "inner": {
+          "t": "bool"
+        },
+        "p": "users.users.<name>.linger",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>.name",
+        "t": "passwdEntry str"
+      },
+      {
+        "inner": {
+          "t": "path"
+        },
+        "p": "users.users.<name>.openssh.authorizedKeys.keyFiles",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "singleLineStr"
+        },
+        "p": "users.users.<name>.openssh.authorizedKeys.keys",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "singleLineStr"
+        },
+        "p": "users.users.<name>.openssh.authorizedPrincipals",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "package"
+        },
+        "p": "users.users.<name>.packages",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.pamMount",
+        "t": "attrsOf"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.password",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "str"
+        },
+        "p": "users.users.<name>.passwordFile",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "either"
+        },
+        "p": "users.users.<name>.shell",
+        "t": "nullOr"
+      },
+      {
+        "inner": {
+          "t": "submodule"
+        },
+        "p": "users.users.<name>.subGidRanges",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "submodule"
+        },
+        "p": "users.users.<name>.subUidRanges",
+        "t": "listOf"
+      },
+      {
+        "inner": {
+          "t": "int"
+        },
+        "p": "users.users.<name>.uid",
+        "t": "nullOr"
+      },
+      {
+        "p": "users.users.<name>.useDefaultShell",
+        "t": "bool"
+      }
+    ]
+  }
+}

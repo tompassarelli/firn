@@ -170,15 +170,15 @@ run_cli() {
 
 assert_output() {
   local name="$1" expected="$2"
-  awk '/^  / {print}' "$expected" >"$scratch/$name.expected.rows"
-  awk '/^  / {print}' "$scratch/$name.out" >"$scratch/$name.actual.rows"
+  awk '/^  / {$1=$1; print}' "$expected" >"$scratch/$name.expected.rows"
+  awk '/^  / {$1=$1; print}' "$scratch/$name.out" >"$scratch/$name.actual.rows"
   if ! cmp -s "$scratch/$name.expected.rows" "$scratch/$name.actual.rows"; then
     diff -u "$expected" "$scratch/$name.out" >&2 || true
     die "$name stdout changed"
   fi
 }
 
-printf 'inventory-native: running exact CLI fixture\n' >&2
+printf 'inventory-native: running CLI inventory scenario\n' >&2
 
 run_cli module-all module list all
 cat >"$scratch/module-all.expected" <<'EOF'

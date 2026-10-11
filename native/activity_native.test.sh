@@ -102,7 +102,7 @@ printf '%s\n' '{"type":"module"}' \
 printf 'activity-native: post-reorder focus behavior\n' >&2
 FIRN_ACTIVITY_TEST_MODULE="$modules/activity/focus-test.js" \
 timeout --foreground 30 "$bun" --eval \
-  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m["run-properties"](process.env.CI ? 512 : 128);' \
+  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m["run-scenarios"]();' \
   >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
   || die "post-reorder focus behavior failed"
 [[ ! -s "$scratch/focus-test.err" ]] \
@@ -247,6 +247,7 @@ jq -e '(.generated_at | type) == "number" and
 
 printf 'activity-native: CLI protocol and persistence\n' >&2
 "$executable" current >"$scratch/current.out"
+# activity-menu consumes one activity ID per line.
 cmp -s "$scratch/current.out" <(printf 'home\n') \
   || die "current output changed"
 "$executable" list --menu >"$scratch/menu.out"
@@ -267,15 +268,12 @@ assignments_ready() {
 }
 wait_for 'persisted assignment' assignments_ready
 
+# niri msg action consumes these ordered command tokens.
 actions_ready() {
   cmp -s "$scratch/actions.log" \
     <(printf 'focus-workspace render\nset-workspace-name acme --workspace 3\nmove-column-to-workspace acme\n')
 }
 wait_for 'ordered niri actions' actions_ready
-cmp -s "$scratch/actions.log" \
-  <(printf 'focus-workspace render\nset-workspace-name acme --workspace 3\nmove-column-to-workspace acme\n') \
-  || die "command action order changed"
-
 printf 'activity-native: sole-writer takeover and restart persistence\n' >&2
 "$executable" daemon \
   >"$scratch/daemon-two.out" 2>"$scratch/daemon-two.err" &

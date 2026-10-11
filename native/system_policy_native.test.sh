@@ -71,7 +71,7 @@ driver_js="$(find "$scratch/build" -name system-policy-native.js -print -quit)"
 [[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
 [[ -n "$driver_js" && -f "$driver_js" ]] || die "system policy module was not emitted"
 FIRN_SYSTEM_POLICY_TEST_MODULE="$pure_js" timeout --foreground 30 "$bun" --eval \
-  'const m = await import(process.env.FIRN_SYSTEM_POLICY_TEST_MODULE); process.exitCode = m["run-properties"](process.env.CI ? 512 : 128);' \
+  'const m = await import(process.env.FIRN_SYSTEM_POLICY_TEST_MODULE); process.exitCode = m["run-scenarios"]() + m["run-properties"](process.env.CI ? 512 : 128);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die "pure policy fixtures failed"
 

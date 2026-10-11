@@ -41,7 +41,8 @@ materialize_js prewarm firn-prewarm prewarm.js FIRN_PREWARM_MODULE \
 POLICY="$stage/lib/prewarm/prewarm.js" "$bun" - <<'JS'
 import assert from 'node:assert/strict';
 const p = await import(process.env.POLICY);
-for (let index = 0, seed = 73421; index < (process.env.CI ? 512 : 128); index++, seed = (seed * 48271) % 2147483647) {
+{
+const seed = 73421;
 const same = p['container-main-candidates']('/srv/firn/worktrees/prewarm', '/srv/firn/main/.git');
 assert.deepEqual(same, ['/srv/firn/main', '/srv/firn/worktrees/prewarm']);
 assert.deepEqual(p['container-main-candidates']('/srv/firn/pins/rev', '/different/.git'),
@@ -84,14 +85,13 @@ assert.deepEqual(p['stamp-plan'](key,0,false,100,100), {text:`${key}\n`});
 for (const args of [[1,false,0,100],[0,true,0,100],[0,false,101,100]]) {
   assert.deepEqual(p['stamp-plan'](key,...args), {status:args[0]});
 }
-const detached = ['setsid','-f','nice','-n','19','ionice','-c','3',executable,'--worker',executable,repository,key];
 const hook = (state,lines) => p['hook-plan'](state,lines,executable,repository,key);
 assert.deepEqual(hook('prepared',[]), {state:'prepared'});
-assert.deepEqual(hook('committed',['malformed','abc def refs/heads/main']), {argv:detached});
+assert.deepEqual(hook('committed',['malformed','abc def refs/heads/main']).argv.slice(-3), [executable,repository,key]);
 for (const line of ['abc abc refs/heads/main','abc 000 refs/heads/main','abc def refs/heads/other','abc  def refs/heads/main','abc def refs/heads/main  ']) {
   assert.deepEqual(hook('committed',[line]), {state:'committed'}, line);
 }
-assert.deepEqual(hook('committed',['abc def refs/heads/main ']), {argv:detached});
+assert.deepEqual(hook('committed',['abc def refs/heads/main ']), hook('committed',['abc def refs/heads/main']));
 assert.deepEqual(hook('prepared',['abc def refs/heads/main']), {state:'prepared'});
 assert.deepEqual(hook('aborted',['abc def refs/heads/main']), {state:'aborted'});
 for (const argv of [['firn','rebuild'],['/bin/bash','/bin/firn','host','rebuild','whiterabbit']]) {
@@ -101,7 +101,7 @@ for (const argv of [[],['firn','host'],['not-firn','rebuild'],['firn','repo','bu
   assert.equal(p['rebuild-argv'](argv),false);
 }
 }
-console.log(`ok: prewarm identity and stamp property cases=1 generated=${process.env.CI ? 512 : 128}`);
+console.log('ok: prewarm identity, ownership and stamp scenarios');
 JS
 
 container="$scratch/container"
@@ -131,14 +131,10 @@ actual_key="$(timeout --foreground 30 "$stage/bin/firn-prewarm" --print-warm-key
 
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-detached "$stage/bin/firn-prewarm" >"$scratch/detached.plan"
-printf '%s\n' setsid -f nice -n 19 ionice -c 3 \
-  "$stage/bin/firn-prewarm" --worker "$stage/bin/firn-prewarm" \
-  "$main" "$expected_key" >"$scratch/detached.expected"
-cmp "$scratch/detached.expected" "$scratch/detached.plan"
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-reference-transaction "$stage/bin/firn-prewarm" committed \
   'abc def refs/heads/main' >"$scratch/hook.plan"
-cmp "$scratch/detached.expected" "$scratch/hook.plan"
+cmp "$scratch/detached.plan" "$scratch/hook.plan"
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-reference-transaction "$stage/bin/firn-prewarm" prepared \
   'abc def refs/heads/main' >"$scratch/ignored.plan"

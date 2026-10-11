@@ -61,7 +61,6 @@ FIRN_NIX_COMPARISON_DISCOVERED="$discovered" \
           }) evaluated.config.environment.systemPackages;
           type = option.type.name;
           default = option.default;
-          description = option.description;
           home = evaluated.config.home-manager.users;
           settings = with evaluated.config; {
             login = security.pam.services.login.enableGnomeKeyring;

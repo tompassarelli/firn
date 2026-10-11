@@ -49,7 +49,7 @@
         [(HookRefuse reason) false])
       (= (policy/hook-exit-code (policy/decide-hook event)) 0))))
 
-(defn case-pin-arguments-and-assertions [seed Int] Bool
+(defn pin-arguments-property [seed Int] Bool
   (and
     (match (policy/parse-pin-arguments [(str "--warn-days=" (mod seed 61))])
       [(PinArgumentsAccepted days) (= days (mod seed 61))]
@@ -58,7 +58,10 @@
     (match (policy/parse-pin-arguments ["--warn-days" (str "no" seed)])
       [(PinArgumentsRejected message) true]
       [(PinArgumentsAccepted days) false]
-      [(PinArgumentsHelp token) false])
+      [(PinArgumentsHelp token) false])))
+
+(defn case-pin-arguments-and-assertions [seed Int] Bool
+  (and (pin-arguments-property seed)
     (policy/valid-sri? "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
     (not (policy/valid-sri? "sha256-not-a-checksum"))))
 
@@ -93,16 +96,20 @@
         "stale-lock-input"))))
 
 (js/export
+  (defn run-scenarios [] Int
+    (if (and
+      (case-event-decoding-and-refusal 0)
+      (case-edit-introduction-and-exits 0)
+      (case-pin-arguments-and-assertions 0)
+      (case-pin-exit-decision 0))
+      0
+      (do (println "FAIL system_policy scenarios") 1))))
+
+(js/export
   (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-event-decoding-and-refusal seed)
-             (case-edit-introduction-and-exits seed)
-             (case-pin-arguments-and-assertions seed)
-             (case-pin-exit-decision seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.system-policy-test property seed=" seed)) 1)))))))
+    (if (<= samples 0) 1
+      (loop [index Int 0 seed Int 73421]
+        (if (>= index samples) 0
+          (if (pin-arguments-property seed)
+            (recur (+ index 1) (mod (* seed 48271) 2147483647))
+            (do (println (str "FAIL pin argument conservation seed=" seed)) 1)))))))

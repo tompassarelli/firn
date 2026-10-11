@@ -34,12 +34,9 @@
     "repo build argv contract"))
 
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and (= (test-path-contract seed) 0) (= (test-command-contract seed) 0))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.repo-build-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (= (test-path-contract 0) 0)
+      (= (test-command-contract 0) 0))
+      0
+      (do (println "FAIL repo_build scenarios") 1))))

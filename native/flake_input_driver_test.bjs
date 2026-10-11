@@ -146,15 +146,10 @@
       (= (driver/outcome-stdout outcome) ""))))
 
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-argv-grammar seed)
-             (case-emit-and-up-to-date seed)
-             (case-conflict-before-summary seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.flake-input-driver-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (case-argv-grammar 0)
+      (case-emit-and-up-to-date 0)
+      (case-conflict-before-summary 0))
+      0
+      (do (println "FAIL flake_input_driver scenarios") 1))))

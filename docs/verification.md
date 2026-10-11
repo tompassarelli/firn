@@ -51,10 +51,15 @@ The schema transaction suite keeps the SHA-256 `abc` vector from
 [RFC 6234, section 8.5](https://www.rfc-editor.org/rfc/rfc6234.html#section-8.5)
 as its external reference, separately from generated schema properties.
 
-Pure-core properties use fixed seeds: 128 generated inputs locally and 512
-when `CI` is set (rebuild uses 16 and 64). The shell collectors supply that
-budget to the pure runner. Prewarm's integration runner checks 128 generated
-keys locally and 512 in CI. A zero property budget fails.
+Generated pure-core properties use fixed seeds: 128 inputs locally and 512
+in CI (rebuild uses 16 and 64). Fixed scenario tables run once; changing only
+an identifier is not a generated property. Views checks child-result
+conservation with generated statuses and streams. Decoder references use
+recorded Beagle schemas and NixOS generation output in `native/fixtures/`.
+Authoring checks real Git staging and compiled Galileo/Nix behavior.
 
-`modules/nexus-checks/default.test.sh` exercises generated health inputs and
-alert decisions through the Nexus service's sourceable rule helpers.
+`modules/nexus-checks/default.test.sh` checks recorded OpenSSH/loginctl output
+once, then generates numeric health inputs, warning sets and alert decisions.
+The boot-coupling measurement compiles the real module metadata bodies in one
+Clause bundle so the local check covers the whole catalog without starting a
+compiler for each module.

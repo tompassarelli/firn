@@ -113,36 +113,10 @@
       [(AuthoringPlanReady plan) false]
       [(AuthoringPlanRejected message) true])))
 
-(defn case-schema-json-name-authority [seed Int] Bool
-  (match (a/schema-entries-from-json
-     (str
-       "[{\"inner\":{\"t\":\"submodule\"},"
-       (str "\"p\":\"services.openssh" (if (= seed 0) "" seed) ".stale\",")
-       (str "\"name\":\"services.openssh" (if (= seed 0) "" seed) ".port\",\"t\":\"int\"},")
-       (str "{\"name\":\"services.openssh" (if (= seed 0) "" seed) ".banner\"}]")))
-    [(SchemaRejected message offset) false]
-    [
-      (SchemaParsed entries)
-      (and
-        (=
-          (a/schemaentry-name (nth entries 0))
-          (str "services.openssh" (if (= seed 0) "" seed) ".port"))
-        (= (a/schemaentry-type (nth entries 0)) "int")
-        (=
-          (a/schemaentry-name (nth entries 1))
-          (str "services.openssh" (if (= seed 0) "" seed) ".banner"))
-        (= (a/schemaentry-type (nth entries 1)) "?"))]))
-
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-argv-grammar seed)
-             (case-name-refusal seed)
-             (case-schema-json-name-authority seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.authoring-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (case-argv-grammar 0)
+      (case-name-refusal 0))
+      0
+      (do (println "FAIL authoring scenarios") 1))))

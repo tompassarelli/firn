@@ -40,27 +40,30 @@
     [(ModuleInputsParsed inputs) inputs]
     [(ModuleInputsRejected message offset) []]))
 
+(defn property-member? [values (Vec input/FlakeInputProperty) wanted input/FlakeInputProperty] Bool
+  (loop [index Int 0]
+    (if (>= index (count values)) false
+      (if (= (nth values index) wanted) true (recur (+ index 1))))))
+
+(defn same-properties? [left input/FlakeInput right input/FlakeInput] Bool
+  (let [a (Vec input/FlakeInputProperty) (input/flakeinput-properties left)
+        b (Vec input/FlakeInputProperty) (input/flakeinput-properties right)]
+    (and (= (count a) (count b))
+      (loop [index Int 0]
+        (if (>= index (count a)) true
+          (and (property-member? b (nth a index)) (recur (+ index 1))))))))
+
 (defn case-parse-and-render [seed Int] Bool
-  (let [
-     (inputs (Vec input/FlakeInput))
-     (parsed-inputs seed (str "alpha" (if (= seed 0) "" seed) "-module") (alpha-source seed))
-     (names (Vec String))
-     (input/sorted-input-names inputs)]
-    (and
-      (= names [(str "alpha" (if (= seed 0) "" seed)) (str "zeta" (if (= seed 0) "" seed))])
-      (=
-        (input/format-input-decl (input/find-input inputs (str "alpha" (if (= seed 0) "" seed))))
-        (str
-          "   :alpha"
-          (if (= seed 0) "" seed)
-          " {:url \"github:alpha"
-          (if (= seed 0) "" seed)
-          "/project\"}"))
-      (=
-        (input/format-input-decl (input/find-input inputs (str "zeta" (if (= seed 0) "" seed))))
-        (str
-          (str "   :zeta" (if (= seed 0) "" seed) " {:inputs.nixpkgs.follows \"nixpkgs\" ")
-          (str ":url \"github:zeta" (if (= seed 0) "" seed) "/project\"}"))))))
+  (let [inputs (Vec input/FlakeInput) (parsed-inputs seed "fixture" (alpha-source seed))
+        names (Vec String) (input/sorted-input-names inputs)
+        rendered String (str "(nix/module [config] {:flake-inputs {"
+          (input/format-input-decl (input/find-input inputs "alpha"))
+          (input/format-input-decl (input/find-input inputs "zeta")) "}})")
+        reparsed (Vec input/FlakeInput) (parsed-inputs seed "fixture" rendered)]
+    (and (= names ["alpha" "zeta"])
+      (= (input/sorted-input-names reparsed) names)
+      (same-properties? (input/find-input reparsed "alpha") (input/find-input inputs "alpha"))
+      (same-properties? (input/find-input reparsed "zeta") (input/find-input inputs "zeta")))))
 
 (defn case-duplicate-url-keeps-first [seed Int] Bool
   (let [
@@ -148,16 +151,11 @@
     [(SpliceUnchanged text) false]))
 
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and
-             (case-parse-and-render seed)
-             (case-duplicate-url-keeps-first seed)
-             (case-six-marker-splice-and-idempotence seed)
-             (case-missing-marker-rejected seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL firn.flake-input-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (case-parse-and-render 0)
+      (case-duplicate-url-keeps-first 0)
+      (case-six-marker-splice-and-idempotence 0)
+      (case-missing-marker-rejected 0))
+      0
+      (do (println "FAIL flake_input scenarios") 1))))

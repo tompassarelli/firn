@@ -13,19 +13,20 @@ expect() {
   fi
 }
 
+login=$(cat "$here/../../native/fixtures/openssh-10.5p1-2026-10-11-login.txt")
+session=$(cat "$here/../../native/fixtures/systemd-loginctl-260.5-2026-10-11-sessions.txt")
+expect true "$(check_logins "$login" "" 'peer-fixture=known' 'SHA256:fixture' "")"
+expect false "$(check_logins "$login" "" 'peer-fixture=known' 'SHA256:other' "")"
+expect false "$(check_logins "$login" "" "" 'SHA256:fixture' "")"
+expect false "$(check_logins "" "$session" "" "" "")"
+expect true "$(check_logins "" "$session" "" "" fixture-session)"
+expect true "$(check_units "" "")"
+expect false "$(check_units 'fixture.service loaded failed failed fixture' "")"
+expect true "$(check_backup '' 946684800)"
+expect true "$(check_lynis '' '' 80 baseline)"
+
 property() {
-  local seed=$1 peer fingerprint login session now days percent hours
-  peer="peer-$seed"
-  fingerprint="SHA256:K$seed"
-  login="Accepted publickey for fixture$seed from $peer port 4242 ssh2: ED25519 $fingerprint"
-  session="s$seed 1000 fixture$seed seat0 737 user tty1 no -"
-  expect true "$(check_logins "$login" "" "$peer=known" "$fingerprint" "")" || return 1
-  expect false "$(check_logins "$login" "" "$peer=known" "SHA256:other" "")" || return 1
-  expect false "$(check_logins "$login" "" "" "$fingerprint" "")" || return 1
-  expect false "$(check_logins "" "$session" "" "" "")" || return 1
-  expect true "$(check_logins "" "$session" "" "" "s$seed")" || return 1
-  expect true "$(check_units "" "")" || return 1
-  expect false "$(check_units "u$seed.service loaded failed failed fixture" "")" || return 1
+  local seed=$1 now days percent hours previous_index current_index previous_ids current_ids unexpected healthy
   days=$((seed % 15))
   now=$((946684800 + days * 86400))
   expect "$([[ "$days" -le 7 ]] && echo true || echo false)" \
@@ -38,11 +39,18 @@ property() {
     "$(check_disk " $percent%")" || return 1
   expect "$([[ "$hours" -lt 26 ]] && echo true || echo false)" \
     "$(check_backup "$((946684800 - hours * 3600))" 946684800)" || return 1
-  expect true "$(check_backup '' 946684800)" || return 1
-  expect true "$(check_lynis 80 "A$seed" 80 "A$seed")" || return 1
-  expect false "$(check_lynis 80 "A$seed" 79 "A$seed")" || return 1
-  expect false "$(check_lynis 80 "A$seed" 80 "A$seed B$seed")" || return 1
-  expect true "$(check_lynis '' '' 80 "A$seed")" || return 1
+  previous_index=$((seed % 101))
+  current_index=$(((seed / 101) % 101))
+  previous_ids="warning-$((seed % 4)) warning-$(((seed / 101) % 4))"
+  current_ids="warning-$(((seed / 7) % 4)) warning-$(((seed / 13) % 4))"
+  unexpected=false
+  for id in $current_ids; do
+    [[ " $previous_ids " == *" $id "* ]] || unexpected=true
+  done
+  healthy=false
+  if ((current_index >= previous_index)) && [[ "$unexpected" == false ]]; then healthy=true; fi
+  expect "$healthy" "$(check_lynis "$previous_index" "$previous_ids" "$current_index" "$current_ids")" || return 1
+  # apply reads the action/status/timestamp fields from decide.
   [[ "$(decide ok 0 ok "$now")" == 'none ok 0' ]] || return 1
   [[ "$(decide fail 0 ok "$now")" == 'recover ok 0' ]] || return 1
   [[ "$(decide ok 0 failure "$now")" == "alert fail $now" ]] || return 1
@@ -57,4 +65,4 @@ for ((index=0; index<samples; index++)); do
   property "$seed" || { printf 'FAIL Nexus health property seed=%s\n' "$seed" >&2; exit 1; }
   seed=$((seed * 48271 % 2147483647))
 done
-printf 'ok: Nexus health property cases=1 generated=%s\n' "$samples"
+printf 'ok: Nexus health property cases=1 generated=%s plus recorded login/session references\n' "$samples"

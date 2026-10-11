@@ -67,7 +67,7 @@ timeout --foreground 30 env \
   FIRN_REBUILD_TEST_MODULE="$modules/firn/rebuild-test.js" \
   "$bun" "$repo/native/firn_rebuild_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
-  || die "seeded rebuild property or impact boundary failed"
+  || die "seeded rebuild properties failed"
 [[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
 [[ ! -s "$scratch/pure.err" ]] || die "pure fixtures wrote stderr"
 

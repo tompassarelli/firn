@@ -157,12 +157,8 @@
         [(PersistStep assignments) false]))))
 
 (js/export
-  (defn run-properties [samples Int] Int
-    (if (<= samples 0)
-      1
-      (loop [index Int 0 seed Int 0]
-        (if (>= index samples)
-          0
-          (if (and (persistent-activity-sequence? seed))
-            (recur (+ index 1) (if (= seed 0) 73421 (mod (* seed 48271) 2147483647)))
-            (do (println (str "FAIL activity.focus-test property seed=" seed)) 1)))))))
+  (defn run-scenarios [] Int
+    (if (and
+      (persistent-activity-sequence? 0))
+      0
+      (do (println "FAIL activity_focus scenarios") 1))))

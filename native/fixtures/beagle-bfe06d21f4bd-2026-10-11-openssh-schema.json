@@ -1,0 +1,159 @@
+[
+  {
+    "name": "services.openssh.allowSFTP",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.authorizedKeysCommand",
+    "t": "str"
+  },
+  {
+    "name": "services.openssh.authorizedKeysCommandUser",
+    "t": "str"
+  },
+  {
+    "inner": {
+      "t": "str"
+    },
+    "name": "services.openssh.authorizedKeysFiles",
+    "t": "listOf"
+  },
+  {
+    "name": "services.openssh.authorizedKeysInHomedir",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.banner",
+    "t": "unspecified"
+  },
+  {
+    "name": "services.openssh.challengeResponseAuthentication",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.ciphers",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.enable",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.enableRecommendedAlgorithms",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.extraConfig",
+    "t": "separatedString"
+  },
+  {
+    "name": "services.openssh.forwardX11",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.gatewayPorts",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.generateHostKeys",
+    "t": "bool"
+  },
+  {
+    "inner": {
+      "t": "attrs"
+    },
+    "name": "services.openssh.hostKeys",
+    "t": "listOf"
+  },
+  {
+    "name": "services.openssh.kbdInteractiveAuthentication",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.kexAlgorithms",
+    "t": "submodule"
+  },
+  {
+    "inner": {
+      "t": "submodule"
+    },
+    "name": "services.openssh.knownHosts",
+    "t": "attrsOf"
+  },
+  {
+    "inner": {
+      "t": "submodule"
+    },
+    "name": "services.openssh.listenAddresses",
+    "t": "listOf"
+  },
+  {
+    "name": "services.openssh.logLevel",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.macs",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.moduliFile",
+    "t": "path"
+  },
+  {
+    "name": "services.openssh.openFirewall",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.package",
+    "t": "package"
+  },
+  {
+    "name": "services.openssh.passwordAuthentication",
+    "t": "submodule"
+  },
+  {
+    "name": "services.openssh.permitRootLogin",
+    "t": "submodule"
+  },
+  {
+    "inner": {
+      "t": "unsignedInt16"
+    },
+    "name": "services.openssh.ports",
+    "t": "listOf"
+  },
+  {
+    "name": "services.openssh.settings",
+    "t": "submodule"
+  },
+  {
+    "inner": {
+      "t": "str"
+    },
+    "name": "services.openssh.sftpFlags",
+    "t": "listOf"
+  },
+  {
+    "name": "services.openssh.sftpServerExecutable",
+    "t": "str"
+  },
+  {
+    "name": "services.openssh.startWhenNeeded",
+    "t": "bool"
+  },
+  {
+    "name": "services.openssh.useDns",
+    "t": "submodule"
+  },
+  {
+    "inner": {
+      "enum": [
+        "fstab",
+        "gpt-auto"
+      ],
+      "t": "enum"
+    },
+    "name": "boot.initrd.systemd.root",
+    "t": "nullOr"
+  }
+]
