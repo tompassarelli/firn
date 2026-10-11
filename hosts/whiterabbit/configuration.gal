@@ -1,57 +1,66 @@
+use firn/tags
+
+whiterabbit turns on users
+whiterabbit turns on nix-settings
+whiterabbit turns on boot
+whiterabbit turns on networking
+whiterabbit turns on remmina
+whiterabbit turns on timezone
+whiterabbit turns on ssh
+whiterabbit turns on swap
+whiterabbit turns on tmp-retention
+whiterabbit turns on auto-upgrade
+whiterabbit turns on framework
+whiterabbit turns on framework13-mic
+whiterabbit turns on fwupd
+whiterabbit turns on thermal-management
+whiterabbit turns on pipewire
+whiterabbit turns off bluetooth
+whiterabbit turns on input
+whiterabbit turns off piper
+whiterabbit turns on g203-led
+whiterabbit turns on kanata
+whiterabbit turns off glide
+whiterabbit turns off guix
+whiterabbit turns on neovim
+whiterabbit turns on vscode
+whiterabbit turns on mini-serve
+whiterabbit turns on bitwarden-desktop
+whiterabbit turns on libsecret
+whiterabbit turns on parted
+whiterabbit turns on nix-ld
+whiterabbit turns on musl
+whiterabbit turns on appimage
+whiterabbit turns on codex
+whiterabbit turns on codex-runtime
+whiterabbit turns on claude
+whiterabbit turns off windows-vm
+whiterabbit turns on nh
+# agent.slice + the session.slice mirror weight. Inert until a launcher
+# actually enters the scope; the slice itself costs nothing.
+whiterabbit turns on agent-slice
+whiterabbit turns on delivery-liveness
+whiterabbit turns on lane-gc
+whiterabbit turns on worker-ledger
+whiterabbit turns on capacity-watchdog
+whiterabbit turns on airplane
+whiterabbit turns on nexus-pull
+
 nix file
   arguments: config, lib, pkgs, ...
   value
     myConfig.modules.system.stateVersion: "25.05"
-    myConfig.modules.users.enable: true
+    for ?m where whiterabbit turns on ?m
+      myConfig.modules.{?m}.enable: true
+    for ?m where whiterabbit turns off ?m
+      myConfig.modules.{?m}.enable: false
     myConfig.modules.users.username: "tom"
     myConfig.modules.users.fullName: "tompassarelli"
     myConfig.modules.chrome.default: true
-    myConfig.modules.nix-settings.enable: true
-    myConfig.modules.boot.enable: true
-    myConfig.modules.networking.enable: true
-    myConfig.modules.remmina.enable: true
-    myConfig.modules.timezone.enable: true
-    myConfig.modules.ssh.enable: true
-    myConfig.modules.swap.enable: true
-    myConfig.modules.tmp-retention.enable: true
-    myConfig.modules.auto-upgrade.enable: true
-    myConfig.modules.framework.enable: true
-    myConfig.modules.framework13-mic.enable: true
-    myConfig.modules.fwupd.enable: true
-    myConfig.modules.thermal-management.enable: true
-    myConfig.modules.pipewire.enable: true
-    myConfig.modules.bluetooth.enable: false
-    myConfig.modules.input.enable: true
-    myConfig.modules.piper.enable: false
-    myConfig.modules.g203-led.enable: true
     myConfig.modules.kanata
-      enable: true
       configFile: ../../dotfiles/kanata/kanata.kbd
       port: 7070
       extraArgs: ["--log-layer-changes"]
-    myConfig.modules.glide.enable: false
-    myConfig.modules.guix.enable: false
-    myConfig.modules.neovim.enable: true
-    myConfig.modules.vscode.enable: true
-    myConfig.modules.mini-serve.enable: true
-    myConfig.modules.bitwarden-desktop.enable: true
-    myConfig.modules.libsecret.enable: true
-    myConfig.modules.parted.enable: true
-    myConfig.modules.nix-ld.enable: true
-    myConfig.modules.musl.enable: true
-    myConfig.modules.appimage.enable: true
-    myConfig.modules.codex.enable: true
-    myConfig.modules.codex-runtime.enable: true
-    myConfig.modules.claude.enable: true
-    myConfig.modules.windows-vm.enable: false
-    myConfig.modules.nh.enable: true
-    # agent.slice + the session.slice mirror weight. Inert until a launcher
-    # actually enters the scope; the slice itself costs nothing.
-    myConfig.modules.agent-slice.enable: true
-    myConfig.modules.delivery-liveness.enable: true
-    myConfig.modules.lane-gc.enable: true
-    myConfig.modules.worker-ledger.enable: true
-    myConfig.modules.capacity-watchdog.enable: true
     # Home Manager activates this user service during a system switch. Bound
     # that activation independently of a periodic worker which may be hung.
     # mkForce: home-manager's nixos module pins its own 5m at equal priority.
@@ -60,7 +69,5 @@ nix file
     # sends KEY_RFKILL; the owner wants F10 to only ever be F10. Airplane mode
     # changes only through the `airplane` command (module airplane).
     services.udev.extraHwdb: "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n"
-    myConfig.modules.airplane.enable: true
     myConfig.modules.stylix.chosenTheme: "everforest-dark-hard"
-    myConfig.modules.nexus-pull.enable: true
     imports: [./_generated-enables.nix]
