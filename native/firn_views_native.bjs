@@ -1,13 +1,11 @@
 #lang beagle/js
 (ns firn.views-native
-  (:require [firn.views :as views]
-            [beagle.nix-schema-path :as paths]))
+  (:require [firn.views :as views]))
 
 (declare-extern bridge-env (Fn [String] (U String Nil)))
 (declare-extern bridge-hostname (Fn [] Any))
 (declare-extern bridge-path-kind (Fn [String] Any))
 (declare-extern bridge-read-text-bounded (Fn [String Int] Any))
-(declare-extern bridge-list-directory-bounded (Fn [String Int] Any))
 (declare-extern bridge-run-capture (Fn [(Vec String) String Int] Any))
 (declare-extern bridge-err (Fn [String] Nil))
 (declare-extern bridge-wall-nanoseconds (Fn [] Int))
@@ -28,10 +26,6 @@
 (defunion HostTextResult
   (HostTextOk [text String])
   (HostTextError [errno Int]))
-
-(defunion HostListResult
-  (HostListOk [entries (Vec String)])
-  (HostListError [errno Int]))
 
 (defunion HostCaptureResult
   (HostCaptureOk
@@ -63,14 +57,6 @@
       (->HostTextError (bridge-result-int result "errno"))
       (->HostTextOk (bridge-result-string result "text")))))
 
-(defn host-list-directory
-  [absolute String
-   limit Int] HostListResult
-  (let [result Any (bridge-list-directory-bounded absolute limit)]
-    (if (result-error? result)
-      (->HostListError (bridge-result-int result "errno"))
-      (->HostListOk (bridge-result-strings result "entries")))))
-
 (defn host-capture
   [argv (Vec String)
    stdin String
@@ -84,34 +70,15 @@
         (bridge-result-string result "stderr")))))
 
 (def max-json-bytes Int 134217728)
-(def max-source-bytes Int 16777216)
 (def max-child-output Int 16777216)
-(def max-directory-entries Int 32768)
-
 (defunion TextLoadResult
   (TextLoaded [text String])
   (TextMissing [path String])
   (TextLoadRejected [message String]))
 
-(defunion DocumentsLoadResult
-  (DocumentsLoaded [documents (Vec paths/SourceDocument)])
-  (DocumentsLoadRejected [message String]))
-
-(defunion NamesLoadResult
-  (NamesLoaded [names (Vec String)])
-  (NamesLoadRejected [message String]))
-
-(defunion ModulesLoadResult
-  (ModulesLoaded [modules (Vec views/ModuleSource)])
-  (ModulesLoadRejected [message String]))
-
 (defunion QueryTextResult
   (QueryText [text String])
   (QueryTextRejected [message String]))
-
-(defunion EntriesLoadResult
-  (EntriesLoaded [entries (Vec views/SchemaEntry)])
-  (EntriesLoadRejected [message String]))
 
 (defunion HostnameResult
   (HostnameLoaded [hostname String])
@@ -175,175 +142,6 @@
   [root String
    relative String] TextLoadResult
   (read-text root relative max-json-bytes true))
-
-(defn directory-names
-  [root String
-   relative String] NamesLoadResult
-  (match (host-list-directory
-           (path root relative) max-directory-entries)
-    [(HostListError errno)
-     (if (or (= errno 2) (= errno 20))
-       (->NamesLoaded [])
-       (->NamesLoadRejected
-         (errno-message "cannot list" relative errno)))]
-    [(HostListOk entries)
-     (->NamesLoaded (sort entries))]))
-
-(defn load-bnix-files
-  [root String
-   relative-directory String] DocumentsLoadResult
-  (match (directory-names root relative-directory)
-    [(NamesLoadRejected message) (->DocumentsLoadRejected message)]
-    [(NamesLoaded names)
-     (loop [remaining (Vec String) names
-            documents (Vec paths/SourceDocument) []]
-       (if (= (count remaining) 0)
-         (->DocumentsLoaded documents)
-         (let [name String (first remaining)]
-           (if (not (views/ends-with? name ".bnix"))
-             (recur (rest remaining) documents)
-             (let [relative String (str relative-directory "/" name)]
-               (match (read-text root relative max-source-bytes true)
-                 [(TextLoaded text)
-                  (recur (rest remaining)
-                    (conj documents (paths/->SourceDocument relative text)))]
-                 [(TextMissing missing)
-                  (->DocumentsLoadRejected
-                    (str "firn views: source disappeared '" missing "'\n"))]
-                 [(TextLoadRejected message)
-                  (->DocumentsLoadRejected message)]))))))]))
-
-(defn load-module-sources-from
-  [root String
-   names (Vec String)
-   index Int
-   modules (Vec views/ModuleSource)] ModulesLoadResult
-  (if (>= index (count names))
-    (->ModulesLoaded modules)
-    (let [name String (nth names index)
-          relative String (str "modules/" name)]
-      (match (host-path-kind (path root relative))
-        [(HostPathKindError errno)
-         (if (= errno 2)
-           (load-module-sources-from root names (+ index 1) modules)
-           (->ModulesLoadRejected
-             (errno-message "cannot inspect" relative errno)))]
-        [(HostPathKindOk kind)
-         (if (not= kind 2)
-           (load-module-sources-from root names (+ index 1) modules)
-           (match (load-bnix-files root relative)
-             [(DocumentsLoadRejected message)
-              (->ModulesLoadRejected message)]
-             [(DocumentsLoaded documents)
-              (load-module-sources-from root names (+ index 1)
-                (conj modules (views/->ModuleSource name documents)))]))]))))
-
-(defn load-modules [root String] ModulesLoadResult
-  (match (directory-names root "modules")
-    [(NamesLoadRejected message) (->ModulesLoadRejected message)]
-    [(NamesLoaded names)
-     (load-module-sources-from root names 0 [])]))
-
-(defn append-documents
-  [left (Vec paths/SourceDocument)
-   right (Vec paths/SourceDocument)] (Vec paths/SourceDocument)
-  (loop [remaining (Vec paths/SourceDocument) right
-         result (Vec paths/SourceDocument) left]
-    (if (= (count remaining) 0)
-      result
-      (recur (rest remaining) (conj result (first remaining))))))
-
-(defn module-documents [modules (Vec views/ModuleSource)] (Vec paths/SourceDocument)
-  (loop [remaining (Vec views/ModuleSource) modules
-         documents (Vec paths/SourceDocument) []]
-    (if (= (count remaining) 0)
-      documents
-      (recur (rest remaining)
-        (append-documents documents
-          (views/modulesource-documents (first remaining)))))))
-
-(defn load-named-directories
-  [root String
-   parent String
-   names (Vec String)
-   index Int
-   documents (Vec paths/SourceDocument)] DocumentsLoadResult
-  (if (>= index (count names))
-    (->DocumentsLoaded documents)
-    (let [relative String (str parent "/" (nth names index))]
-      (match (host-path-kind (path root relative))
-        [(HostPathKindError errno)
-         (if (= errno 2)
-           (load-named-directories root parent names (+ index 1) documents)
-           (->DocumentsLoadRejected
-             (errno-message "cannot inspect" relative errno)))]
-        [(HostPathKindOk kind)
-         (if (not= kind 2)
-           (load-named-directories root parent names (+ index 1) documents)
-           (match (load-bnix-files root relative)
-             [(DocumentsLoadRejected message)
-              (->DocumentsLoadRejected message)]
-             [(DocumentsLoaded nested)
-              (load-named-directories root parent names (+ index 1)
-                (append-documents documents nested))]))]))))
-
-(defn load-parent-documents
-  [root String
-   parent String] DocumentsLoadResult
-  (match (directory-names root parent)
-    [(NamesLoadRejected message) (->DocumentsLoadRejected message)]
-    [(NamesLoaded names)
-     (load-named-directories root parent names 0 [])]))
-
-(defn load-reference-documents [root String] DocumentsLoadResult
-  (match (load-modules root)
-    [(ModulesLoadRejected message) (->DocumentsLoadRejected message)]
-    [(ModulesLoaded modules)
-     (match (load-parent-documents root "hosts")
-       [(DocumentsLoadRejected message) (->DocumentsLoadRejected message)]
-       [(DocumentsLoaded hosts)
-        (match (read-text root "flake.bnix" max-source-bytes false)
-          [(TextLoadRejected message) (->DocumentsLoadRejected message)]
-          [(TextMissing missing)
-           (->DocumentsLoaded
-             (append-documents (module-documents modules) hosts))]
-          [(TextLoaded text)
-           (->DocumentsLoaded
-             (conj (append-documents (module-documents modules) hosts)
-               (paths/->SourceDocument "flake.bnix" text)))])])]))
-
-(defn schema-entries-from-text
-  [relative String
-   text String] EntriesLoadResult
-  (match (views/schema-from-json text)
-    [(SchemaLoaded entries) (->EntriesLoaded entries)]
-    [(SchemaRejected message offset)
-     (->EntriesLoadRejected
-       (str "firn views: invalid '" relative "' at " offset ": " message "\n"))]))
-
-(defn load-explain-schema [root String] EntriesLoadResult
-  (match (read-json-required root ".beagle-cache/schema.json")
-    [(TextMissing missing)
-     (->EntriesLoadRejected (str "firn views: missing '" missing "'\n"))]
-    [(TextLoadRejected message) (->EntriesLoadRejected message)]
-    [(TextLoaded main-text)
-     (match (schema-entries-from-text ".beagle-cache/schema.json" main-text)
-       [(EntriesLoadRejected message) (->EntriesLoadRejected message)]
-       [(EntriesLoaded main)
-        (match (read-text root ".beagle-cache/schema-submodules.json"
-                 max-json-bytes false)
-          [(TextMissing missing) (->EntriesLoaded main)]
-          [(TextLoadRejected message) (->EntriesLoadRejected message)]
-          [(TextLoaded submodule-text)
-           (match (views/submodule-schema-from-json submodule-text)
-             [(SchemaRejected message offset)
-              (->EntriesLoadRejected
-                (str
-                  "firn views: invalid '.beagle-cache/schema-submodules.json' at "
-                  offset ": " message "\n"))]
-             [(SchemaLoaded nested)
-              (->EntriesLoaded
-                (views/append-schema-entries main nested))])])])]))
 
 (defn child-result
   [argv (Vec String)
@@ -460,8 +258,6 @@
       [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
       [(SchemaExplain input)
        (emit-error "firn views: invalid platform action\n")]
-      [(SchemaExtract host)
-       (emit-error "firn views: invalid platform action\n")]
       [(HostGeneration host)
        (emit-error "firn views: invalid platform action\n")])))
 
@@ -484,20 +280,18 @@
 (defn run-schema-explain
   [root String
    input String] Int
-  (match (load-explain-schema root)
-    [(EntriesLoadRejected message) (emit-error message)]
-    [(EntriesLoaded entries)
-     (match (load-reference-documents root)
-       [(DocumentsLoadRejected message) (emit-error message)]
-       [(DocumentsLoaded documents)
-        (emit-result (views/render-schema-explain input entries documents))])]))
-
-(defn run-schema-extract
-  [root String
-   host String] Int
-  (emit-result
-    (views/render-schema-extract host
-      (child-result ["firn" "schema" "extract" host] ""))))
+  (let [option (U String Nil) (views/extract-option-path input)]
+    (if (nil? option)
+      (emit-error
+        (str "firn schema explain: couldn't extract an option path from: "
+          input "\n"))
+      (let [child views/ChildResult
+            (child-result
+              ["env" "-C" root (galileo-binary) "schema" "explain" option] "")]
+        (emit-result
+          (views/->CommandResult (views/childresult-status child)
+            (views/childresult-stdout child)
+            (views/childresult-stderr child)))))))
 
 (defn run-host-generation [host String] Int
   (emit-result
@@ -506,7 +300,6 @@
 
 (defn action-needs-current-host? [action views/ViewsAction] Bool
   (match action
-    [(SchemaExtract host) (= host "")]
     [(HostGeneration host) (= host "")]
     [(FlakeInputs token) false]
     [(PlatformList selection) false]
@@ -518,8 +311,6 @@
   [action views/ViewsAction
    hostname String] views/ViewsAction
   (match action
-    [(SchemaExtract host)
-     (if (= host "") (views/->SchemaExtract hostname) action)]
     [(HostGeneration host)
      (if (= host "") (views/->HostGeneration hostname) action)]
     [(FlakeInputs token) action]
@@ -537,7 +328,6 @@
         "       firn platform show <module>\n"
         "       firn platform safelist [all]\n"
         "       firn schema explain <path-or-error>\n"
-        "       firn schema extract [host]\n"
         "       firn host gen [host]\n"))
     64))
 
@@ -550,7 +340,6 @@
     [(PlatformShow module) (run-platform root action)]
     [(PlatformSafelist token) (run-platform root action)]
     [(SchemaExplain input) (run-schema-explain root input)]
-    [(SchemaExtract host) (run-schema-extract root host)]
     [(HostGeneration host) (run-host-generation host)]))
 
 (js/export
