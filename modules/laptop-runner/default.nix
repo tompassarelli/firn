@@ -24,6 +24,7 @@
               pkgs.util-linux
               pkgs.openssh
               pkgs.python3
+              pkgs.git
             ]}:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin"
             "LAPTOP_RUNNER_PLACEMENT=${cfg.placement}"
           ];
