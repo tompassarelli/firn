@@ -4,7 +4,7 @@ set -euo pipefail
 firn_repo="${FIRN_REPO:-}"
 if [[ -z "$firn_repo" ]]; then
   checkout="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  if [[ -n "$checkout" && -f "$checkout/config/galileo-revision" && -f "$checkout/flake.bnix" ]]; then
+  if [[ -n "$checkout" && -f "$checkout/config/galileo-revision" && -f "$checkout/flake.gal" ]]; then
     firn_repo="$checkout"
   else
     firn_repo="$HOME/code/nixos-config/main" # hardcoded-repo-path:allow
