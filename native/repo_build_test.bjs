@@ -7,17 +7,17 @@
   (expect
     seed
     (and
-      (build/source-path? "flake.bnix")
-      (build/source-path? (str "modules/alpha" (if (= seed 0) "" seed) "/default.bnix"))
-      (not (build/source-path? "scripts/fixture.bnix"))
-      (not (build/source-path? "tests/fixture.bnix"))
-      (not (build/source-path? "docs/fixtures/example.bnix"))
-      (not (build/source-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.bnix")))
-      (not (build/source-path? "result-old/module.bnix"))
-      (not (build/source-path? ".direnv/cache/module.bnix"))
+      (build/source-path? "flake.gal")
+      (build/source-path? (str "modules/alpha" (if (= seed 0) "" seed) "/default.gal"))
+      (not (build/source-path? "scripts/fixture.gal"))
+      (not (build/source-path? "tests/fixture.gal"))
+      (not (build/source-path? "docs/fixtures/example.gal"))
+      (not (build/source-path? (str "modules/alpha" (if (= seed 0) "" seed) "/default.bnix")))
+      (not (build/source-path? "result-old/module.gal"))
+      (not (build/source-path? ".direnv/cache/module.gal"))
       (build/obsolete-output-path? (str "hosts/alpha" (if (= seed 0) "" seed) "/enabled-tags.nix"))
       (=
-        (build/output-relative (str "modules/alpha" (if (= seed 0) "" seed) "/default.bnix"))
+        (build/output-relative (str "modules/alpha" (if (= seed 0) "" seed) "/default.gal"))
         (str "modules/alpha" (if (= seed 0) "" seed) "/default.nix")))
     "source inventory path contract"))
 

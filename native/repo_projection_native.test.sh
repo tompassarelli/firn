@@ -8,11 +8,11 @@ cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 mkdir -p "$scratch/hosts" "$scratch/modules/sample" "$scratch/config"
 cp "$repo/config/galileo-revision" "$scratch/config/galileo-revision"
-cp "$repo/flake.bnix" "$scratch/flake.bnix"
-cat >"$scratch/modules/sample/default.bnix" <<'SOURCE'
-#lang beagle/nix
-(ns default)
-{:answer 42}
+cp "$repo/flake.gal" "$scratch/flake.gal"
+cat >"$scratch/modules/sample/default.gal" <<'SOURCE'
+nix file
+  value
+    answer: 42
 SOURCE
 export FIRN_REPO="$scratch"
 "$repo/dotfiles/bin/firn" repo build >"$scratch/build.out"

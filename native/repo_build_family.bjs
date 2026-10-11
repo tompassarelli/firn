@@ -6,7 +6,6 @@
             [firn.flake-input-family :as flake-family]))
 
 (def max-directory-entries Int 16384)
-(def max-generated-bytes Int 33554432)
 (def max-compiler-output-bytes Int 16777216)
 
 (defunion InventoryLoadResult
@@ -108,27 +107,6 @@
              (emit-error bridge
                "firn-build: flake-inputs resolution failed; aborting\n")))))]))
 
-(defn cleanup-temporary
-  [bridge Any
-   temporary String
-   relative String] Int
-  (let [errno Int (.removeFile bridge temporary)]
-    (if (or (= errno 0) (= errno 2))
-      0
-      (emit-error bridge
-        (build/errno-message
-          "cannot remove temporary output for" relative errno)))))
-
-(defn fail-after-cleanup
-  [bridge Any
-   temporary String
-   relative String
-   message String] Int
-  (let [cleanup-status Int (cleanup-temporary bridge temporary relative)]
-    (do
-      (.err bridge message)
-      (if (= cleanup-status 0) 1 cleanup-status))))
-
 (defn emit-compiler-output
   [bridge Any
    stdout String
@@ -138,114 +116,31 @@
     (if (= stderr "") 0 (do (.err bridge stderr) 0))
     0))
 
-(defn publish-compiled
-  [bridge Any
-   temporary String
-   destination String
-   relative String
-   check-only Bool] Int
-  (let [read-result Any (.readText bridge temporary max-generated-bytes)
-        read-errno Int (.status bridge read-result)]
-    (if (not (= read-errno 0))
-      (fail-after-cleanup bridge temporary relative
-        (build/errno-message
-          "cannot read temporary output for" relative read-errno))
-      (let [generated String (.value bridge read-result)
-            write-errno Int (.writeTextAtomic bridge temporary
-              (build/strip-authoring-attributes generated))]
-        (if (not (= write-errno 0))
-          (fail-after-cleanup bridge temporary relative
-            (build/errno-message
-              "cannot clean temporary output for" relative write-errno))
-          (let [existing Any (.readText bridge destination max-generated-bytes)
-                existing-errno Int (.status bridge existing)
-                same Bool (and (= existing-errno 0)
-                            (= (.value bridge existing)
-                               (build/strip-authoring-attributes generated)))]
-            (cond
-              [same (cleanup-temporary bridge temporary relative)]
-              [(and (not= existing-errno 0) (not= existing-errno 2))
-               (fail-after-cleanup bridge temporary relative
-                 (build/errno-message "cannot read" relative existing-errno))]
-              [check-only
-               (let [capture Any (.runCapture bridge
-                       ["diff" "-u" "--label" destination "--label"
-                        (str destination " (generated)")
-                        (if (= existing-errno 2) "/dev/null" destination)
-                        temporary] max-compiler-output-bytes)]
-                 (do
-                   (if (= (.status bridge capture) 0)
-                     (let [observed Any (.value bridge capture)]
-                       (emit-compiler-output bridge (.stdout bridge observed)
-                         (.stderr bridge observed)))
-                     (.err bridge (str "firn diff: cannot compare " relative "\n")))
-                   (cleanup-temporary bridge temporary relative)
-                   1))]
-              [:else
-               (let [rename-errno Int (.renameFile bridge temporary destination)]
-                 (if (= rename-errno 0)
-                   0
-                   (fail-after-cleanup bridge temporary relative
-                     (build/errno-message "cannot publish" relative rename-errno))))])))))))
+(defn galileo-binary [bridge Any] String
+  (let [runtime (U String Nil) (.env bridge "FIRN_RUNTIME_BIN")]
+    (if (and (some? runtime)
+             (= (.status bridge (.pathKind bridge (str runtime "/galileo"))) 0))
+      (str runtime "/galileo")
+      "galileo")))
 
-(defn run-compiler
+(defn run-galileo-build
   [bridge Any
    root String
-   compiler String
-   state build/SourceState
-   temporary String
-   check-only Bool] Int
-  (let [process build/CompilerProcess (build/compiler-process compiler root state temporary)
-        relative String (build/compilerprocess-source-relative process)
-        capture Any (.runCapture bridge (build/compilerprocess-argv process)
+   arguments (Vec String)] Int
+  (let [capture Any (.runCapture bridge
+          (into ["env" "-C" root (galileo-binary bridge) "build"] arguments)
           max-compiler-output-bytes)
         errno Int (.status bridge capture)]
     (if (not (= errno 0))
-      (fail-after-cleanup bridge temporary relative
-        (build/compiler-spawn-message relative errno))
+      (emit-error bridge (str "firn-build: cannot start galileo build: errno " errno "\n"))
       (let [result Any (.value bridge capture)
-            status Int (.exitStatus bridge result)
-            stdout String (.stdout bridge result)
-            stderr String (.stderr bridge result)]
-        (if (not (= status 0))
-          (do
-            (emit-compiler-output bridge stdout stderr)
-            (fail-after-cleanup bridge temporary relative
-              (build/compiler-failure-message relative status)))
-          (publish-compiled bridge temporary
-            (absolute-path root
-              (build/compilerprocess-destination-relative process))
-            relative check-only))))))
-
-(defn compile-source
-  [bridge Any
-   root String
-   compiler String
-   state build/SourceState
-   check-only Bool] Int
-  (let [destination-relative String (build/sourcestate-output-relative state)
-        destination String (absolute-path root destination-relative)]
-  (let [temporary-result Any (.createTemporarySibling bridge destination)
-        errno Int (.status bridge temporary-result)]
-    (if (not (= errno 0))
-      (emit-error bridge
-        (build/errno-message
-          "cannot create temporary output for" destination-relative errno))
-      (let [temporary String (.value bridge temporary-result)]
-        (run-compiler bridge root compiler state temporary check-only))))))
-
-(defn compile-sources
-  [bridge Any
-   root String
-   compiler String
-   sources (Vec build/SourceState)
-   index Int] Int
-  (if (>= index (count sources))
-    0
-    (let [status Int (compile-source bridge root compiler (nth sources index) false)]
-      (if (= status 0)
-        (compile-sources bridge root compiler sources (+ index 1))
-        status))))
+            status Int (.exitStatus bridge result)]
+        (do
+          (emit-compiler-output bridge (.stdout bridge result) (.stderr bridge result))
+          (if (= status 0)
+            0
+            (emit-error bridge
+              (str "firn-build: galileo build exited " status "\n"))))))))
 
 (defn remove-obsolete-output
   [bridge Any
@@ -272,10 +167,9 @@
 (defn execute-plan
   [bridge Any
    root String
-   compiler String
    plan build/RepoBuildPlan] Int
   (let [sources (Vec build/SourceState) (build/repobuildplan-sources plan)
-        compile-status Int (compile-sources bridge root compiler sources 0)]
+        compile-status Int (run-galileo-build bridge root [])]
     (if (not (= compile-status 0))
       compile-status
       (let [cleanup-status Int (remove-obsolete-outputs bridge root
@@ -297,33 +191,28 @@
 (defn run-diff
   [bridge Any
    root String
-   compiler String
    target String] Int
   (match (load-inventory-directory bridge root "")
     [(InventoryRejected message) (emit-error bridge message)]
     [(InventoryLoaded inventory)
-     (let [sources (Vec build/SourceState) (build/sourceinventory-sources inventory)]
-       (loop [index Int 0
-              checked Int 0
-              failed Int 0]
-         (if (>= index (count sources))
+     (let [sources (Vec build/SourceState) (build/sourceinventory-sources inventory)
+           selected (Vec String)
+           (loop [index Int 0 paths (Vec String) []]
+             (if (>= index (count sources))
+               paths
+               (let [state build/SourceState (nth sources index)]
+                 (recur (+ index 1)
+                   (if (diff-selected? state target)
+                     (conj paths (build/sourcestate-relative state))
+                     paths)))))]
+       (if (= (count selected) 0)
+         (do (.out bridge "firn diff: 0 checked\n") 1)
+         (let [status Int (run-galileo-build bridge root
+                 (into ["--check"] (if (= target "all") [] selected)))]
            (do
-             (.out bridge (str "firn diff: " checked " checked, " failed
-                            " differing or failed\n"))
-             (if (and (> checked 0) (= failed 0)) 0 1))
-           (let [state build/SourceState (nth sources index)]
-             (if (diff-selected? state target)
-               (let [status Int (compile-source bridge root compiler state true)]
-                 (recur (+ index 1) (+ checked 1)
-                   (+ failed (if (= status 0) 0 1))))
-               (recur (+ index 1) checked failed))))))]))
-
-(defn beagle-root [bridge Any] (U String Nil)
-  (let [explicit (U String Nil) (.env bridge "BEAGLE_PATH")]
-    (if (some? explicit)
-      explicit
-      (let [home (U String Nil) (.env bridge "HOME")]
-        (if (some? home) (str home "/code/beagle/main") nil)))))
+             (.out bridge (str "firn diff: " (count selected) " checked, "
+                            (if (= status 0) "clean" "differing or failed") "\n"))
+             status))))]))
 
 (defn repository-root [bridge Any] (U String Nil)
   (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]
@@ -336,23 +225,21 @@
 
 (defn run-root
   [bridge Any
-   root String
-   compiler String] Int
+   root String] Int
   (let [preparation-status Int (run-preparation bridge root)]
     (if (not (= preparation-status 0))
       preparation-status
       (match (load-inventory-directory bridge root "")
         [(InventoryRejected message) (emit-error bridge message)]
         [(InventoryLoaded inventory)
-         (execute-plan bridge root compiler (build/build-plan inventory))]))))
+         (execute-plan bridge root (build/build-plan inventory))]))))
 
 (defn run-command
   [bridge Any
-   root String
-   compiler String] Int
+   root String] Int
   (do
     (.out bridge ">> firn-build\n")
-    (let [status Int (run-root bridge root compiler)]
+    (let [status Int (run-root bridge root)]
       (if (= status 0)
         0
         (do
@@ -370,24 +257,12 @@
     [(OtherRepoBuildCommand argv) (usage-error bridge)]
     [(InvalidRepoBuildArgv argv) (usage-error bridge)]
     [(ParsedRepoDiff target)
-     (let [root (U String Nil) (repository-root bridge)
-           beagle (U String Nil) (beagle-root bridge)]
-       (if (or (nil? root) (nil? beagle))
-         (emit-error bridge "firn diff: repository or compiler is unavailable\n")
-         (run-diff bridge root (str beagle "/bin/beagle-build") target)))]
+     (let [root (U String Nil) (repository-root bridge)]
+       (if (nil? root)
+         (emit-error bridge "firn diff: FIRN_REPO and HOME are not set\n")
+         (run-diff bridge root target)))]
     [(ParsedRepoBuild token)
-     (let [root (U String Nil) (repository-root bridge)
-           beagle (U String Nil) (beagle-root bridge)]
-       (cond
-         [(nil? root)
-          (do
-            (.err bridge
-              "firn repo build: FIRN_REPO and HOME are not set\n")
-            1)]
-         [(nil? beagle)
-          (do
-            (.err bridge
-              "firn repo build: BEAGLE_PATH and HOME are not set\n")
-            1)]
-         [:else
-          (run-command bridge root (str beagle "/bin/beagle-build"))]))])))
+     (let [root (U String Nil) (repository-root bridge)]
+       (if (nil? root)
+         (emit-error bridge "firn repo build: FIRN_REPO and HOME are not set\n")
+         (run-command bridge root)))])))
