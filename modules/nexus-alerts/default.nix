@@ -131,7 +131,7 @@
       matrix_server=${lib.escapeShellArg config.myConfig.modules.nexus-matrix.serverName}
       matrix_tom=${lib.escapeShellArg config.myConfig.modules.socrates-chat.tomUserId}
       matrix_room=''${NEXUS_ALERT_MATRIX_ROOM_ALIAS:-#socrates-alerts:$matrix_server}
-      ntfy_url=''${NEXUS_ALERT_NTFY_URL:-http://10.77.0.1:2586}
+      ntfy_url=''${NEXUS_ALERT_NTFY_URL:-${baseUrl}}
       ntfy_token_file=''${NEXUS_ALERT_NTFY_TOKEN_FILE:-${config.sops.secrets.ntfy-publisher-token.path}}
       matrix_request() {
         local remaining response status
