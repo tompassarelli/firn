@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
+galileo="galileo"
+if [[ -n "${FIRN_RUNTIME_BIN:-}" && -x "$FIRN_RUNTIME_BIN/galileo" ]]; then
+  galileo="$FIRN_RUNTIME_BIN/galileo"
+fi
+
+usage() {
+  printf 'Usage: firn schema extract [<host>]\n       firn repo validate [all|<file>...]\n' >&2
+  exit 64
+}
+
+toplevels='configurations: builtins.concatStringsSep "" (builtins.map (name: name + " " + configurations.${name}.config.system.build.toplevel.drvPath + "\n") (builtins.attrNames configurations))'
+
+validate() {
+  local paths=()
+  if [[ "$#" -gt 0 && "$1" != all ]]; then
+    paths=("$@")
+  fi
+  cd "$root"
+  printf 'firn repo validate: [1/3] galileo check...\n' >&2
+  "$galileo" check "${paths[@]}"
+  printf 'firn repo validate: [2/3] galileo build --check...\n' >&2
+  "$galileo" build --check "${paths[@]}"
+  printf 'firn repo validate: [3/3] evaluating every nixosConfigurations toplevel...\n' >&2
+  nix eval --raw "$root#nixosConfigurations" --apply "$toplevels"
+}
+
+case "${1:-} ${2:-}" in
+  "schema extract")
+    shift 2
+    [[ "$#" -le 1 && "${1:-}" != -* ]] || usage
+    mkdir -p "$root/.beagle-cache"
+    exec "$galileo" schema extract --host "${1:-whiterabbit}" --flake "$root" \
+      --out "$root/.beagle-cache/schema.json"
+    ;;
+  "repo validate")
+    shift 2
+    validate "$@"
+    ;;
+  *) usage ;;
+esac

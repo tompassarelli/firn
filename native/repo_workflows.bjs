@@ -999,7 +999,7 @@
   (match phase
     [(UpgradeSnapshot token) "schema snapshot"]
     [(UpgradeLockUpdate token) "nix flake update"]
-    [(UpgradeSchemaExtract token) "Beagle schema extraction"]
+    [(UpgradeSchemaExtract token) "Galileo schema extraction"]
     [(UpgradeSchemaCompare token) "schema comparison"]
     [(UpgradeValidate token) "repository validation"]))
 
@@ -1017,8 +1017,7 @@
 (defn render-upgrade-dry-run [] String
   (str
     ">> [dry-run] would run: nix flake update --flake <repo>\n"
-    ">> [dry-run] would run: beagle-extract-schema for NixOS"
-    " and configured Darwin schemas\n"
+    ">> [dry-run] would run: galileo schema extract for NixOS\n"
     "firn upgrade: dry run complete; no files were changed.\n"))
 
 (defn root-path
@@ -1061,7 +1060,7 @@
   (if dry-run
     []
     [(->InheritProcess
-       "current Beagle schema extraction"
+       "current Galileo schema extraction"
        ["env" (str "FIRN_REPO=" root) "firn-schema" "schema" "extract"])
      (->CaptureToFileProcess
        "schema snapshot"
@@ -1073,7 +1072,7 @@
        "nix flake update"
        ["nix" "flake" "update" "--flake" root])
      (->InheritProcess
-       "Beagle schema extraction"
+       "Galileo schema extraction"
        ["env" (str "FIRN_REPO=" root) "firn-schema" "schema" "extract"])
      (->CompareProcess
        "schema comparison"
@@ -1100,7 +1099,7 @@
       root])
    (->InheritProcess
      "validate changed repository"
-     ["beagle" "validate" root])])
+     ["env" (str "FIRN_REPO=" root) "firn-schema" "repo" "validate"])])
 
 (js/export (defn repo-workflow-plan
              [root String
@@ -1112,7 +1111,7 @@
      (->RepoWorkflowPlan
        [(->InheritProcess
           "repository validation"
-          ["beagle" "validate" root])]
+          ["env" (str "FIRN_REPO=" root) "firn-schema" "repo" "validate"])]
        "")]
     [(RepoLint token)
      (->RepoWorkflowPlan (lint-processes root tracked)
@@ -1129,10 +1128,8 @@
        "")]
     [(RepoDoctor token)
      (->RepoWorkflowPlan
-       [(->InheritProcess "Beagle authoring doctor"
-          ["beagle" "doctor" "--deep"])
-        (->InheritProcess "repository validation"
-          ["beagle" "validate" root])]
+       [(->InheritProcess "repository validation"
+          ["env" (str "FIRN_REPO=" root) "firn-schema" "repo" "validate"])]
        "")]
     [(RepoPinAncestry token)
      (->RepoWorkflowPlan [] "")]
