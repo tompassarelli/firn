@@ -12,13 +12,6 @@
      offset Int])))
 
 (js/export
-  (defunion HostSourceResult
-  (HostSourceParsed [value r/HostTags])
-  (HostSourceRejected
-    [message String
-     offset Int])))
-
-(js/export
   (defunion DarwinAllowlistResult
   (DarwinAllowlistParsed [modules (Vec String)])
   (DarwinAllowlistRejected
@@ -51,20 +44,6 @@
   (defrecord OverridesScan
   [ok Bool
    values (Vec r/TaggedOverrides)
-   message String
-   offset Int]))
-
-(js/export
-  (defrecord EnabledEntryScan
-  [ok Bool
-   value r/EnabledTag
-   message String
-   offset Int]))
-
-(js/export
-  (defrecord EnabledVectorScan
-  [ok Bool
-   values (Vec r/EnabledTag)
    message String
    offset Int]))
 
@@ -228,44 +207,6 @@
                 (event-offset events cursor))
               (recur next cursor))
             (recur next found))))))))
-
-(js/export
-  (defn host-map-candidate
-  [events (Vec reader/ReaderEvent)
-   start Int] Int
-  (if (= :map/open (reader/readerevent-kind (nth events start)))
-    start
-    (if (and (list-head? events start "def")
-             (= 3 (container-child-count events start)))
-      (let [candidate Int (container-child-start events start 2)]
-        (if (and (>= candidate 0)
-                 (= :map/open
-                    (reader/readerevent-kind (nth events candidate))))
-          candidate
-          -1))
-      -1))))
-
-(js/export
-  (defn find-host-map [events (Vec reader/ReaderEvent)] SpanScan
-  (loop [cursor Int 0
-         found Int -1]
-    (if (= cursor (count events))
-      (if (< found 0) (span-missing) (span-found found))
-      (let [next Int (datum-end events cursor)
-            candidate Int (host-map-candidate events cursor)]
-        (cond
-          (< next 0)
-          (span-rejected "invalid top-level datum" (event-offset events cursor))
-
-          (< candidate 0)
-          (recur next found)
-
-          (>= found 0)
-          (span-rejected "duplicate host tag map"
-                         (event-offset events candidate))
-
-          :else
-          (recur next candidate)))))))
 
 (js/export
   (defn unwrap-module-body
@@ -651,157 +592,6 @@
                       (stringvectorscan-values tags)
                       (stringvectorscan-values opt-in)
                       (overridesscan-values overrides)))))))))))))
-
-(js/export
-  (defn valid-edit-text? [text String] Bool
-  (and (> (count text) 1)
-       (let [prefix String (subs text 0 1)]
-         (or (= prefix "+") (= prefix "-"))))))
-
-(js/export
-  (defn read-enabled-entry
-  [events (Vec reader/ReaderEvent)
-   start Int] EnabledEntryScan
-  (let [event reader/ReaderEvent (nth events start)
-        kind Keyword (reader/readerevent-kind event)]
-    (cond
-      (= kind :symbol)
-      (->EnabledEntryScan true
-                          (r/->EnabledTag
-                            (reader/readerevent-value event) [] [])
-                          ""
-                          -1)
-
-      (= kind :vector/open)
-      (let [children Int (container-child-count events start)]
-        (if (< children 1)
-          (->EnabledEntryScan false (r/->EnabledTag "" [] [])
-                              "enabled tag vector cannot be empty"
-                              (reader/readerevent-offset event))
-          (let [tag-start Int (container-child-start events start 0)
-                tag-event reader/ReaderEvent (nth events tag-start)]
-            (if (not= :symbol (reader/readerevent-kind tag-event))
-              (->EnabledEntryScan false (r/->EnabledTag "" [] [])
-                                  "enabled tag name must be a symbol"
-                                  (reader/readerevent-offset tag-event))
-              (loop [child Int 1
-                     edits (Vec String) []]
-                (if (= child children)
-                  (->EnabledEntryScan
-                    true
-                    (r/enabled-tag-from-edit-texts
-                      (reader/readerevent-value tag-event) edits)
-                    ""
-                    -1)
-                  (let [edit-start Int (container-child-start events start child)
-                        edit-event reader/ReaderEvent (nth events edit-start)
-                        edit String (reader/readerevent-value edit-event)]
-                    (if (or (not= :symbol
-                                  (reader/readerevent-kind edit-event))
-                            (not (valid-edit-text? edit)))
-                      (->EnabledEntryScan
-                        false
-                        (r/->EnabledTag "" [] [])
-                        "enabled tag edit must be +module or -module"
-                        (reader/readerevent-offset edit-event))
-                      (recur (+ child 1) (conj edits edit))))))))))
-
-      :else
-      (->EnabledEntryScan false (r/->EnabledTag "" [] [])
-                          "enabled tag entry must be a symbol or vector"
-                          (reader/readerevent-offset event))))))
-
-(js/export
-  (defn read-enabled-vector
-  [events (Vec reader/ReaderEvent)
-   field SpanScan] EnabledVectorScan
-  (cond
-    (not (spanscan-ok field))
-    (->EnabledVectorScan false [] (spanscan-message field)
-                         (spanscan-offset field))
-
-    (not (spanscan-found field))
-    (->EnabledVectorScan true [] "" -1)
-
-    :else
-    (let [start Int (spanscan-start field)]
-      (if (not= :vector/open
-                (reader/readerevent-kind (nth events start)))
-        (->EnabledVectorScan false [] ":enabled must be a vector"
-                             (event-offset events start))
-        (let [end Int (datum-end events start)]
-          (loop [cursor Int (+ start 1)
-                 values (Vec r/EnabledTag) []]
-            (if (= cursor (- end 1))
-              (->EnabledVectorScan true values "" -1)
-              (let [entry EnabledEntryScan (read-enabled-entry events cursor)
-                    next Int (datum-end events cursor)]
-                (if (not (enabledentryscan-ok entry))
-                  (->EnabledVectorScan false []
-                    (enabledentryscan-message entry)
-                    (enabledentryscan-offset entry))
-                  (recur next
-                    (conj values (enabledentryscan-value entry)))))))))))))
-
-(js/export
-  (defn host-tags-from-source
-  [host String
-   source String
-   darwin-allowed (Vec String)] HostSourceResult
-  (let [read reader/DatumRead (reader/read-events source)
-        read-error String? (reader/datumread-error read)]
-    (if (some? read-error)
-      (->HostSourceRejected read-error (reader/datumread-error-offset read))
-      (let [events (Vec reader/ReaderEvent) (reader/datumread-events read)
-            host-map SpanScan (find-host-map events)]
-        (cond
-          (not (spanscan-ok host-map))
-          (->HostSourceRejected (spanscan-message host-map)
-                                (spanscan-offset host-map))
-
-          (not (spanscan-found host-map))
-          ;; The Racket resolver treats a host source without its metadata
-          ;; map as an empty Linux host; preserve that source-selection
-          ;; behavior at the native boundary.
-          (->HostSourceParsed
-            (r/->HostTags host [] [] "linux" false []))
-
-          :else
-          (let [map-start Int (spanscan-start host-map)
-                platform-field SpanScan (map-field events map-start ":platform")
-                enabled-field SpanScan (map-field events map-start ":enabled")
-                disabled-field SpanScan (map-field events map-start ":disabled")
-                platform StringAtomScan (read-symbol-field events platform-field "linux")
-                enabled EnabledVectorScan (read-enabled-vector events enabled-field)
-                disabled StringVectorScan (optional-symbol-vector
-                  events disabled-field ":disabled")]
-            (cond
-              (not (stringatomscan-ok platform))
-              (->HostSourceRejected
-                (stringatomscan-message platform)
-                (stringatomscan-offset platform))
-
-              (not (enabledvectorscan-ok enabled))
-              (->HostSourceRejected
-                (enabledvectorscan-message enabled)
-                (enabledvectorscan-offset enabled))
-
-              (not (stringvectorscan-ok disabled))
-              (->HostSourceRejected
-                (stringvectorscan-message disabled)
-                (stringvectorscan-offset disabled))
-
-              :else
-              (let [platform-name String (stringatomscan-value platform)
-                    darwin Bool (= platform-name "darwin")]
-                (->HostSourceParsed
-                  (r/->HostTags
-                    host
-                    (enabledvectorscan-values enabled)
-                    (stringvectorscan-values disabled)
-                    platform-name
-                    darwin
-                    (if darwin darwin-allowed []))))))))))))
 
 (js/export
   (defn json-event-offset [event json/JsonEvent] Int
