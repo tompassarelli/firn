@@ -105,11 +105,9 @@
   (ModulesLoaded [modules (Vec views/ModuleSource)])
   (ModulesLoadRejected [message String]))
 
-(defunion SchemasLoadResult
-  (SchemasLoaded
-    [nixos (Vec views/SchemaEntry)
-     darwin (Vec views/SchemaEntry)])
-  (SchemasLoadRejected [message String]))
+(defunion QueryTextResult
+  (QueryText [text String])
+  (QueryTextRejected [message String]))
 
 (defunion EntriesLoadResult
   (EntriesLoaded [entries (Vec views/SchemaEntry)])
@@ -323,26 +321,6 @@
      (->EntriesLoadRejected
        (str "firn views: invalid '" relative "' at " offset ": " message "\n"))]))
 
-(defn load-platform-schemas [root String] SchemasLoadResult
-  (match (read-json-required root ".beagle-cache/schema.json")
-    [(TextMissing missing)
-     (->SchemasLoadRejected (str "firn views: missing '" missing "'\n"))]
-    [(TextLoadRejected message) (->SchemasLoadRejected message)]
-    [(TextLoaded nixos-text)
-     (match (read-json-required root ".beagle-cache/schema-darwin.json")
-       [(TextMissing missing)
-        (->SchemasLoadRejected (str "firn views: missing '" missing "'\n"))]
-       [(TextLoadRejected message) (->SchemasLoadRejected message)]
-       [(TextLoaded darwin-text)
-        (match (schema-entries-from-text
-                 ".beagle-cache/schema.json" nixos-text)
-          [(EntriesLoadRejected message) (->SchemasLoadRejected message)]
-          [(EntriesLoaded nixos)
-           (match (schema-entries-from-text
-                    ".beagle-cache/schema-darwin.json" darwin-text)
-             [(EntriesLoadRejected message) (->SchemasLoadRejected message)]
-             [(EntriesLoaded darwin) (->SchemasLoaded nixos darwin)])])])]))
-
 (defn load-explain-schema [root String] EntriesLoadResult
   (match (read-json-required root ".beagle-cache/schema.json")
     [(TextMissing missing)
@@ -405,34 +383,101 @@
                    (bridge-stdout-tty)))
           0)])]))
 
+(defn galileo-binary [] String
+  (let [runtime (U String Nil) (bridge-env "FIRN_RUNTIME_BIN")]
+    (if (or (nil? runtime) (= runtime ""))
+      "galileo"
+      (let [candidate String (str runtime "/galileo")]
+        (match (host-path-kind candidate)
+          [(HostPathKindOk kind) candidate]
+          [(HostPathKindError errno) "galileo"])))))
+
+(defn galileo-query
+  [root String
+   galileo String
+   question String] QueryTextResult
+  (match (host-capture ["env" "-C" root galileo "query" question "--json"]
+           "" max-child-output)
+    [(HostCaptureError errno)
+     (->QueryTextRejected
+       (str "firn views: cannot run '" galileo "': errno " errno "\n"))]
+    [(HostCaptureOk status stdout stderr)
+     (if (= status 0)
+       (->QueryText stdout)
+       (->QueryTextRejected
+         (str stderr "firn views: galileo query '" question "' exited "
+           status "\n")))]))
+
+(defn query-names
+  [root String
+   galileo String
+   question String] views/QueryNamesResult
+  (match (galileo-query root galileo question)
+    [(QueryTextRejected message) (views/->QueryNamesRejected message)]
+    [(QueryText text)
+     (match (views/query-names-from-json text)
+       [(QueryNamesRejected message)
+        (views/->QueryNamesRejected
+          (str "firn views: galileo query '" question "': " message "\n"))]
+       [(QueryNames names) (views/->QueryNames names)])]))
+
+(defn query-rows
+  [root String
+   galileo String
+   question String] views/QueryRowsResult
+  (match (galileo-query root galileo question)
+    [(QueryTextRejected message) (views/->QueryRowsRejected message)]
+    [(QueryText text)
+     (match (views/query-rows-from-json text)
+       [(QueryRowsRejected message)
+        (views/->QueryRowsRejected
+          (str "firn views: galileo query '" question "': " message "\n"))]
+       [(QueryRows rows) (views/->QueryRows rows)])]))
+
+(defn append-rows
+  [left (Vec views/PlatformRow)
+   right (Vec views/PlatformRow)] (Vec views/PlatformRow)
+  (loop [remaining (Vec views/PlatformRow) right
+         result (Vec views/PlatformRow) left]
+    (if (= (count remaining) 0)
+      result
+      (recur (rest remaining) (conj result (first remaining))))))
+
+(defn render-platform
+  [action views/ViewsAction
+   verdicts (Vec views/PlatformVerdict)] Int
+  (match action
+    [(PlatformList selection)
+     (emit-result (views/render-platform-list selection verdicts))]
+    [(PlatformShow module)
+     (emit-result (views/render-platform-show module verdicts))]
+    [(PlatformSafelist token)
+     (emit-result (views/render-platform-safelist verdicts))]
+    [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
+    [(SchemaExplain input)
+     (emit-error "firn views: invalid platform action\n")]
+    [(SchemaExtract host)
+     (emit-error "firn views: invalid platform action\n")]
+    [(HostGeneration host)
+     (emit-error "firn views: invalid platform action\n")]))
+
 (defn run-platform
   [root String
    action views/ViewsAction] Int
-  (match (load-platform-schemas root)
-    [(SchemasLoadRejected message) (emit-error message)]
-    [(SchemasLoaded nixos darwin)
-     (match (load-modules root)
-       [(ModulesLoadRejected message) (emit-error message)]
-       [(ModulesLoaded modules)
-        (match (views/platform-matrix modules nixos darwin)
-          [(PlatformRejected message) (emit-error (str message "\n"))]
-          [(PlatformLoaded verdicts)
-           (match action
-             [(PlatformList selection)
-              (emit-result
-                (views/render-platform-list selection verdicts
-                  (count nixos) (count darwin)))]
-             [(PlatformShow module)
-              (emit-result (views/render-platform-show module verdicts))]
-             [(PlatformSafelist token)
-              (emit-result (views/render-platform-safelist verdicts))]
-             [(FlakeInputs token) (emit-error "firn views: invalid platform action\n")]
-             [(SchemaExplain input)
-              (emit-error "firn views: invalid platform action\n")]
-             [(SchemaExtract host)
-              (emit-error "firn views: invalid platform action\n")]
-             [(HostGeneration host)
-              (emit-error "firn views: invalid platform action\n")])])])]))
+  (let [galileo String (galileo-binary)]
+    (match (query-names root galileo "all ?m where ?m is a Module")
+      [(QueryNamesRejected message) (emit-error message)]
+      [(QueryNames modules)
+       (match (query-rows root galileo
+                "all ?m, ?p where ?m is a Module and ?p allows every module")
+         [(QueryRowsRejected message) (emit-error message)]
+         [(QueryRows everywhere)
+          (match (query-rows root galileo "all ?m, ?p where ?m supports ?p")
+            [(QueryRowsRejected message) (emit-error message)]
+            [(QueryRows supported)
+             (render-platform action
+               (views/platform-matrix modules
+                 (append-rows everywhere supported)))])])])))
 
 (defn run-schema-explain
   [root String

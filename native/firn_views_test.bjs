@@ -1,88 +1,30 @@
 #lang beagle/js
-(ns firn.views-test (:require [firn.views :as views] [beagle.nix-schema-path :as paths]))
+(ns firn.views-test (:require [firn.views :as views]))
 
-(defn source [seed Int id String text String] paths/SourceDocument (paths/->SourceDocument id text))
+(defn suffix [seed Int] String (if (= seed 0) "" (str seed)))
 
-(defn make-module [seed Int name String id String text String] views/ModuleSource
-  (views/->ModuleSource name [(source seed id text)]))
+(defn row [module String platform String] views/PlatformRow
+  (views/->PlatformRow module platform))
 
-(defn schema-json [seed Int] String
-  (str
-    (str "[{\"name\":\"services.shared" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\",")
-    (str "\"declarations\":[\"shared" (if (= seed 0) "" seed) ".nix\"]},")
-    (str "{\"name\":\"services.linux" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\"},")
-    "{\"name\":\"users.users.<name>.shell\",\"t\":\"str\"},"
-    "{\"name\":\"programs.dynamic\",\"t\":\"attrsOf\","
-    "\"inner\":{\"t\":\"anything\"}},"
-    (str "{\"name\":\"services.mode" (if (= seed 0) "" seed) "\",\"t\":\"nullOr\",")
-    "\"inner\":{\"t\":\"enum\",\"enum\":[\"a\",\"b\"]}},"
-    (str "{\"p\":\"services.submodule" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\"}]")))
-
-(defn darwin-schema-json [seed Int] String
-  (str
-    (str "[{\"name\":\"services.shared" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\"},")
-    (str "{\"name\":\"services.darwin" (if (= seed 0) "" seed) ".enable\",\"t\":\"bool\"},")
-    "{\"name\":\"users.users.<name>.shell\",\"t\":\"str\"},"
-    "{\"name\":\"programs.dynamic\",\"t\":\"attrsOf\"}]"))
-
-(defn schema-entries [seed Int text String] (Vec views/SchemaEntry)
-  (match (views/schema-from-json text)
-    [(SchemaLoaded entries) entries]
-    [(SchemaRejected message offset) []]))
-
-(defn platform-modules [seed Int] (Vec views/ModuleSource)
-  [
-    (make-module
-      seed
-      (str "both" (if (= seed 0) "" seed))
-      (str "modules/both" (if (= seed 0) "" seed) "/default.bnix")
-      (str "#lang beagle/nix\n{:services.shared" (if (= seed 0) "" seed) ".enable true}"))
-    (make-module
-      seed
-      (str "linux" (if (= seed 0) "" seed))
-      (str "modules/linux" (if (= seed 0) "" seed) "/default.bnix")
-      (str "#lang beagle/nix\n{:services.linux" (if (= seed 0) "" seed) ".enable true}"))
-    (make-module
-      seed
-      (str "darwin" (if (= seed 0) "" seed))
-      (str "modules/darwin" (if (= seed 0) "" seed) "/default.bnix")
-      (str "#lang beagle/nix\n{:services.darwin" (if (= seed 0) "" seed) ".enable true}"))
-    (make-module
-      seed
-      (str "neither" (if (= seed 0) "" seed))
-      (str "modules/neither" (if (= seed 0) "" seed) "/default.bnix")
-      (str "#lang beagle/nix\n{:boot.unknown" (if (= seed 0) "" seed) ".enable true}"))
-    (make-module
-      seed
-      (str "wildcard" (if (= seed 0) "" seed))
-      (str "modules/wildcard" (if (= seed 0) "" seed) "/default.bnix")
-      "#lang beagle/nix\n{:users.users.tom.shell pkg}")
-    (make-module
-      seed
-      (str "freeform" (if (= seed 0) "" seed))
-      (str "modules/freeform" (if (= seed 0) "" seed) "/default.bnix")
-      "#lang beagle/nix\n{:programs.dynamic.custom true}")])
-
-(defn matrix [seed Int] (Vec views/PlatformVerdict)
-  (match (views/platform-matrix
-     (platform-modules seed)
-     (schema-entries seed (schema-json seed))
-     (schema-entries seed (darwin-schema-json seed)))
-    [(PlatformRejected message) []]
-    [(PlatformLoaded verdicts) verdicts]))
-
-(defn verdict [seed Int name String] Keyword
-  (let [(found (U views/PlatformVerdict Nil)) (views/verdict-for (matrix seed) name)]
+(defn verdict [verdicts (Vec views/PlatformVerdict) name String] Keyword
+  (let [(found (U views/PlatformVerdict Nil)) (views/verdict-for verdicts name)]
     (if (nil? found) :missing (views/platformverdict-verdict found))))
 
 (defn case-platform-verdicts [seed Int] Bool
-  (and
-    (= (verdict seed (str "both" (if (= seed 0) "" seed))) :both)
-    (= (verdict seed (str "linux" (if (= seed 0) "" seed))) :linux-only)
-    (= (verdict seed (str "darwin" (if (= seed 0) "" seed))) :darwin-only)
-    (= (verdict seed (str "neither" (if (= seed 0) "" seed))) :no-data)
-    (= (verdict seed (str "wildcard" (if (= seed 0) "" seed))) :both)
-    (= (verdict seed (str "freeform" (if (= seed 0) "" seed))) :both)))
+  (let [both String (str "both" (suffix seed))
+        linux String (str "linux" (suffix seed))
+        darwin String (str "darwin" (suffix seed))
+        neither String (str "neither" (suffix seed))
+        everywhere (Vec views/PlatformVerdict)
+        (views/platform-matrix [both linux]
+          [(row both "linux") (row linux "linux") (row both "darwin")])
+        nowhere (Vec views/PlatformVerdict)
+        (views/platform-matrix [darwin neither] [(row darwin "darwin")])]
+    (and
+      (= (verdict everywhere both) :both)
+      (= (verdict everywhere linux) :linux-only)
+      (= (verdict nowhere darwin) :darwin-only)
+      (= (verdict nowhere neither) :neither))))
 
 (defn action-kind [seed Int action views/ViewsAction] String
   (match action

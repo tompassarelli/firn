@@ -130,30 +130,29 @@ assert.equal(suggestion.status, 1);
 assert.ok(suggestion.stderr.includes('services.openssh.enable'));
 let seed = 73421;
 const random = () => (seed = seed * 48271 % 2147483647);
-const corpus = decoded.entries.filter(row => row.type === 'bool');
-const subset = values => values.filter(() => random()%3 !== 0);
 for (let index=0; index<(process.env.CI ? 512 : 128); index++) {
-  const linux = subset(corpus), darwin = subset(corpus);
-  const requested = Array.from({length: 5}, () => subset(corpus).map(row => row.path));
-  const modules = requested.map((names,i) => p['->ModuleSource'](`module${i}`, [paths['->SourceDocument'](`modules/module${i}/default.bnix`, `#lang beagle/nix\n{${names.map(name => `:${name} true`).join(' ')}}`)]));
-  const matrix = p['platform-matrix'](modules, linux, darwin);
-  assert.equal(matrix._tag, 'PlatformLoaded');
-  const expected = requested.map(names => {
-    const linuxMissing = names.filter(name => !linux.some(row => row.path === name));
-    const darwinMissing = names.filter(name => !darwin.some(row => row.path === name));
-    return {kind: linuxMissing.length === 0 ? (darwinMissing.length === 0 ? 'both' : 'linux-only') : (darwinMissing.length === 0 ? 'darwin-only' : 'no-data'),
-      blockers: [...new Set([...linuxMissing,...darwinMissing])].sort()};
+  const modules = Array.from({length: 5}, (_, i) => `module${i}`);
+  const linuxEverywhere = random()%2 === 0;
+  const rows = [...(linuxEverywhere ? modules.map(m => [m,'linux']) : []),
+    ...modules.filter(() => random()%2 === 0).map(m => [m,'darwin'])];
+  const matrix = p['platform-matrix'](modules, rows.map(([m,platform]) => p['->PlatformRow'](m, platform)));
+  const expected = modules.map(m => {
+    const lacks = ['darwin','linux'].filter(platform => !rows.some(([n,q]) => n === m && q === platform));
+    return {kind: lacks.length === 0 ? 'both' : lacks.length === 2 ? 'neither' : `${lacks[0] === 'darwin' ? 'linux' : 'darwin'}-only`, blockers: lacks};
   });
-  assert.deepEqual(matrix.verdicts.map(row => [String(row.verdict).replace(/^:/,'').replaceAll('_','-'),row.blockers]), expected.map(row => [row.kind,row.blockers]));
-  const listed = p['render-platform-list']('all',matrix.verdicts,linux.length,darwin.length);
+  assert.deepEqual(matrix.map(row => [String(row.verdict).replace(/^:/,'').replaceAll('_','-'),row.blockers]), expected.map(row => [row.kind,row.blockers]));
+  const listed = p['render-platform-list']('all',matrix);
   assert.equal(listed.status, 0);
-  assert.deepEqual(listed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), modules.map(row => row.name).sort());
-  const safelist = p['render-platform-safelist'](matrix.verdicts);
+  assert.ok(!listed.stdout.includes('Sources:'));
+  assert.deepEqual(listed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), modules);
+  const darwinListed = p['render-platform-list']('darwin',matrix);
+  assert.deepEqual(darwinListed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), rows.filter(([,q]) => q === 'darwin').map(([m]) => m).sort());
+  const safelist = p['render-platform-safelist'](matrix);
   assert.equal(safelist.status, 0);
-  assert.deepEqual([...safelist.stdout.matchAll(/"(module[0-9]+)"/g)].map(match => match[1]).sort(), modules.filter((row,i) => ['both','darwin-only'].includes(expected[i].kind)).map(row => row.name).sort());
-  const shown = p['render-platform-show']('module0', matrix.verdicts);
+  assert.deepEqual([...safelist.stdout.matchAll(/"(module[0-9]+)"/g)].map(match => match[1]).sort(), modules.filter((m,i) => ['both','darwin-only'].includes(expected[i].kind)).sort());
+  const shown = p['render-platform-show']('module0', matrix);
   assert.equal(shown.status, 0);
-  for (const path of expected[0].blockers) assert.ok(shown.stdout.includes(path));
+  assert.equal(shown.stdout.split('unsupported on:\n')[1] ?? '', expected[0].blockers.map(platform => `  ${platform}\n`).join(''));
 }
 console.log('ok: recorded Beagle/flake decoders and generated platform model');
 JS
