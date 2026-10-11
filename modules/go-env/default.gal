@@ -3,6 +3,8 @@ use firn/tags
 go-env is a Module
 go-env is tagged development
 
+# Go has no config file: GOPATH must also apply to Go from a development shell
+# so the toolchain uses these paths instead of creating ~/go.
 nix module
   arguments: config, lib, ...
   config when config.myConfig.modules.go-env.enable

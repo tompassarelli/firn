@@ -2,6 +2,9 @@ use firn/tags
 
 agent-slice is a Module
 
+# Weights preserve idle capacity; MemoryHigh throttles without a MemoryMax kill limit.
+# The session weight must rise too: weights are ratios among sibling slices.
+# systemd ships session.slice, so its settings are emitted as a drop-in override.
 nix module
   arguments: config, lib, ...
   config when config.myConfig.modules.agent-slice.enable

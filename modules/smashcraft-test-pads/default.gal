@@ -3,6 +3,11 @@ use firn/tags
 smashcraft-test-pads is a Module
 smashcraft-test-pads is tagged desktop
 
+# Smashcraft's virtual test pads, from smashcraft:ts/scripts/integrity/linux.ts,
+# keep root-only /dev/input nodes, so Steam and every other desktop program
+# can't open them; the test helpers read a twin node in /dev/smashcraft-pads.
+# The file sorts before 70-uaccess.rules, which gives joysticks to the seat
+# user.
 nix module
   arguments: config, lib, pkgs, ...
   config when config.myConfig.modules.smashcraft-test-pads.enable

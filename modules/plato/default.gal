@@ -2,6 +2,8 @@ use firn/tags
 
 plato is a Module
 
+# OOMScoreAdjust below the user manager's 100 needs privilege, so Plato is a
+# system unit running as the user, with its own tmux socket inside that cgroup.
 nix module
   arguments: config, lib, pkgs, ...
   let username = config.myConfig.modules.users.username

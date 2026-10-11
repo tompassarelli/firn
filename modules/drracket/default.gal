@@ -6,6 +6,7 @@ drracket is tagged racket
 nix module
   arguments: config, lib, pkgs, ...
   config when config.myConfig.modules.drracket.enable
+    # Only external packages belong here; built-ins can already exist at installation scope.
     "environment"
       "systemPackages": [pkgs.unstable.racket]
     "system"

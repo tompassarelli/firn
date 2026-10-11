@@ -3,6 +3,22 @@ use firn/tags
 beagle is a Module
 beagle is tagged development
 
+# The Beagle compiler is DEV-CHANNEL ONLY: the packaged flake build of
+# beagle no longer enters environment.systemPackages, so it no longer enters
+# the system closure. Only the checkout-execution `*-dev` shims ship from
+# Beagle. Each shim execs ~/code/beagle/main's own bin/<name> so the racket
+# that runs is whatever that checkout's own direnv resolves — never a packaged
+# racket, and never the packaged beagle. A missing checkout is a clear, loud
+# failure (exit 127 + message), never a silent fallback to a packaged binary.
+#
+# The dev wrappers deliberately do NOT export _BEAGLE_RACKET. The checkout's
+# own bin/_beagle-racket resolves racket through that checkout's direnv, which
+# is the racket its .zo bytecode was compiled against. Injecting a package's
+# pinned racket instead would reintroduce exactly the stale-bytecode skew the
+# dev/prod split exists to prevent ("body of .../raco.rkt"). A dev command
+# runs the checkout on the checkout's own terms; direnv is supplied so that
+# resolution works outside a direnv shell (dispatched agent, CI, cron, plain
+# subshell).
 nix module
   arguments: config, flakeRoot, lib, pkgs, ...
   let liveInputs = with pkgs: [bash, coreutils, direnv, findutils, gawk, git, gnugrep, gnused]
