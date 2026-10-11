@@ -7,7 +7,7 @@
         homeDir config.myConfig.modules.users.homeDir
         username config.myConfig.modules.users.username
         description "Socrates chat relay for local agent sessions"
-        path (s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bun pkgs.tmux pkgs.websocat pkgs.jq pkgs.sqlite pkgs.ripgrep pkgs.iproute2 pkgs.coreutils]))]
+        path (s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bun pkgs.gh pkgs.tmux pkgs.websocat pkgs.jq pkgs.sqlite pkgs.ripgrep pkgs.iproute2 pkgs.coreutils]))]
     {:options.myConfig.modules.socrates-chat
       {:enable (lib.mkEnableOption description)
        :homeserver (lib.mkOption
@@ -22,7 +22,11 @@
        :proxyPane (lib.mkOption
          {:type (lib.types.nullOr lib.types.str)
           :default nil
-          :description "Optional proxy tmux socket and pane, in socket:pane form"})}
+          :description "Optional proxy tmux socket and pane, in socket:pane form"})
+       :watches (lib.mkOption
+         {:type lib.types.bool
+          :default false
+          :description "Run the watch and ETA engine; enable it on exactly one host, one with gh signed in"})}
      :config (lib.mkIf cfg.enable
        {:home-manager.users {username (nix/module [...]
          {:systemd.user.services.socrates-chat
@@ -35,6 +39,7 @@
                   (s "SOCRATES_CHAT_HOMESERVER=" cfg.homeserver)
                   (s "SOCRATES_CHAT_TOM_USER_ID=" cfg.tomUserId)
                   (s "SOCRATES_CHAT_TOKEN_FILE=" cfg.tokenFile)]
-                 (lib.optional (!= cfg.proxyPane nil) (s "SOCRATES_CHAT_PROXY_PANE=" cfg.proxyPane))])
+                 (lib.optional (!= cfg.proxyPane nil) (s "SOCRATES_CHAT_PROXY_PANE=" cfg.proxyPane))
+                 (lib.optional cfg.watches "SOCRATES_CHAT_WATCHES=1")])
               :ExecStart (s homeDir "/.local/share/north/bin/socrates-chat run")}
             :Install {:WantedBy ["default.target"]}}})}})}))

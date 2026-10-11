@@ -20,6 +20,11 @@
       default = null;
       description = "Optional proxy tmux socket and pane, in socket:pane form";
     };
+    watches = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Run the watch and ETA engine; enable it on exactly one host, one with gh signed in";
+    };
   };
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = ({ ... }: {
@@ -39,6 +44,7 @@
               "SOCRATES_CHAT_TOKEN_FILE=${cfg.tokenFile}"
             ]
             (lib.optional (cfg.proxyPane != null) "SOCRATES_CHAT_PROXY_PANE=${cfg.proxyPane}")
+            (lib.optional cfg.watches "SOCRATES_CHAT_WATCHES=1")
           ];
           ExecStart = "${homeDir}/.local/share/north/bin/socrates-chat run";
         };
@@ -50,6 +56,7 @@
   };
 }) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
     pkgs.bun
+    pkgs.gh
     pkgs.tmux
     pkgs.websocat
     pkgs.jq
