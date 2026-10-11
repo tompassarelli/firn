@@ -14,14 +14,13 @@ jobs:
     name: Tests (${{ matrix.name }})
     strategy:
       fail-fast: false
-      max-parallel: 5
+      max-parallel: 4
       matrix:
         include:
           - {suite: runtime, shard: 0, name: runtime}
-          - {suite: discovered, shard: 0, name: discovered 1/4}
-          - {suite: discovered, shard: 1, name: discovered 2/4}
-          - {suite: discovered, shard: 2, name: discovered 3/4}
-          - {suite: discovered, shard: 3, name: discovered 4/4}
+          - {suite: drift, shard: 0, name: drift}
+          - {suite: discovered, shard: 0, name: discovered 1/2}
+          - {suite: discovered, shard: 1, name: discovered 2/2}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -39,35 +38,91 @@ jobs:
         with:
           nix_path: nixpkgs=channel:nixos-25.05
 
-      - name: Link beagle package (beagle's pinned racket — MUST match the compiler)
-        # The compiler sources beagle/bin/_beagle-racket and runs under beagle's
-        # flake-pinned racket. beagle-lib MUST be linked with that SAME racket,
-        # or the collection lands in nixpkgs#racket's package DB and the compiler
-        # dies under the pinned racket with "collection not found: beagle/private/*".
-        # (nixpkgs#racket and beagle's pin are versioned independently — 9.2 vs 9.1.)
-        # _beagle-racket's PLTCOLLECTS scope aliases `beagle` onto `beagle-lib`;
-        # raco refuses both as one directory, so set up by package with it unset.
+      - name: Read setup identities
+        id: setup
         run: |
-          source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
-          PLTCOLLECTS='' "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
-          PLTCOLLECTS='' "$RACO" setup --pkgs beagle-lib
-
-      - name: Read declared Clause revision
-        id: clause
-        run: echo "revision=$(cat firn/config/clause-revision)" >> "$GITHUB_OUTPUT"
+          echo "beagle=$(git -C beagle rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "clause=$(cat firn/config/clause-revision)" >> "$GITHUB_OUTPUT"
+          nix flake metadata nixpkgs --json > "$RUNNER_TEMP/test-tools-lock.json"
+          echo "tools-url=$(jq -r .url "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
+          tools_key=$(jq -r .locked.narHash "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
+          echo "tools-key=$tools_key" >> "$GITHUB_OUTPUT"
 
       - name: Checkout clause
         uses: actions/checkout@v4
         with:
           repository: tompassarelli/clause
-          ref: ${{ steps.clause.outputs.revision }}
+          ref: ${{ steps.setup.outputs.clause }}
           path: clause
 
+      - name: Cache test tools
+        id: tools-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/test-tools
+          key: tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.tools-key }}
+
       - name: Install test tools
-        run: nix profile install nixpkgs#bun nixpkgs#ripgrep nixpkgs#jq
+        if: steps.tools-cache.outputs.cache-hit != 'true'
+        env:
+          TOOLS_URL: ${{ steps.setup.outputs.tools-url }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/test-tools"
+          nix build --no-link --print-out-paths "$TOOLS_URL#bun" "$TOOLS_URL#ripgrep" "$TOOLS_URL#jq" \
+            > "$RUNNER_TEMP/test-tools/paths"
+          mapfile -t tools < "$RUNNER_TEMP/test-tools/paths"
+          mapfile -t closure < <(nix-store --query --requisites "${tools[@]}")
+          nix-store --export "${closure[@]}" > "$RUNNER_TEMP/test-tools/closure.nar"
+
+      - name: Activate test tools
+        run: |
+          nix-store --import < "$RUNNER_TEMP/test-tools/closure.nar" > /dev/null
+          while IFS= read -r tool; do
+            if [[ -d "$tool/bin" ]]; then
+              echo "$tool/bin" >> "$GITHUB_PATH"
+            fi
+          done < "$RUNNER_TEMP/test-tools/paths"
+
+      - name: Cache compiled Beagle collection and pinned Racket
+        id: beagle-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            beagle/**/compiled
+            beagle/.beagle
+            ~/.local/share/racket
+            ${{ runner.temp }}/beagle-cache
+          key: beagle-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.beagle }}-${{ hashFiles('beagle/flake.lock') }}
+
+      - name: Link beagle package with its pinned Racket
+        if: steps.beagle-cache.outputs.cache-hit != 'true'
+        # Racket bytecode and package links must use the compiler's pinned Racket.
+        run: |
+          mkdir -p "$RUNNER_TEMP/beagle-cache"
+          source "$GITHUB_WORKSPACE/beagle/bin/_beagle-racket"
+          PLTCOLLECTS='' "$RACO" pkg install --auto --batch --link --force "$GITHUB_WORKSPACE/beagle/beagle-lib"
+          PLTCOLLECTS='' "$RACO" setup --pkgs beagle-lib
+          printf '%s\n' "$RACKET" > "$RUNNER_TEMP/beagle-cache/racket-path"
+          mapfile -t closure < <(nix-store --query --requisites "${RACKET%/bin/racket}")
+          nix-store --export "${closure[@]}" > "$RUNNER_TEMP/beagle-cache/closure.nar"
+
+      - name: Activate pinned Racket
+        run: |
+          nix-store --import < "$RUNNER_TEMP/beagle-cache/closure.nar" > /dev/null
+          echo "_BEAGLE_RACKET=$(cat "$RUNNER_TEMP/beagle-cache/racket-path")" >> "$GITHUB_ENV"
+
+      - name: Cache firn user runtime
+        if: matrix.suite != 'runtime'
+        id: runtime-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/firn-runtime
+            ${{ runner.temp }}/firn-runtime-closure.nar
+          key: runtime-repo-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.beagle }}-${{ steps.setup.outputs.tools-key }}-${{ hashFiles('firn/native/**', 'firn/config/clause-revision', 'firn/dotfiles/bin/firn-runtime-update') }}
 
       - name: Install firn user runtime
-        if: matrix.suite == 'discovered'
+        if: matrix.suite != 'runtime' && steps.runtime-cache.outputs.cache-hit != 'true'
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
@@ -75,12 +130,17 @@ jobs:
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
+          mapfile -t roots < <(awk -F= '/^(bun_store_path|clause_runtime_dependency)=\/nix\/store\// {print $2}' \
+            "$FIRN_RUNTIME_ROOT/current/manifest")
+          mapfile -t closure < <(nix-store --query --requisites "${roots[@]}")
+          nix-store --export "${closure[@]}" > "$RUNNER_TEMP/firn-runtime-closure.nar"
+
+      - name: Activate firn user runtime
+        if: matrix.suite != 'runtime'
+        run: nix-store --import < "$RUNNER_TEMP/firn-runtime-closure.nar" > /dev/null
 
       - name: Drift check (.bnix and .nix in sync)
-        if: matrix.suite == 'discovered'
-        # Regenerates every .nix from its sibling .bnix and fails if any
-        # generated file differs from what's committed. Forces .bnix to
-        # remain the source of truth.
+        if: matrix.suite == 'drift'
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
@@ -93,6 +153,7 @@ jobs:
           fi
 
       - name: Discovered shell tests
+        if: matrix.suite != 'drift'
         working-directory: firn
         env:
           BEAGLE_PATH: ${{ github.workspace }}/beagle
@@ -101,9 +162,10 @@ jobs:
           FIRN_REAL_REPO: ${{ github.workspace }}/firn
           FIRN_TEST_SUITE: ${{ matrix.suite }}
           FIRN_TEST_SHARD: ${{ matrix.shard }}
-          FIRN_TEST_SHARDS: 4
+          FIRN_TEST_SHARDS: 2
         run: |
-          export FIRN_BUN="$(command -v bun)"
+          FIRN_BUN="$(command -v bun)"
+          export FIRN_BUN
           skip=(
             modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
             native/authoring_native.test.sh # needs the private Galileo compiler; public firn CI cannot check it out
