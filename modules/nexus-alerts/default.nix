@@ -1,7 +1,7 @@
 { config, lib, pkgs, ... }:
 
 ((username: ((port: ((listen: ((baseUrl: ((sopsFile: ((ph: ((envTemplate: ((nexusAlert: ((notifyBody: ((userNotify: ((onFailureDropin: ((notifyResetDropin: {
-  options.myConfig.modules.nexus-alerts.enable = lib.mkEnableOption "nexus push alerts: ntfy on wg-nexus, nexus-alert CLI, OnFailure notify for every service";
+  options.myConfig.modules.nexus-alerts.enable = lib.mkEnableOption "nexus push alerts: Matrix with ntfy fallback, nexus-alert CLI, OnFailure notify for every service";
   options.myConfig.modules.nexus-alerts.sopsFile = lib.mkOption {
     type = lib.types.path;
     description = "sops file holding the ntfy publisher and phone tokens and hashes";
@@ -126,8 +126,42 @@
       case "$1" in urgent) prio=5 ;; normal|socrates-test) prio=3 ;; *) usage ;; esac
       title=''${3:-Nexus}
       click=''${4:-}
-      token=$(cat ${config.sops.secrets.ntfy-publisher-token.path})
+      matrix_url=''${NEXUS_ALERT_MATRIX_URL:-http://10.77.0.1:6167}
+      matrix_token_file=''${NEXUS_ALERT_MATRIX_TOKEN_FILE:-/run/secrets/socrates-chat-as-token}
+      matrix_server=${lib.escapeShellArg config.myConfig.modules.nexus-matrix.serverName}
+      matrix_tom=${lib.escapeShellArg config.myConfig.modules.socrates-chat.tomUserId}
+      matrix_room=''${NEXUS_ALERT_MATRIX_ROOM_ALIAS:-#socrates-alerts:$matrix_server}
+      ntfy_url=''${NEXUS_ALERT_NTFY_URL:-http://10.77.0.1:2586}
+      ntfy_token_file=''${NEXUS_ALERT_NTFY_TOKEN_FILE:-${config.sops.secrets.ntfy-publisher-token.path}}
+      matrix_request() {
+        local remaining response status
+        remaining=$(jq -nr --argjson deadline "$deadline" --argjson now "$EPOCHREALTIME" '$deadline - $now | select(. > 0)') || return 1
+        [ -n "$remaining" ] || return 1
+        response=$(printf 'Authorization: Bearer %s\n' "$matrix_token" | curl -s --max-time "$remaining" -H @- -w $'\n%{http_code}' "$@") || return 1
+        status=''${response##*$'\n'}
+        [[ $status == 2[0-9][0-9] ]] || return 1
+        printf '%s' "''${response%$'\n'*}"
+      }
+      matrix_send() {
+        local matrix_token deadline alias sender room payload response
+        deadline=$(jq -nr --argjson now "$EPOCHREALTIME" '$now + 5') || return 1
+        matrix_token=$(cat "$matrix_token_file") || return 1
+        [ -n "$matrix_token" ] || return 1
+        alias=$(jq -nr --arg value "$matrix_room" '$value | @uri') || return 1
+        sender=$(jq -nr --arg value "@agent-alerts:$matrix_server" '$value | @uri') || return 1
+        response=$(matrix_request "$matrix_url/_matrix/client/v3/directory/room/$alias?user_id=$sender") || return 1
+        room=$(jq -er '.room_id | select(type == "string" and startswith("!")) | @uri' <<<"$response") || return 1
+        payload=$(jq -n --arg topic "$1" --arg text "$2" --arg title "$title" --arg click "$click" --arg tom "$matrix_tom" '{msgtype: "m.text", body: ((if $topic == "urgent" then "Tom (" + $tom + "): " else "" end) + $title + "\n" + $text + (if $click == "" then "" else "\n" + $click end)), "m.mentions": {user_ids: (if $topic == "urgent" then [$tom] else [] end)}}') || return 1
+        response=$(matrix_request -X PUT -H 'Content-Type: application/json' --data-binary "$payload" "$matrix_url/_matrix/client/v3/rooms/$room/send/m.room.message/nexus-alert-$(date +%s%N)-$$?user_id=$sender") || return 1
+        jq -er '.event_id | select(type == "string" and startswith("$"))' <<<"$response"
+      }
+      if matrix_id=$(matrix_send "$1" "$2" 2>/dev/null); then
+        if [ "$1" = normal ]; then printf '%s\n' "$matrix_id"; exit 0; fi
+      else
+        echo 'nexus-alert: Matrix delivery failed; sending ntfy fallback' >&2
+      fi
+      token=$(cat "$ntfy_token_file")
       curl -fsS -H @<(printf 'Authorization: Bearer %s\nPriority: %s\nTitle: %s\n' "$token" "$prio" "$title"; [ -z "$click" ] || printf 'Click: %s\n' "$click") \
-        --data-binary "$2" "${baseUrl}/$1" | jq -r .id
+        --data-binary "$2" "$ntfy_url/$1" | jq -r .id
     '';
   }))) (builtins.getAttr "ntfy-auth.env" config.sops.templates))) config.sops.placeholder)) config.myConfig.modules.nexus-alerts.sopsFile)) "http://${listen}")) "10.77.0.1:${builtins.toString port}")) 2586)) config.myConfig.modules.users.username)
