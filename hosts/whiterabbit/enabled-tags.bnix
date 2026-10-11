@@ -5,7 +5,7 @@
 {:platform linux
  :enabled
   [terminal
-   cli-tools
+   [cli-tools +tmux]
    [desktop -mako +river]
    theming
    auth

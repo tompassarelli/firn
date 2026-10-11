@@ -108,6 +108,7 @@
   myConfig.modules.swaylock.enable = lib.mkDefault true;
   myConfig.modules.tealdeer.enable = lib.mkDefault true;
   myConfig.modules.theme-switcher.enable = lib.mkDefault true;
+  myConfig.modules.tmux.enable = lib.mkDefault true;
   myConfig.modules.tree.enable = lib.mkDefault true;
   myConfig.modules.unrar.enable = lib.mkDefault true;
   myConfig.modules.unzip.enable = lib.mkDefault true;
