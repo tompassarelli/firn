@@ -38,6 +38,8 @@ die() {
 
 [[ -x "$beagle/bin/beagle" ]] \
   || die "authoritative Beagle checkout is missing: $beagle"
+command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
+  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
 
 build_family() {
   local output="$scratch/build"
@@ -130,33 +132,34 @@ zeta-host runs linux
 zeta-host enables desktop
 EOF
 
-cat >"$fixture/hosts/alpha-host/configuration.bnix" <<'EOF'
-#lang beagle/nix
-(ns configuration)
-(nix/module [config lib pkgs ...]
-  {:myConfig.modules.alpha.enable true
-   :myConfig.modules.beta
-    {:enable false
-     :port 44}
-   :myConfig.modules.gamma.someOption "configured"
-   :imports [(p "./_generated-enables.nix")]})
-EOF
-cat >"$fixture/hosts/zeta-host/configuration.bnix" <<'EOF'
-#lang beagle/nix
-(ns configuration)
-(nix/module [config lib pkgs ...]
-  {:myConfig.modules.beta.enable true
-   :imports [(p "./_generated-enables.nix")]})
-EOF
+cat >"$fixture/hosts/alpha-host/configuration.gal" <<'EOF'
+use firn/tags
 
-cat >"$fixture/hosts/alpha-host/_generated-enables.bnix" <<'EOF'
-this output artifact is deliberately not valid Beagle source
+alpha-host turns on alpha
+alpha-host turns off beta
+
+nix file
+  arguments: config, lib, pkgs, ...
+  value
+    for ?m where alpha-host turns on ?m
+      myConfig.modules.{?m}.enable: true
+    for ?m where alpha-host turns off ?m
+      myConfig.modules.{?m}.enable: false
+    myConfig.modules.beta.port: 44
+    myConfig.modules.gamma.someOption: "configured"
+    imports: [./_generated-enables.nix]
 EOF
-cat >"$fixture/hosts/zeta-host/_generated-enables.bnix" <<'EOF'
-#lang beagle/nix
-(ns _generated-enables)
-(nix/module [config lib pkgs ...]
-  {:myConfig.modules.orphan.enable true})
+cat >"$fixture/hosts/zeta-host/configuration.gal" <<'EOF'
+use firn/tags
+
+zeta-host turns on beta
+
+nix file
+  arguments: config, lib, pkgs, ...
+  value
+    for ?m where zeta-host turns on ?m
+      myConfig.modules.{?m}.enable: true
+    imports: [./_generated-enables.nix]
 EOF
 
 run_cli() {
@@ -201,8 +204,8 @@ run_cli module-used module list used
 cat >"$scratch/module-used.expected" <<'EOF'
 Used modules (3):
   alpha  (alpha-host)
-  beta  (alpha-host, zeta-host, via tag@alpha-host)
-  gamma  (alpha-host, via tag@zeta-host)
+  beta  (alpha-host, zeta-host)
+  gamma  (via tag@zeta-host)
 EOF
 assert_output module-used "$scratch/module-used.expected"
 
@@ -215,12 +218,12 @@ assert_output module-unused "$scratch/module-unused.expected"
 
 run_cli module-refs module refs beta
 cat >"$scratch/module-refs.expected" <<'EOF'
-Hosts (direct, from configuration.bnix):
+Hosts (direct, from configuration.gal):
   alpha-host
   zeta-host
 
 Hosts (via tag resolution):
-  alpha-host
+  (none)
 EOF
 assert_output module-refs "$scratch/module-refs.expected"
 
