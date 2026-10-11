@@ -1,0 +1,40 @@
+#lang beagle/nix
+
+(ns default)
+
+(nix/module [config lib pkgs ...]
+  (let [cfg config.myConfig.modules.socrates-chat
+        homeDir config.myConfig.modules.users.homeDir
+        username config.myConfig.modules.users.username
+        description "Socrates chat relay for local agent sessions"
+        path (s "PATH=/run/wrappers/bin:/run/current-system/sw/bin:" homeDir "/.local/share/firn/bin:" homeDir "/.local/share/north/bin:" (lib.makeBinPath [pkgs.bun pkgs.tmux pkgs.websocat pkgs.jq pkgs.sqlite pkgs.ripgrep pkgs.iproute2 pkgs.coreutils]))]
+    {:options.myConfig.modules.socrates-chat
+      {:enable (lib.mkEnableOption description)
+       :homeserver (lib.mkOption
+         {:type lib.types.str
+          :description "Matrix homeserver URL"})
+       :tomUserId (lib.mkOption
+         {:type lib.types.str
+          :description "Matrix user id authorized to send input to agent sessions"})
+       :tokenFile (lib.mkOption
+         {:type lib.types.str
+          :description "Path to the rendered appservice token, supplied by the private overlay"})
+       :proxyPane (lib.mkOption
+         {:type (lib.types.nullOr lib.types.str)
+          :default nil
+          :description "Optional proxy tmux socket and pane, in socket:pane form"})}
+     :config (lib.mkIf cfg.enable
+       {:home-manager.users {username (nix/module [...]
+         {:systemd.user.services.socrates-chat
+           {:Unit {:Description description}
+            :Service {:Type "simple"
+              :Restart "always"
+              :RestartSec "10s"
+              :Environment (lib.concatLists
+                [[path
+                  (s "SOCRATES_CHAT_HOMESERVER=" cfg.homeserver)
+                  (s "SOCRATES_CHAT_TOM_USER_ID=" cfg.tomUserId)
+                  (s "SOCRATES_CHAT_TOKEN_FILE=" cfg.tokenFile)]
+                 (lib.optional (!= cfg.proxyPane nil) (s "SOCRATES_CHAT_PROXY_PANE=" cfg.proxyPane))])
+              :ExecStart (s homeDir "/.local/share/north/bin/socrates-chat run")}
+            :Install {:WantedBy ["default.target"]}}})}})}))

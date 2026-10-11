@@ -1,0 +1,60 @@
+{ config, lib, pkgs, ... }:
+
+((cfg: ((homeDir: ((username: ((description: ((path: {
+  options.myConfig.modules.socrates-chat = {
+    enable = lib.mkEnableOption description;
+    homeserver = lib.mkOption {
+      type = lib.types.str;
+      description = "Matrix homeserver URL";
+    };
+    tomUserId = lib.mkOption {
+      type = lib.types.str;
+      description = "Matrix user id authorized to send input to agent sessions";
+    };
+    tokenFile = lib.mkOption {
+      type = lib.types.str;
+      description = "Path to the rendered appservice token, supplied by the private overlay";
+    };
+    proxyPane = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Optional proxy tmux socket and pane, in socket:pane form";
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${username} = ({ ... }: {
+      systemd.user.services.socrates-chat = {
+        Unit = {
+          Description = description;
+        };
+        Service = {
+          Type = "simple";
+          Restart = "always";
+          RestartSec = "10s";
+          Environment = lib.concatLists [
+            [
+              path
+              "SOCRATES_CHAT_HOMESERVER=${cfg.homeserver}"
+              "SOCRATES_CHAT_TOM_USER_ID=${cfg.tomUserId}"
+              "SOCRATES_CHAT_TOKEN_FILE=${cfg.tokenFile}"
+            ]
+            (lib.optional (cfg.proxyPane != null) "SOCRATES_CHAT_PROXY_PANE=${cfg.proxyPane}")
+          ];
+          ExecStart = "${homeDir}/.local/share/north/bin/socrates-chat run";
+        };
+        Install = {
+          WantedBy = [ "default.target" ];
+        };
+      };
+    });
+  };
+}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
+    pkgs.bun
+    pkgs.tmux
+    pkgs.websocat
+    pkgs.jq
+    pkgs.sqlite
+    pkgs.ripgrep
+    pkgs.iproute2
+    pkgs.coreutils
+  ]}")) "Socrates chat relay for local agent sessions")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.socrates-chat)
