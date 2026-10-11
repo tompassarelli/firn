@@ -4,7 +4,7 @@ source_dir="$(dirname "$(readlink -f "$0")")"
 plan=0
 [[ "${1:-}" == --plan ]] && plan=1
 if [[ "$plan" == 0 && "${MACHINE_UPDATE_ADMITTED:-0}" != 1 ]]; then
-  exec bun "$source_dir/../agents/skills/machine-capacity/scripts/machine-capacity.mjs" run \
+  exec bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
     --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
     env MACHINE_UPDATE_ADMITTED=1 "$0" "$@"
 fi
