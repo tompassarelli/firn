@@ -32,6 +32,7 @@ cmd=( "$@" )
 case "$(basename -- "$1")" in
   ghostty) cmd=( "$1" "--class=$MARK" "${@:2}" ) ;;
 esac
+cmd=( env -u CLAUDE_CODE_SESSION_ID -u CLAUDE_JOB_DIR -u CLAUDE_CODE_SESSION_ATTENDED "${cmd[@]}" )
 
 # Own systemd scope per window, so capacity tools attribute its load to it
 # rather than to whichever terminal launched it.
