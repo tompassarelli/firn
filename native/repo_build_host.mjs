@@ -1,16 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
 import {
-  closeSync,
   lstatSync,
-  openSync,
   readFileSync,
   readdirSync,
-  renameSync,
   unlinkSync,
-  writeFileSync,
 } from 'node:fs';
-import { extname } from 'node:path';
 import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_REPO_BUILD_MODULE
@@ -59,17 +54,7 @@ const bridge = Object.freeze({
       return result(errno(error));
     }
   },
-  writeTextAtomic(path, text) {
-    const temporary = `${path}.firn-${process.pid}-${crypto.randomUUID()}.tmp`;
-    try {
-      writeFileSync(temporary, text, { flag: 'wx', mode: 0o600 });
-      renameSync(temporary, path);
-      return 0;
-    } catch (error) {
-      try { unlinkSync(temporary); } catch {}
-      return errno(error);
-    }
-  },
+
   removeFile(path) {
     try {
       unlinkSync(path);
@@ -78,23 +63,8 @@ const bridge = Object.freeze({
       return errno(error);
     }
   },
-  renameFile(source, destination) {
-    try {
-      renameSync(source, destination);
-      return 0;
-    } catch (error) {
-      return errno(error);
-    }
-  },
-  createTemporarySibling(destination) {
-    const temporary = `${destination}.firn-${process.pid}-${crypto.randomUUID()}.tmp${extname(destination)}`;
-    try {
-      closeSync(openSync(temporary, 'wx', 0o600));
-      return result(0, temporary);
-    } catch (error) {
-      return result(errno(error));
-    }
-  },
+
+
   runCapture(argv, maximum) {
     try {
       const child = Bun.spawnSync(argv, { stdout: 'pipe', stderr: 'pipe' });
