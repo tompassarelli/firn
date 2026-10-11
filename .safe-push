@@ -1,2 +1,6 @@
 [ci]
 	budget = tests.yml 345
+[land]
+	check = native/ :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --class heavy --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh native
+	check = modules/,hosts/,native/nix/ :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --class heavy --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh drift
+	check = dotfiles/bin/ :: bash .github/scripts/land-checks.sh dotfiles
