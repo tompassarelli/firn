@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export rustc-module()
-  module(path(myConfig.modules.rustc.enable), "Rust compiler", package(path(unstable.rustc)))

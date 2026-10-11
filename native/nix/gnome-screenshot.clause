@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export gnome-screenshot-module()
-  module(path(myConfig.modules.gnome-screenshot.enable), "GNOME Screenshot tool", package(path(gnome-screenshot)))

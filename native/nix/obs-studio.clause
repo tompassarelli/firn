@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export obs-studio-module()
-  module(path(myConfig.modules.obs-studio.enable), "OBS Studio screen recording", package(path(obs-studio)))

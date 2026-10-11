@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export dotnet-module()
-  configuration-module(path(myConfig.modules.dotnet.enable),
-    ".NET SDK and CLI tools",
-    {environment: {systemPackages: [package(path(dotnet-sdk_8))],
-       sessionVariables: {PATH: ["$HOME/.dotnet/tools"]}}})

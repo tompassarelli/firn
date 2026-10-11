@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export anytype-module()
-  module(path(myConfig.modules.anytype.enable), "Anytype — local-first knowledge/notes workspace", package(path(anytype)))

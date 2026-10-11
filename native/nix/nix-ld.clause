@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export nix-ld-module()
-  configuration-module(path(myConfig.modules.nix-ld.enable),
-    "nix-ld dynamic library shim",
-    {programs: {nix-ld: {enable: true}}})

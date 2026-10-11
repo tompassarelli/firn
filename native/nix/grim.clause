@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export grim-module()
-  module(path(myConfig.modules.grim.enable), "Grim screenshot tool", package(path(grim)))

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export libreoffice-module()
-  module(path(myConfig.modules.libreoffice.enable), "Enable LibreOffice office suite", package(path(libreoffice-fresh)))

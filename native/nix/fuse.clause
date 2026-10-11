@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export fuse-module()
-  module(path(myConfig.modules.fuse.enable), "FUSE filesystem support", package(path(fuse)))

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export wf-recorder-module()
-  module(path(myConfig.modules.wf-recorder.enable), "Wayland screen recorder", package(path(wf-recorder)))

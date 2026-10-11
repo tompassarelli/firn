@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export hplip-module()
-  configuration-module(path(myConfig.modules.hplip.enable),
-    "HP printer drivers",
-    {services: {printing: {drivers: [package(path(hplip))]}}})

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export uv-module()
-  module(path(myConfig.modules.uv.enable), "uv Python package manager", package(path(uv)))

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export freetds-module()
-  module(path(myConfig.modules.freetds.enable), "FreeTDS (TDS protocol library for MSSQL)", package(path(freetds)))

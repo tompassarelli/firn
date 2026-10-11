@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-export gnome-keyring-module()
-  configuration-module(path(myConfig.modules.gnome-keyring.enable),
-    "GNOME Keyring (secrets storage + Seahorse GUI)",
-    {security: {pam: {services: {login: {enableGnomeKeyring: true}}}},
-     services: {gnome: {gnome-keyring: {enable: true}}},
-     programs: {seahorse: {enable: true}}})

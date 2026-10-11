@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export guix-module()
-  configuration-module(path(myConfig.modules.guix.enable),
-    "GNU Guix package manager",
-    {services: {guix: {enable: true}}})

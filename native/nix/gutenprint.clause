@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export gutenprint-module()
-  configuration-module(path(myConfig.modules.gutenprint.enable),
-    "Gutenprint printer drivers",
-    {services: {printing: {drivers: [package(path(gutenprint))]}}})

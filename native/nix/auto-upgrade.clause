@@ -1,5 +1,0 @@
-import "nixpkgs.clause"
-
-export auto-upgrade-module()
-  configuration-module(path(myConfig.modules.auto-upgrade.enable), "Automatic system updates",
-    {system: {autoUpgrade: {enable: true, flake: "{configured-text(path(myConfig.modules.users.codeDir))}/nixos-config", flags: ["--update-input", "nixpkgs", "--update-input", "nixpkgs-unstable", "--commit-lock-file"], dates: "Sun 03:00", randomizedDelaySec: "30min", allowReboot: false}}})

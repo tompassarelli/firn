@@ -67,11 +67,6 @@
       (ends-with? relative "/responsibilities.bnix")))
 
 (js/export
-  (defn clause-metadata-path? [relative String] Bool
-    (and (starts-with? relative "modules/")
-         (ends-with? relative "/tags.clause"))))
-
-(js/export
   (defn clause-source-path? [relative String] Bool
     (and (starts-with? relative "native/nix/")
          (ends-with? relative ".clause"))))
@@ -83,7 +78,6 @@
 (js/export
   (defn source-path? [relative String] Bool
   (and (ends-with? relative ".bnix")
-       (not (clause-metadata-path? relative))
        (not (source-excluded? relative)))))
 
 (js/export

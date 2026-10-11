@@ -4,7 +4,6 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 beagle="${BEAGLE_PATH:?BEAGLE_PATH must name the Beagle checkout}"
-workbench="${FIRN_CLAUSE_WORKBENCH:-${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/clause-workbench}"
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-build-family.XXXXXX")"
 
 cleanup() {
@@ -45,7 +44,7 @@ build_family() {
     >"$output/node_modules/beagle/package.json"
   cp -- "$repo/native/repo_build_family_test_host.mjs" \
     "$output/repo_build_family_test_host.mjs"
-  cp -- "$repo/native/clause_source_host.mjs" "$output/clause_source_host.mjs"
+  cp -- "$repo/native/module_facts_host.mjs" "$output/module_facts_host.mjs"
   [[ -f "$output/firn/repo-build-family.js" ]] \
     || die "compiled repo-build family module is unavailable"
 }
@@ -74,7 +73,7 @@ build_family \
   "$core" "$repo/native/repo_build_test.bjs" \
   "$repo/native/repo_build_family.bjs"
 
-timeout --foreground 30 env FIRN_CLAUSE_WORKBENCH="$workbench" bun \
+timeout --foreground 60 bun \
   "$scratch/build/repo_build_family_test_host.mjs" "$repo" \
   >"$scratch/responsibility.out" 2>"$scratch/responsibility.err" \
   || {

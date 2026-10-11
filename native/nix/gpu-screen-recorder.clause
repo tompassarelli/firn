@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export gpu-screen-recorder-module()
-  module(path(myConfig.modules.gpu-screen-recorder.enable),
-    "GPU-accelerated screen recorder (X11 + Wayland; NVENC/VAAPI/V4L2)",
-    package(path(gpu-screen-recorder)))

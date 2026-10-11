@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export fwupd-module()
-  module(path(myConfig.modules.fwupd.enable), "fwupd firmware updater", package(path(fwupd)))

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export wowup-module()
-  module(path(myConfig.modules.wowup.enable), "WowUp-CF addon manager", package(path(wowup-cf)))

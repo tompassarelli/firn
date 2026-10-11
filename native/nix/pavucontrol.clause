@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export pavucontrol-module()
-  module(path(myConfig.modules.pavucontrol.enable), "PulseAudio volume control", package(path(pavucontrol)))

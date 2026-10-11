@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export upower-module()
-  configuration-module(path(myConfig.modules.upower.enable),
-    "UPower power management",
-    {services: {upower: {enable: true}}})

@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export input-module()
-  configuration-module(path(myConfig.modules.input.enable),
-    "touchpad support (libinput)",
-    {services: {libinput: {enable: true}}})

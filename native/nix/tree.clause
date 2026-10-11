@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export tree-module()
-  module(path(myConfig.modules.tree.enable), "Enable tree file tree display utility", package(path(tree)))

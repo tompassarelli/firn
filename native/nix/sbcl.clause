@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export sbcl-module()
-  module(path(myConfig.modules.sbcl.enable), "Steel Bank Common Lisp compiler", package(path(sbcl)))

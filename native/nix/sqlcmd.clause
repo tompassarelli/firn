@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export sqlcmd-module()
-  module(path(myConfig.modules.sqlcmd.enable), "sqlcmd for Microsoft SQL Server", package(path(sqlcmd)))

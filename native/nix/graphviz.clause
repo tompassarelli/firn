@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export graphviz-module()
-  module(path(myConfig.modules.graphviz.enable), "Graphviz graph visualization", package(path(graphviz)))

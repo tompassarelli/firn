@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export shellcheck-module()
-  module(path(myConfig.modules.shellcheck.enable), "ShellCheck shell script linter", package(path(shellcheck)))

@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export piper-module()
-  configuration-module(path(myConfig.modules.piper.enable),
-    "gaming mouse configuration (Piper + ratbagd)",
-    {services: {ratbagd: {enable: true}},
-     environment: {systemPackages: [package(path(piper))]}})

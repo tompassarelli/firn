@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export pipewire-module()
-  configuration-module(path(myConfig.modules.pipewire.enable),
-    "PipeWire audio configuration",
-    {services: {pipewire: {enable: true, pulse: {enable: true},
-     alsa: {enable: true, support32Bit: true}}}})

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export obsidian-module()
-  module(path(myConfig.modules.obsidian.enable), "Obsidian note-taking", package(path(obsidian)))

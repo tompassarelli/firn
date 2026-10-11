@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export kooha-module()
-  module(path(myConfig.modules.kooha.enable), "Kooha screen recorder", package(path(kooha)))

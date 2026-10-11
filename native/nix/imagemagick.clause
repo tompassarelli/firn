@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export imagemagick-module()
-  module(path(myConfig.modules.imagemagick.enable), "ImageMagick image processing", package(path(imagemagick)))

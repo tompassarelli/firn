@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export wine-module()
-  configuration-module(path(myConfig.modules.wine.enable),
-    "Wine (unstable, 32+64-bit)",
-    {environment: {systemPackages: [package(path(wineWowPackages.unstable)),
-       package(path(unstable.winetricks))]}})

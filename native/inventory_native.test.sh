@@ -95,17 +95,31 @@ EOF
 cat >"$fixture/modules/beta/default.bnix" <<'EOF'
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...] {:tags [terminal]})
+(nix/module [config lib pkgs ...] {:config {}})
 EOF
 cat >"$fixture/modules/gamma/default.bnix" <<'EOF'
 #lang beagle/nix
 (ns default)
-(nix/module [config lib pkgs ...] {:tags [desktop]})
+(nix/module [config lib pkgs ...] {:config {}})
 EOF
 cat >"$fixture/modules/orphan/default.bnix" <<'EOF'
 #lang beagle/nix
 (ns default)
 (nix/module [config lib pkgs ...] {:config {}})
+EOF
+
+mkdir -p "$fixture/config"
+cat >"$fixture/config/tags.gal" <<'EOF'
+use firn/tags
+
+desktop is a Tag
+terminal is a Tag
+alpha is a Module
+beta is a Module
+gamma is a Module
+orphan is a Module
+beta is tagged terminal
+gamma is tagged desktop
 EOF
 
 cat >"$fixture/hosts/alpha-host/enabled-tags.bnix" <<'EOF'

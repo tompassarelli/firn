@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export ladybird-module()
-  module(path(myConfig.modules.ladybird.enable), "Enable Ladybird browser (bleeding edge from git)", package(path(unstable.ladybird)))

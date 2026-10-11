@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export direnv-module()
-  configuration-module(path(myConfig.modules.direnv.enable), "direnv for automatic dev shell activation",
-    {programs: {direnv: {enable: true, nix-direnv: {enable: true}}},
-     home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-       {programs: {direnv: {enable: true, nix-direnv: {enable: true}}}})}})

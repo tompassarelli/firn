@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export kitty-module()
-  configuration-module(path(myConfig.modules.kitty.enable), "Kitty terminal configuration",
-    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {programs: {kitty: {enable: true, settings: {tab_bar_edge: "top", tab_bar_style: "powerline", window_padding_width: "2 0 0 3"}}}})}})

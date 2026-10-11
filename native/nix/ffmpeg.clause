@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export ffmpeg-module()
-  module(path(myConfig.modules.ffmpeg.enable), "FFmpeg video processing", package(path(ffmpeg)))

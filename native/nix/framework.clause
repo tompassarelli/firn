@@ -1,8 +1,0 @@
-import "nixpkgs.clause"
-
-export framework-module()
-  configuration-module(path(myConfig.modules.framework.enable),
-    "Framework Computer specific tools",
-    {services: {logind: {settings: {Login: {HandleLidSwitch: "ignore",
-     HandleLidSwitchExternalPower: "ignore"}}}},
-     boot: {extraModprobeConfig: "options mt7925_common disable_clc=1\noptions mt7925e disable_aspm=1\n\n"}})

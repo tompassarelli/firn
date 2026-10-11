@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export remmina-module()
-  configuration-module(path(myConfig.modules.remmina.enable), "Remmina remote desktop client",
-    {environment: {systemPackages: [package(path(remmina))]},
-     home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-       {xdg: {configFile: {"autostart/remmina-applet.desktop": {text: "[Desktop Entry]\nHidden=true\n\n"}}}})}})

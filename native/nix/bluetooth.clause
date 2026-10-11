@@ -1,9 +1,0 @@
-import "nixpkgs.clause"
-
-export bluetooth-module()
-  configuration-module(path(myConfig.modules.bluetooth.enable),
-    "Enable Bluetooth configuration",
-    {hardware: {bluetooth: {enable: true, powerOnBoot: true,
-       settings: {General: {Enable: "Source,Sink,Media,Socket", Experimental: true}}}},
-     services: {blueman: {enable: true}},
-     environment: {systemPackages: [package(path(bluez))]}})

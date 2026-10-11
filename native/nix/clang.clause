@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export clang-module()
-  module(path(myConfig.modules.clang.enable), "Clang C/C++ compiler", package(path(clang)))

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export clippy-module()
-  module(path(myConfig.modules.clippy.enable), "Rust linter", package(path(unstable.clippy)))

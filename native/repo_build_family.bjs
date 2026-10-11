@@ -69,16 +69,6 @@
                         (recur (+ index 1)
                           (merge-inventory inventory child-inventory))])]
                     [(and (or (= kind 1) (= kind 3))
-                          (build/clause-metadata-path? entry-relative))
-                     (let [name String (subs entry-relative 8 (- (count entry-relative) 12))]
-                       (match (tag-family/module-source bridge root name)
-                         [(ModuleSelectionRejected message) (->InventoryRejected message)]
-                         [(ModuleSourceSelected source metadata output)
-                          (recur (+ index 1)
-                            (merge-inventory inventory
-                              (build/->SourceInventory
-                                [(build/->SourceState source output)] [])))]))]
-                    [(and (or (= kind 1) (= kind 3))
                           (build/source-path? entry-relative))
                      (recur (+ index 1)
                        (merge-inventory inventory

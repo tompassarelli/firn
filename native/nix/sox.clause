@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export sox-module()
-  module(path(myConfig.modules.sox.enable), "Enable SoX audio recording for Claude Code voice mode", package(path(sox)))

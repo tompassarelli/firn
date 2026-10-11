@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export appimage-module()
-  configuration-module(path(myConfig.modules.appimage.enable),
-    "AppImage support via appimage-run + binfmt",
-    {programs: {appimage: {enable: true, binfmt: true}}})

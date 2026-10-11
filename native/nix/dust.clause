@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export dust-module()
-  module(path(myConfig.modules.dust.enable), "Enable dust disk usage analyzer", package(path(dust)))

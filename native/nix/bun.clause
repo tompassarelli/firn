@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export bun-module()
-  module(path(myConfig.modules.bun.enable), "Bun JavaScript runtime and package manager", package(path(bun)))

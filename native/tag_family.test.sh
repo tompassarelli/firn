@@ -132,42 +132,26 @@ make_fixture() {
 (ns flake)
 {}
 EOF
-  cat >"$root/modules/alpha/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:tags [desktop terminal]})
-EOF
-  cat >"$root/modules/beta/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:tags [desktop]})
-EOF
-  cat >"$root/modules/delta/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:tags-opt-in [desktop]})
-EOF
-  cat >"$root/modules/epsilon/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:tags [creative]
-   :tags-opt-in [desktop]})
-EOF
-  cat >"$root/modules/gamma/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:tags [terminal]})
-EOF
-  cat >"$root/modules/plain/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:config {}})
+  mkdir -p "$root/config"
+  cat >"$root/config/tags.gal" <<'EOF'
+use firn/tags
+
+creative is a Tag
+desktop is a Tag
+terminal is a Tag
+alpha is a Module
+beta is a Module
+delta is a Module
+epsilon is a Module
+gamma is a Module
+plain is a Module
+alpha is tagged desktop
+alpha is tagged terminal
+beta is tagged desktop
+delta can opt into desktop
+epsilon is tagged creative
+epsilon can opt into desktop
+gamma is tagged terminal
 EOF
   cat >"$root/hosts/$host/enabled-tags.bnix" <<'EOF'
 #lang beagle/nix

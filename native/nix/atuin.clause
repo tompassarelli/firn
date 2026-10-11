@@ -1,7 +1,0 @@
-import "nixpkgs.clause"
-
-export atuin-module()
-  configuration-module(path(myConfig.modules.atuin.enable), "atuin shell history sync",
-    {home-manager: {users: dictionary(configured-text(path(myConfig.modules.users.username)),
-      {programs: {atuin: {enable: true, enableFishIntegration: true,
-        settings: {auto_sync: true, sync_frequency: "5m", search_mode: "fuzzy"}}}})}})

@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export curl-module()
-  module(path(myConfig.modules.curl.enable), "curl HTTP client", package(path(curl)))

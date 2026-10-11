@@ -1,6 +1,0 @@
-import "nixpkgs.clause"
-
-export steam-module()
-  configuration-module(path(myConfig.modules.steam.enable),
-    "Steam gaming platform",
-    {programs: {steam: {enable: true, package: package(path(unstable.steam))}}})

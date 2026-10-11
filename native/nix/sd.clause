@@ -1,4 +1,0 @@
-import "nixpkgs.clause"
-
-export sd-module()
-  module(path(myConfig.modules.sd.enable), "sd find-and-replace tool", package(path(sd)))
