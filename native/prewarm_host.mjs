@@ -60,7 +60,7 @@ function kind(path) {
 function looksLikeFirn(path) {
   return kind(path) === 2
     && kind(`${path}/config/galileo-revision`) === 1
-    && kind(`${path}/flake.bnix`) === 1;
+    && kind(`${path}/flake.gal`) === 1;
 }
 
 function resolveRepository() {

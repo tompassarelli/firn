@@ -135,10 +135,10 @@ runtime="$scratch/runtime"
 host="$(hostname)"
 mkdir -p "$main/config" "$main/hosts/$host" "$container/worktrees" "$runtime"
 printf 'fixture\n' >"$main/config/galileo-revision"
-printf '#lang beagle/nix\n(ns flake)\n' >"$main/flake.bnix"
+printf 'module flake\n' >"$main/flake.gal"
 printf 'fixture\n' >"$main/hosts/$host/marker"
 git init -q -b main "$main"
-git -C "$main" add -- config/galileo-revision flake.bnix "hosts/$host/marker"
+git -C "$main" add -- config/galileo-revision flake.gal "hosts/$host/marker"
 git -C "$main" -c user.name=prewarm-test \
   -c user.email=prewarm-test@example.invalid commit -qm base
 git -C "$main" worktree add -q -b slug "$lane"
@@ -155,6 +155,23 @@ actual_key="$(timeout --foreground 30 "$stage/bin/firn-prewarm" --print-warm-key
 [[ "$actual_key" == "$expected_key" ]]
 [[ "$(wc -l <"$FIRN_GALILEO_COUNT")" -eq 1 ]]
 printf 'ok: --print-warm-key spawns 1 query\n'
+
+unmigrated="$scratch/unmigrated"
+mkdir -p "$unmigrated/config" "$unmigrated/hosts/$host"
+cp "$main/config/galileo-revision" "$unmigrated/config/galileo-revision"
+cp "$main/hosts/$host/marker" "$unmigrated/hosts/$host/marker"
+printf '#lang beagle/nix\n(ns flake)\n' >"$unmigrated/flake.bnix"
+git init -q -b main "$unmigrated"
+git -C "$unmigrated" add -- config/galileo-revision flake.bnix "hosts/$host/marker"
+git -C "$unmigrated" -c user.name=prewarm-test \
+  -c user.email=prewarm-test@example.invalid commit -qm base
+set +e
+FIRN_REPO="$unmigrated" timeout --foreground 30 "$stage/bin/firn-prewarm" \
+  --print-warm-key >"$scratch/unmigrated.out"
+status=$?
+set -e
+[[ "$status" -eq 1 && ! -s "$scratch/unmigrated.out" ]]
+printf 'ok: a checkout missing flake.gal is rejected\n'
 
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-detached "$stage/bin/firn-prewarm" >"$scratch/detached.plan"

@@ -37,14 +37,14 @@
      (policy/->RawHookEvent
        "Edit"
        nil
-       (str "/code/nixos-config/file" (if (= seed 0) "" seed) ".bnix")
+       (str "/code/nixos-config/file" (if (= seed 0) "" seed) ".gal")
        (str "session" (if (= seed 0) "" seed))
        false
        false
        true)]
     (and
       (match (policy/decide-hook event)
-        [(HookInject context) true]
+        [(HookInject context) (= context policy/firn-digest)]
         [(HookPass token) false]
         [(HookRefuse reason) false])
       (= (policy/hook-exit-code (policy/decide-hook event)) 0))))
@@ -75,7 +75,7 @@
      [
        (policy/->PinEvidence
          (str "fixed-output" (if (= seed 0) "" seed))
-         "module.bnix:4"
+         "module.gal:4"
          "https://example.test/source"
          "https://example.test/source"
          true

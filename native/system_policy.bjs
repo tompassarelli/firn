@@ -72,8 +72,10 @@
 (js/export
   (def firn-digest String
   (str
-    "You are editing the Firn system configuration. Edit .bnix sources, never "
-    ".nix; run firn repo build and firn repo validate after .bnix changes. "
+    "You are editing the Firn system configuration. Edit .gal sources, never "
+    ".nix; run firn repo build and firn repo validate after .gal changes. "
+    "Check uncertain Galileo syntax and schema facts with the runtime's "
+    "galileo help, galileo refs and galileo schema explain. "
     "Keep Tom-maintained and high-churn project source and build outputs out "
     "of the boot/system closure. A derivation, package, worktree, or filesystem "
     "pin does not grant closure admission; use a dev shell, user runtime, or "

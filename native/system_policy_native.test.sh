@@ -126,6 +126,8 @@ inject_payload="$(printf \
   "$scratch/repo-through-symlink")"
 run_case inject "$inject_payload"
 jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and (.hookSpecificOutput.additionalContext | type) == "string"' "$scratch/inject.out" >/dev/null
+jq -e '.hookSpecificOutput.additionalContext | startswith("You are editing the Firn system configuration. Edit .gal sources, never .nix; run firn repo build and firn repo validate after .gal changes. Check uncertain Galileo syntax and schema facts with the runtime'"'"'s galileo help, galileo refs and galileo schema explain. ")' "$scratch/inject.out" >/dev/null \
+  || die "inject context does not carry the .gal instruction text"
 [[ -f "$scratch/runtime/firn-system-policy.inject_session" ]] \
   || die "session marker was not created"
 run_case inject-second "$inject_payload"
