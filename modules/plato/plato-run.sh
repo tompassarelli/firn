@@ -7,11 +7,17 @@ fi
 dir="$HOME/code"
 mkdir -p "$dir"
 cd "$dir"
+name=Plato
+args=(--dangerously-skip-permissions)
+if [[ -s "$state/standby" ]]; then
+  name="Plato standby"
+  args+=(--append-system-prompt "$(cat "$state/standby")")
+fi
 idfile="$state/session-id"
 id=$(cat "$idfile" 2>/dev/null || true)
 if [[ -n "$id" && -f "$HOME/.claude/projects/${dir//\//-}/$id.jsonl" ]]; then
-  exec claude --resume "$id" --remote-control Plato --dangerously-skip-permissions
+  exec claude --resume "$id" --remote-control "$name" "${args[@]}"
 fi
 id=$(cat /proc/sys/kernel/random/uuid)
 printf '%s\n' "$id" >"$idfile"
-exec claude --session-id "$id" --remote-control Plato --dangerously-skip-permissions
+exec claude --session-id "$id" --remote-control "$name" "${args[@]}"
