@@ -41,7 +41,7 @@ flake-inputs(): Command
 flake-input-resolve(): Command
   {node: "flake-input", edge: "resolve",
    leaf: {usage: "emit", arguments: ["emit"]},
-   detail-gap: "  ", summary: "collect :flake-inputs from active modules; emit splices into flake.bnix",
+   detail-gap: "  ", summary: "read module flake inputs through galileo query; emit builds flake.gal into flake.nix",
    common-gap: "", common-summary: "",
    executable: "firn-flake-input"}
 

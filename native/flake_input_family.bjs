@@ -3,152 +3,31 @@
   (:require [firn.flake-input-driver :as driver]))
 
 (def max-source-bytes Int 16777216)
-(def max-directory-entries Int 16384)
 
-(defunion DirectoryNamesResult
-  (DirectoryNamesLoaded [names (Vec String)])
-  (DirectoryNamesRejected [message String]))
+(defn read-flake [bridge Any root String] String
+  (let [result Any (.readText bridge (str root "/flake.nix") max-source-bytes)]
+    (if (= (.status bridge result) 0) (.value bridge result) "")))
 
-(defunion ModuleLoadResult
-  (ModuleLoaded [module driver/ModuleSource])
-  (ModuleLoadRejected [message String]))
-
-(defunion ModulesLoadResult
-  (ModulesLoaded [modules (Vec driver/ModuleSource)])
-  (ModulesLoadRejected [message String]))
-
-(defunion FlakeLoadResult
-  (FlakeLoaded [text String])
-  (FlakeLoadRejected [message String]))
-
-(defn path
-  [root String
-   relative String] String
-  (str root "/" relative))
-
-(defn errno-message
-  [operation String
-   relative String
-   errno Int] String
-  (str "firn flake-input resolve: " operation " '" relative
-    "': errno " errno "\n"))
-
-(defn directory-names [bridge Any root String] DirectoryNamesResult
-  (let [relative String "modules"
-        absolute String (path root relative)
-        result Any (.listDirectory bridge absolute max-directory-entries)
-        errno Int (.status bridge result)]
-    (if (not (= errno 0))
-       (if (or (= errno 2) (= errno 20))
-         (->DirectoryNamesLoaded [])
-         (->DirectoryNamesRejected
-           (errno-message "cannot list" relative errno)))
-      (let [entries (Vec String) (.value bridge result)]
-        (loop [index Int 0
-               names (Vec String) []]
-          (if (>= index (count entries))
-            (->DirectoryNamesLoaded (sort names))
-            (let [name String (nth entries index)
-                  candidate String (str absolute "/" name)
-                  kind-result Any (.pathKind bridge candidate)
-                  kind-errno Int (.status bridge kind-result)]
-              (if (= kind-errno 0)
-                (let [kind Int (.value bridge kind-result)]
-                  (recur (+ index 1)
-                    (if (= kind 2) (conj names name) names)))
-                (if (= kind-errno 2)
-                  (recur (+ index 1) names)
-                  (->DirectoryNamesRejected
-                    (errno-message "cannot inspect"
-                      (str relative "/" name) kind-errno)))))))))))
-
-(defn load-module
-  [bridge Any
-   root String
-   name String] ModuleLoadResult
-  (let [relative String (str "modules/" name "/default.bnix")
-        absolute String (path root relative)
-        kind-result Any (.pathKind bridge absolute)
-        kind-errno Int (.status bridge kind-result)]
-    (if (not (= kind-errno 0))
-       (if (= kind-errno 2)
-         (->ModuleLoaded (driver/->ModuleSource name ""))
-         (->ModuleLoadRejected
-           (errno-message "cannot inspect" relative kind-errno)))
-      (let [kind Int (.value bridge kind-result)]
-       (if (not (or (= kind 1) (= kind 3)))
-         (->ModuleLoaded (driver/->ModuleSource name ""))
-         (let [read-result Any (.readText bridge absolute max-source-bytes)
-               read-errno Int (.status bridge read-result)]
-           (if (not (= read-errno 0))
-            (->ModuleLoadRejected
-              (errno-message "cannot read" relative read-errno))
-            (let [source String (.value bridge read-result)]
-              (->ModuleLoaded (driver/->ModuleSource name source))))))))))
-
-(defn load-modules-from
-  [bridge Any
-   root String
-   names (Vec String)
-   index Int
-   modules (Vec driver/ModuleSource)] ModulesLoadResult
-  (if (>= index (count names))
-    (->ModulesLoaded modules)
-    (match (load-module bridge root (nth names index))
-      [(ModuleLoadRejected message) (->ModulesLoadRejected message)]
-      [(ModuleLoaded module)
-       (load-modules-from bridge root names (+ index 1) (conj modules module))])))
-
-(defn load-modules [bridge Any root String] ModulesLoadResult
-  (match (directory-names bridge root)
-    [(DirectoryNamesRejected message) (->ModulesLoadRejected message)]
-    [(DirectoryNamesLoaded names) (load-modules-from bridge root names 0 [])]))
-
-(defn load-flake [bridge Any root String] FlakeLoadResult
-  (let [relative String "flake.bnix"
-        absolute String (path root relative)
-        result Any (.readText bridge absolute max-source-bytes)
-        errno Int (.status bridge result)]
-    (if (not (= errno 0))
-       (->FlakeLoadRejected
-         (errno-message "cannot read" relative errno))
-      (let [text String (.value bridge result)] (->FlakeLoaded text)))))
-
-(defn emit-io-error [bridge Any message String] Int
-  (do (.err bridge message) 1))
-
-(defn execute-effects
-  [bridge Any
-   root String
-   outcome driver/FlakeInputOutcome
-   index Int] Int
-  (if (>= index (count (driver/flakeinputoutcome-effects outcome)))
-    (driver/flakeinputoutcome-status outcome)
-    (match (nth (driver/flakeinputoutcome-effects outcome) index)
-      [(StdoutText text)
-       (do (.out bridge text) (execute-effects bridge root outcome (+ index 1)))]
-      [(StderrText text)
-       (do (.err bridge text)
-           (execute-effects bridge root outcome (+ index 1)))]
-      [(WriteFlake relative text)
-       (let [errno Int (.writeTextAtomic bridge (path root relative) text)]
-         (if (= errno 0)
-           (execute-effects bridge root outcome (+ index 1))
-           (emit-io-error bridge
-             (errno-message "cannot write" relative errno))))])))
+(defn emit-error [bridge Any message String] Int
+  (do (.err bridge (str "firn flake-input resolve: " message "\n")) 1))
 
 (js/export
  (defn run-root [bridge Any root String] Int
-  (match (load-modules bridge root)
-    [(ModulesLoadRejected message) (emit-io-error bridge message)]
-    [(ModulesLoaded modules)
-     (match (load-flake bridge root)
-       [(FlakeLoadRejected message) (emit-io-error bridge message)]
-       [(FlakeLoaded text)
-        (execute-effects bridge root
-          (driver/run-flake-input-emit
-            (driver/->FlakeInputRepositoryData modules text))
-          0)])])))
+  (let [before String (read-flake bridge root)
+        build-status Int (.runFlakeBuild bridge root)]
+    (if (not (= build-status 0))
+      (emit-error bridge (str "galileo build of flake.gal exited " build-status))
+      (let [facts Any (.readFlakeInputs bridge root)]
+        (if (not (= (.status bridge facts) 0))
+          (emit-error bridge
+            (str "cannot read flake inputs through galileo query: "
+              (.moduleFactsMessage bridge facts)))
+          (do
+            (.out bridge
+              (driver/summary-text
+                (driver/inputs-from-rows (.value bridge facts))
+                (not (= before (read-flake bridge root)))))
+            0)))))))
 
 (defn repository-root [bridge Any] (U String Nil)
   (let [explicit (U String Nil) (.env bridge "FIRN_REPO")]

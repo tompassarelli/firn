@@ -58,50 +58,59 @@ build_family() {
     "$output/flake_input_family_test_host.mjs"
 }
 
-datum="$beagle/native-core/src/beagle/datum_reader.bjs"
 core="$repo/native/flake_input.bjs"
 driver="$repo/native/flake_input_driver.bjs"
 
-build_family "$datum" "$core" "$driver" \
-  "$repo/native/flake_input_test.bjs" \
+command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
+  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
+
+build_family "$core" "$driver" \
   "$repo/native/flake_input_driver_test.bjs" \
   "$repo/native/flake_input_family.bjs"
 
 timeout --foreground 30 bun "$scratch/build/flake_input_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/driver.err" \
-  || die "pure and driver test cases did not all pass"
+  || die "driver test cases did not all pass"
+
+module() {
+  local root="$1" name="$2"
+  shift 2
+  mkdir -p "$root/modules/$name"
+  {
+    printf 'use firn/tags\n\n%s is a Module\n' "$name"
+    for url in "$@"; do
+      printf '%s needs flake input %s\n' "$name" "$url"
+    done
+  } >"$root/modules/$name/default.gal"
+}
 
 make_fixture() {
   local root="$1"
-  mkdir -p \
-    "$root/modules/alpha" \
-    "$root/modules/beta" \
-    "$root/modules/plain"
-  cat >"$root/modules/alpha/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  (let [name "alpha"]
-    {:flake-inputs
-      {:zeta {:url "github:zeta/project"
-              :inputs.nixpkgs.follows "nixpkgs"}
-       :alpha {:url "github:alpha/project"}}}))
+  mkdir -p "$root/config"
+  printf 'use firn/tags\n\ncli-tools is a Tag\n' >"$root/config/tags.gal"
+  module "$root" alpha '"zeta" from "github:zeta/project"' \
+    '"alpha" from "github:alpha/project"'
+  module "$root" beta '"zeta" from "github:zeta/project"'
+  module "$root" plain
+  cat >"$root/flake.gal" <<'EOF'
+use firn/tags
+
+given flake input {name: Text} follows {input: Text} from {target: Text}
+
+flake input "zeta" follows "nixpkgs" from "nixpkgs"
+
+nix file
+  value
+    inputs
+      nixpkgs
+        url: "github:nixos/nixpkgs/nixos-26.05"
+      for ?name, ?url where ?name flake input url ?url
+        {?name}
+          for ?input, ?target where flake input ?name follows ?input from ?target
+            inputs.{?input}.follows: ?target
+          url: ?url
+    outputs: ({self, nixpkgs, for ?n where ?n flake input url ?_: `{?n}`, ...}) => {lib.mkSystem: nixpkgs.lib.nixosSystem({specialArgs: {inputs: {for ?n where ?n flake input url ?_: {?n}: `{?n}`}}})}
 EOF
-  cat >"$root/modules/beta/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:flake-inputs
-    {:zeta {:url "github:zeta/project"
-            :ignored "later declaration is coalesced"}}})
-EOF
-  cat >"$root/modules/plain/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...]
-  {:config {}})
-EOF
-  cp "$repo/docs/fixtures/flake-input-before.bnix" "$root/flake.bnix"
 }
 
 native_root="$scratch/native-repo"
@@ -111,30 +120,43 @@ run_once() {
   local result="$1"
   shift
   set +e
-  timeout --foreground 30 "$@" >"$result.out" 2>"$result.err"
+  timeout --foreground 60 "$@" >"$result.out" 2>"$result.err"
   local status=$?
   set -e
   printf '%s\n' "$status" >"$result.status"
 }
 
-run_once "$scratch/native" \
-  env -u FIRN_FLAKE_INPUTS_EMIT -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
-    FIRN_REPO="$native_root" \
-    env FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
-      bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
+emit() {
+  run_once "$1" env FIRN_REPO="$2" \
+    FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+    bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
+}
 
+expected="$repo/docs/fixtures/flake-input-expected.nix"
+
+emit "$scratch/native" "$native_root"
 [[ "$(<"$scratch/native.status")" == "0" ]] \
   || die "native command failed with status $(<"$scratch/native.status")"
+diff -u "$expected" "$native_root/flake.nix"
+grep -qx '  zeta (from alpha)' "$scratch/native.out" \
+  || die "summary does not name alpha as zeta's first module"
+grep -qx 'flake-inputs: updated flake.nix' "$scratch/native.out" \
+  || die "first run did not report the update"
 
-diff -u "$repo/docs/fixtures/flake-input-expected.bnix" "$native_root/flake.bnix"
-run_once "$scratch/native-second" \
-  env FIRN_REPO="$native_root" \
-    env FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
-      bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
-[[ "$(<"$scratch/native-second.status")" == "0" ]] \
-  || die "second native run failed"
-cmp -s "$repo/docs/fixtures/flake-input-expected.bnix" "$native_root/flake.bnix" \
-  || die "idempotent run changed flake.bnix"
+emit "$scratch/native-second" "$native_root"
+[[ "$(<"$scratch/native-second.status")" == "0" ]] || die "second native run failed"
+cmp -s "$expected" "$native_root/flake.nix" || die "idempotent run changed flake.nix"
+grep -qx 'flake-inputs: flake.nix is up to date' "$scratch/native-second.out" \
+  || die "second run did not report up to date"
+
+module "$native_root" beta '"zeta" from "github:other/project"'
+emit "$scratch/conflict" "$native_root"
+[[ "$(<"$scratch/conflict.status")" == "1" ]] || die "conflicting urls did not fail"
+[[ ! -s "$scratch/conflict.out" ]] || die "conflict wrote a summary"
+grep -q 'two values for "zeta"' "$scratch/conflict.err" \
+  || die "conflict diagnostic does not name zeta"
+cmp -s "$expected" "$native_root/flake.nix" || die "conflict changed flake.nix"
+
 run_once "$scratch/invalid" env \
   FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
   bun "$repo/native/flake_input_host.mjs" flake-input resolve show
@@ -142,4 +164,4 @@ run_once "$scratch/invalid" env \
   || die "invalid grammar did not return 64"
 [[ ! -s "$scratch/invalid.out" ]] || die "invalid grammar wrote stdout"
 
-printf 'ok: flake-input emit matches recorded output, is idempotent and refuses conflicts or invalid input\n'
+printf 'ok: flake-input emit builds flake.gal to the recorded flake.nix, is idempotent and refuses conflicts or invalid input\n'
