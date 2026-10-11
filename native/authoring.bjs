@@ -433,16 +433,22 @@
 
 (defn host-configuration-body [name String] String
   (str
+    "use firn/tags\n"
     "use hosts/" name "/enabled-tags\n\n"
+    "users is a Module\n"
+    "boot is a Module\n"
+    "networking is a Module\n"
+    name " turns on users\n"
+    name " turns on boot\n"
+    name " turns on networking\n\n"
     "nix module\n"
     "  arguments: config, lib, pkgs, ...\n"
     "  imports: [./_generated-enables.nix]\n"
     "  config\n"
     "    myConfig.modules.system.stateVersion: \"25.11\"\n"
     "    myConfig.modules.users.username: \"you\"\n"
-    "    myConfig.modules.users.enable: true\n"
-    "    myConfig.modules.boot.enable: true\n"
-    "    myConfig.modules.networking.enable: true\n"))
+    "    for ?m where " name " turns on ?m\n"
+    "      myConfig.modules.{?m}.enable: true\n"))
 
 (defn host-tags-body [name String] String
   (str

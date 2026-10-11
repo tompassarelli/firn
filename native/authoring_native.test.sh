@@ -298,6 +298,15 @@ for enabled in true false; do
   check_nix modules/sample-submodule/default.nix "$enabled" "$submodule_config"
   check_nix modules/sample-home/default.nix "$enabled" "$home_config"
 done
+(
+  cd "$fixture"
+  galileo query modules hosts/sample-host 'all ?m where ?m is enabled on sample-host' --json
+) >"$scratch/host-enabled.json" || die "host enabled query failed"
+for module_name in boot networking users; do
+  rg -q "\"$module_name\"" "$scratch/host-enabled.json" || die "sample-host does not enable $module_name"
+done
+[[ "$(rg -c 'modules\.(boot|networking|users)\.enable = true;' "$fixture/hosts/sample-host/configuration.nix")" == 3 ]] \
+  || die "host configuration does not set its three direct enables"
 check_nix hosts/sample-host/configuration.nix true \
   '{myConfig.modules = {system.stateVersion = "25.11"; users.username = "you"; users.enable = true; boot.enable = true; networking.enable = true;};}'
 [[ "$(nix-instantiate --eval --strict --expr "let m = import $fixture/hosts/sample-host/configuration.nix {config = {}; lib = {}; pkgs = {};}; in map toString m.imports")" == \
