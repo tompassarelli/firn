@@ -82,7 +82,7 @@ whiterabbit disables zoom
 
 nix module
   arguments: config, lib, pkgs, ...
-  for ?module where ?module is enabled on whiterabbit
+  for ?module where ?module is tag-enabled on whiterabbit
     myConfig.modules.{?module}.enable: lib.mkDefault(true)
     for ?path, ?value where whiterabbit gets ?path set to ?value by ?module
       {?path}: lib.mkDefault(?value)
