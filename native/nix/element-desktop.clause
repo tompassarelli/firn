@@ -1,4 +1,12 @@
 import "nixpkgs.clause"
 
+foreign override-element-desktop<Specification: Record>(?specification: Specification): Package
+  construction: "nix"
+  call: "element-desktop.override"
+  from: "pkgs"
+  failure: throw
+
+// Electron cannot detect gnome-keyring under niri; without this flag Element stops at "System unsupported".
 export element-desktop-module()
-  module(path(myConfig.modules.element-desktop.enable), "Element Matrix desktop client", package(path(element-desktop)))
+  module(path(myConfig.modules.element-desktop.enable), "Element Matrix desktop client",
+    override-element-desktop({commandLineArgs: "--password-store=gnome-libsecret"}))
