@@ -59,6 +59,7 @@
       "kanata-*.service"
       "mini-serve.service"
       "NetworkManager.service"
+      "NetworkManager-dispatcher.service"
       "wpa_supplicant.service"
       "nix-daemon.service"
       "nscd.service"
