@@ -1065,16 +1065,14 @@
   [root String
    tracked (Vec String)] (Vec ProcessBoundary)
   (let [targets (Vec String) (select-lint-targets tracked)]
-    (loop [index Int 0
-           processes (Vec ProcessBoundary) []]
-      (if (>= index (count targets))
-        processes
-        (let [target String (nth targets index)]
+    (if (= (count targets) 0)
+      []
+      (loop [index Int 0
+             argv (Vec String) ["nix-instantiate" "--parse"]]
+        (if (>= index (count targets))
+          [(->InheritProcess "lint" argv)]
           (recur (+ index 1)
-            (conj processes
-              (->InheritProcess
-                (str "lint " target)
-                ["nix-instantiate" "--parse" (root-path root target)]))))))))
+            (conj argv (root-path root (nth targets index)))))))))
 
 (defn upgrade-processes
   [root String
