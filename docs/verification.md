@@ -78,6 +78,6 @@ Authoring checks real Git staging and compiled Galileo/Nix behavior.
 
 `modules/nexus-checks/default.test.sh` checks recorded OpenSSH/loginctl output
 once, then generates numeric health inputs, warning sets and alert decisions.
-The boot-coupling measurement compiles the real module metadata bodies in one
-Clause bundle so the local check covers the whole catalog without starting a
-compiler for each module.
+The boot-coupling measurement runs one `galileo check` over the real modules,
+so the local check covers the whole catalog without starting a compiler for
+each module.
