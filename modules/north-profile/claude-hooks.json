@@ -103,7 +103,7 @@
         ]
       },
       {
-        "matcher": "Bash|Read|SendMessage",
+        "matcher": "Bash|Read|Grep|Glob|SendMessage",
         "hooks": [
           {
             "type": "command",
