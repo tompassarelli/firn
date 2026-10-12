@@ -86,7 +86,7 @@ export function readHostFacts(root) {
 }
 
 export function buildGenerated(root) {
-  const run = Bun.spawnSync([galileo(), 'build'], {
+  const run = Bun.spawnSync([galileo(), 'build', '--layout', 'idiomatic'], {
     cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 120000,
   });
   return run.exitCode ?? 1;
@@ -108,7 +108,7 @@ export function readFlakeInputs(root) {
 }
 
 export function runFlakeBuild(root) {
-  const run = Bun.spawnSync([galileo(), 'build', ...flakeProgram], {
+  const run = Bun.spawnSync([galileo(), 'build', '--layout', 'idiomatic', ...flakeProgram], {
     cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 300000,
   });
   return run.exitCode ?? 1;

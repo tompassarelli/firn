@@ -1,6 +1,47 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((username: ((stateDir: ((authorizedKeys: ((checks: ((heartbeat: ((timer: {
+let
+  username = config.myConfig.modules.users.username;
+  stateDir = "/var/lib/nexus-checks";
+  authorizedKeys = pkgs.writeText "nexus-authorized-keys" (lib.concatStringsSep "\n" config.myConfig.modules.users.authorizedKeys);
+  checks = pkgs.writeShellApplication {
+    name = "nexus-checks";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.gawk
+      pkgs.systemd
+      pkgs.openssh
+      pkgs.lynis
+      "/run/current-system/sw"
+    ];
+    runtimeEnv = {
+      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone";
+      AUTHORIZED_KEYS = authorizedKeys;
+      USER_NAME = username;
+      BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";
+    };
+    text = builtins.readFile ./nexus-checks.sh;
+  };
+  heartbeat = pkgs.writeShellApplication {
+    name = "nexus-heartbeat";
+    runtimeInputs = [ pkgs.coreutils pkgs.gnugrep "/run/current-system/sw" ];
+    runtimeEnv = {
+      CHECKS_STATE = stateDir;
+      HEARTBEAT_REPO = "tompassarelli/firn";
+    };
+    text = builtins.readFile ./nexus-heartbeat.sh;
+  };
+  timer = calendar: {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = calendar;
+      Persistent = true;
+      RandomizedDelaySec = "2m";
+    };
+  };
+in {
   options.myConfig.modules.nexus-checks.enable = lib.mkEnableOption "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat";
   config = lib.mkIf config.myConfig.modules.nexus-checks.enable {
     environment.systemPackages = [ checks ];
@@ -52,38 +93,4 @@
 
     '';
   };
-}) (calendar: {
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = calendar;
-      Persistent = true;
-      RandomizedDelaySec = "2m";
-    };
-  }))) (pkgs.writeShellApplication {
-    name = "nexus-heartbeat";
-    runtimeInputs = [ pkgs.coreutils pkgs.gnugrep "/run/current-system/sw" ];
-    runtimeEnv = {
-      CHECKS_STATE = stateDir;
-      HEARTBEAT_REPO = "tompassarelli/firn";
-    };
-    text = builtins.readFile ./nexus-heartbeat.sh;
-  }))) (pkgs.writeShellApplication {
-    name = "nexus-checks";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gnugrep
-      pkgs.gnused
-      pkgs.gawk
-      pkgs.systemd
-      pkgs.openssh
-      pkgs.lynis
-      "/run/current-system/sw"
-    ];
-    runtimeEnv = {
-      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone";
-      AUTHORIZED_KEYS = authorizedKeys;
-      USER_NAME = username;
-      BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";
-    };
-    text = builtins.readFile ./nexus-checks.sh;
-  }))) (pkgs.writeText "nexus-authorized-keys" (lib.concatStringsSep "\n" config.myConfig.modules.users.authorizedKeys)))) "/var/lib/nexus-checks")) config.myConfig.modules.users.username)
+}

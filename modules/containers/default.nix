@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
-((username: {
+let
+  username = config.myConfig.modules.users.username;
+in {
   options.myConfig.modules.containers.enable = lib.mkEnableOption "Podman containers with Distrobox";
   config = lib.mkIf config.myConfig.modules.containers.enable {
     virtualisation.podman = {
@@ -11,4 +13,4 @@
     users.users.${username}.extraGroups = [ "podman" ];
     environment.systemPackages = with pkgs; [ distrobox podman-compose ];
   };
-}) config.myConfig.modules.users.username)
+}

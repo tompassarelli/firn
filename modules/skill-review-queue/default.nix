@@ -1,6 +1,12 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((gh: ((notify: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  gh = if config.myConfig.modules.github-pat.enable then config.myConfig.modules.github-pat.gh else pkgs.gh;
+  notify = if config.myConfig.modules.nexus-alerts.enable then "nexus-notify@%n.service" else "update-notify@%n.service";
+  description = "Weekly skill review queue: open or update the north issue listing skill reviews older than 30 days";
+in {
   options.myConfig.modules.skill-review-queue.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.skill-review-queue.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -31,4 +37,4 @@
       };
     });
   };
-}) "Weekly skill review queue: open or update the north issue listing skill reviews older than 30 days")) (if config.myConfig.modules.nexus-alerts.enable then "nexus-notify@%n.service" else "update-notify@%n.service"))) (if config.myConfig.modules.github-pat.enable then config.myConfig.modules.github-pat.gh else pkgs.gh))) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

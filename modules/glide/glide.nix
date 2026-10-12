@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
-((cfg: {
+let
+  cfg = config.myConfig.modules.glide;
+in {
   config = lib.mkIf cfg.enable {
     systemd.services.glide = {
       description = "Glide touchpad motion detection daemon";
@@ -27,4 +29,4 @@
       };
     };
   };
-}) config.myConfig.modules.glide)
+}

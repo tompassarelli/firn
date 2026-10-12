@@ -1,6 +1,8 @@
 { config, lib, pkgs, inputs, ... }:
 
-((username: {
+let
+  username = config.myConfig.modules.users.username;
+in {
   options.myConfig.modules.walker.enable = lib.mkEnableOption "Walker modern wayland app launcher";
   config = lib.mkIf config.myConfig.modules.walker.enable {
     environment.systemPackages = [
@@ -65,4 +67,4 @@
       };
     });
   };
-}) config.myConfig.modules.users.username)
+}

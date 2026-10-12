@@ -128,7 +128,7 @@
    root String
    arguments (Vec String)] Int
   (let [capture Any (.runCapture bridge
-          (into ["env" "-C" root (galileo-binary bridge) "build"] arguments)
+          (into ["env" "-C" root (galileo-binary bridge) "build" "--layout" "idiomatic"] arguments)
           max-compiler-output-bytes)
         errno Int (.status bridge capture)]
     (if (not (= errno 0))

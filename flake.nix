@@ -56,7 +56,42 @@
       url = "github:0xc000022070/zen-browser-flake";
     };
   };
-  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, disko, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: ((firnModules: ((darwinModuleNames: ((environmentPkgs: ((whiterabbitEnvironmentApps: ((validateDomainDependency: ((mkWhiterabbitEnvironment: ((mkWhiterabbitWorld: ((whiterabbitEnvironment: ((baselineWorld: ((toggledWorld: ((rejectedDependency: {
+  outputs = ({ self, nixpkgs, nixpkgs-unstable, nixpkgs-master, home-manager, nix-darwin, stylix, sops-nix, disko, kanata-git, glide, elephant, nur, quickshell, walker, zen-browser, ... }: let
+    firnModules = ./modules;
+    darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
+    environmentPkgs = import nixpkgs {
+      system = "x86_64-linux";
+      config.allowUnfree = true;
+    };
+    whiterabbitEnvironmentApps = [ environmentPkgs.blender environmentPkgs.obsidian ];
+    validateDomainDependency = dependency: if ((dependency.dependentDomain == "boot") && (dependency.requiredDomain == "environment")) then builtins.throw "boot responsibilities cannot require the environment domain" else dependency;
+    mkWhiterabbitEnvironment = includeExperimentPackage: home-manager.lib.homeManagerConfiguration {
+      pkgs = environmentPkgs;
+      modules = [
+        ({ pkgs, ... }: {
+          home.username = "tom";
+          home.homeDirectory = "/home/tom";
+          home.stateVersion = "25.05";
+          home.packages = (whiterabbitEnvironmentApps ++ (if includeExperimentPackage then [ pkgs.hello ] else [ ]));
+        })
+      ];
+    };
+    mkWhiterabbitWorld = includeExperimentPackage: {
+      boot = self.lib.mkSystem {
+        hostname = "whiterabbit";
+        hostConfig = ./hosts/whiterabbit/configuration.nix;
+        hardwareConfig = ./hardware-configuration.nix;
+      };
+      environment = mkWhiterabbitEnvironment includeExperimentPackage;
+    };
+    whiterabbitEnvironment = mkWhiterabbitEnvironment false;
+    baselineWorld = mkWhiterabbitWorld false;
+    toggledWorld = mkWhiterabbitWorld true;
+    rejectedDependency = builtins.tryEval (validateDomainDependency {
+      dependentDomain = "boot";
+      requiredDomain = "environment";
+    });
+  in {
     lib.mkSystem = ({ hostname, hostConfig, hardwareConfig, system ? "x86_64-linux", extraModules ? [ ], extraOverlays ? [ ], extraSpecialArgs ? { }, ... }: nixpkgs.lib.nixosSystem {
       system = system;
       specialArgs = ({
@@ -84,7 +119,9 @@
             "z /var/lib/sops-nix/key.txt 0400 ${config.myConfig.modules.users.username} users -"
           ];
           environment.systemPackages = with pkgs; [ sops age ];
-          imports = ((moduleDirs: builtins.map (m: "${firnModules}/${m}") moduleDirs) (builtins.attrNames (nixpkgs.lib.filterAttrs (n: v: (v == "directory")) (builtins.readDir ./modules))));
+          imports = let
+            moduleDirs = builtins.attrNames (nixpkgs.lib.filterAttrs (n: v: (v == "directory")) (builtins.readDir ./modules));
+          in builtins.map (m: "${firnModules}/${m}") moduleDirs;
           home-manager.backupFileExtension = "backup";
           home-manager.extraSpecialArgs = ({
             inputs = {
@@ -126,7 +163,43 @@
                 src = glide;
                 cargoLock.lockFile = "${glide}/Cargo.lock";
               };
-              nyxt4 = ((nyxt-tarball: ((nyxt-appimage: ((nyxt-extracted: ((cl-electron-extracted: ((nyxt-unwrapped: final.buildFHSEnv {
+              nyxt4 = let
+                nyxt-tarball = final.fetchurl {
+                  url = "https://github.com/atlas-engineer/nyxt/releases/download/4.0.0/Linux-Nyxt-x86_64.tar.gz";
+                  hash = "sha256-v+x6K5svLA3L+IjEdTjmJEf3hvgwhwrvqAcelpY1ScQ=";
+                };
+                nyxt-appimage = final.runCommand "nyxt.AppImage" { } ''
+                  tar xzf ${nyxt-tarball} -O > $out
+                  chmod +x $out
+
+                '';
+                nyxt-extracted = final.appimageTools.extractType2 {
+                  pname = "nyxt";
+                  version = "4.0.0";
+                  src = nyxt-appimage;
+                };
+                cl-electron-extracted = final.appimageTools.extractType2 {
+                  pname = "cl-electron-server";
+                  version = "4.0.0";
+                  src = "${nyxt-extracted}/usr/bin/cl-electron-server";
+                };
+                nyxt-unwrapped = final.runCommand "nyxt-unwrapped-4.0.0" { } ''
+                  mkdir -p $out/app/Nyxt/_build/cl-electron $out/share/applications $out/share/icons/hicolor/256x256/apps
+
+                  # Nyxt binary and libs
+                  cp ${nyxt-extracted}/usr/bin/nyxt $out/app/Nyxt/
+                  cp -r ${nyxt-extracted}/usr/lib/* $out/app/Nyxt/ 2>/dev/null || true
+
+                  # cl-electron (full Electron distribution)
+                  cp -r ${cl-electron-extracted}/* $out/app/Nyxt/_build/cl-electron/
+
+                  # Desktop integration
+                  cp ${nyxt-extracted}/nyxt.desktop $out/share/applications/ 2>/dev/null || true
+                  cp ${nyxt-extracted}/nyxt.png $out/share/icons/hicolor/256x256/apps/ 2>/dev/null || true
+                  sed -i "s|Exec=.*|Exec=nyxt %u|" $out/share/applications/nyxt.desktop 2>/dev/null || true
+
+                '';
+              in final.buildFHSEnv {
                 pname = "nyxt";
                 version = "4.0.0";
                 targetPkgs = p: with p; [
@@ -194,37 +267,7 @@
                   ln -s ${nyxt-unwrapped}/share/icons $out/share/icons
 
                 '';
-              }) (final.runCommand "nyxt-unwrapped-4.0.0" { } ''
-                  mkdir -p $out/app/Nyxt/_build/cl-electron $out/share/applications $out/share/icons/hicolor/256x256/apps
-
-                  # Nyxt binary and libs
-                  cp ${nyxt-extracted}/usr/bin/nyxt $out/app/Nyxt/
-                  cp -r ${nyxt-extracted}/usr/lib/* $out/app/Nyxt/ 2>/dev/null || true
-
-                  # cl-electron (full Electron distribution)
-                  cp -r ${cl-electron-extracted}/* $out/app/Nyxt/_build/cl-electron/
-
-                  # Desktop integration
-                  cp ${nyxt-extracted}/nyxt.desktop $out/share/applications/ 2>/dev/null || true
-                  cp ${nyxt-extracted}/nyxt.png $out/share/icons/hicolor/256x256/apps/ 2>/dev/null || true
-                  sed -i "s|Exec=.*|Exec=nyxt %u|" $out/share/applications/nyxt.desktop 2>/dev/null || true
-
-                ''))) (final.appimageTools.extractType2 {
-                  pname = "cl-electron-server";
-                  version = "4.0.0";
-                  src = "${nyxt-extracted}/usr/bin/cl-electron-server";
-                }))) (final.appimageTools.extractType2 {
-                  pname = "nyxt";
-                  version = "4.0.0";
-                  src = nyxt-appimage;
-                }))) (final.runCommand "nyxt.AppImage" { } ''
-                  tar xzf ${nyxt-tarball} -O > $out
-                  chmod +x $out
-
-                ''))) (final.fetchurl {
-                  url = "https://github.com/atlas-engineer/nyxt/releases/download/4.0.0/Linux-Nyxt-x86_64.tar.gz";
-                  hash = "sha256-v+x6K5svLA3L+IjEdTjmJEf3hvgwhwrvqAcelpY1ScQ=";
-                }));
+              };
             })
           ] ++ extraOverlays);
         }
@@ -304,7 +347,13 @@
     modules = firnModules;
     checks.x86_64-linux = {
       host-whiterabbit = self.nixosConfigurations.whiterabbit.config.system.build.toplevel;
-      nix-syntax = ((pkgs: ((source: pkgs.runCommand "firn-nix-syntax" {
+      nix-syntax = let
+        pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        source = nixpkgs.lib.fileset.toSource {
+          root = ./.;
+          fileset = nixpkgs.lib.fileset.fileFilter (file: file.hasExt "nix") ./.;
+        };
+      in pkgs.runCommand "firn-nix-syntax" {
         nativeBuildInputs = [ pkgs.nix pkgs.findutils ];
       } ''
         export NIX_STATE_DIR="$TMPDIR/nix-state"
@@ -312,10 +361,7 @@
           nix-instantiate --store dummy:// --parse "$file" >/dev/null
         done
         touch $out
-      '') (nixpkgs.lib.fileset.toSource {
-          root = ./.;
-          fileset = nixpkgs.lib.fileset.fileFilter (file: file.hasExt "nix") ./.;
-        }))) nixpkgs.legacyPackages.x86_64-linux);
+      '';
     };
     homeConfigurations = {
       "tom@whiterabbit" = whiterabbitEnvironment;
@@ -348,35 +394,14 @@
       description = "firn starter configuration";
       path = ./template;
     };
-    devShells.x86_64-linux.default = ((pkgs: pkgs.mkShell {
+    devShells.x86_64-linux.default = let
+      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    in pkgs.mkShell {
       packages = [ pkgs.pre-commit pkgs.gitleaks ];
       shellHook = ''
         pre-commit install --allow-missing-config 2>/dev/null
 
       '';
-    }) nixpkgs.legacyPackages.x86_64-linux);
-  }) (builtins.tryEval (validateDomainDependency {
-      dependentDomain = "boot";
-      requiredDomain = "environment";
-    })))) (mkWhiterabbitWorld true))) (mkWhiterabbitWorld false))) (mkWhiterabbitEnvironment false))) (includeExperimentPackage: {
-      boot = self.lib.mkSystem {
-        hostname = "whiterabbit";
-        hostConfig = ./hosts/whiterabbit/configuration.nix;
-        hardwareConfig = ./hardware-configuration.nix;
-      };
-      environment = mkWhiterabbitEnvironment includeExperimentPackage;
-    }))) (includeExperimentPackage: home-manager.lib.homeManagerConfiguration {
-      pkgs = environmentPkgs;
-      modules = [
-        ({ pkgs, ... }: {
-          home.username = "tom";
-          home.homeDirectory = "/home/tom";
-          home.stateVersion = "25.05";
-          home.packages = (whiterabbitEnvironmentApps ++ (if includeExperimentPackage then [ pkgs.hello ] else [ ]));
-        })
-      ];
-    }))) (dependency: if ((dependency.dependentDomain == "boot") && (dependency.requiredDomain == "environment")) then builtins.throw "boot responsibilities cannot require the environment domain" else dependency))) [ environmentPkgs.blender environmentPkgs.obsidian ])) (import nixpkgs {
-      system = "x86_64-linux";
-      config.allowUnfree = true;
-    }))) (builtins.fromJSON (builtins.readFile ./config/darwin-modules.json)))) ./modules));
+    };
+  });
 }

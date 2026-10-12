@@ -1,6 +1,10 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "worker-ledger: every 15 minutes record finished Claude, Codex and Gemini workers as runs in threads, fill landings of runs still waiting to land, and snapshot account usage (agents usage)";
+in {
   options.myConfig.modules.worker-ledger.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.worker-ledger.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -41,4 +45,4 @@
       };
     });
   };
-}) "worker-ledger: every 15 minutes record finished Claude, Codex and Gemini workers as runs in threads, fill landings of runs still waiting to land, and snapshot account usage (agents usage)")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 
-((username: ((homeDir: {
+let
+  username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
+in {
   options.myConfig.modules.codex-runtime.enable = lib.mkEnableOption "Codex provider runtime (runtime store roots)";
   config = lib.mkIf config.myConfig.modules.codex-runtime.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -19,4 +22,4 @@
       };
     });
   };
-}) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}

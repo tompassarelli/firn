@@ -1,6 +1,10 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "Twice-daily ranked public watch digest";
+in {
   options.myConfig.modules.model-watch.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.model-watch.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -88,4 +92,4 @@
       };
     });
   };
-}) "Twice-daily ranked public watch digest")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

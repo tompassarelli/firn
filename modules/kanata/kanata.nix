@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
-((cfg: {
+let
+  cfg = config.myConfig.modules.kanata;
+in {
   config = lib.mkIf cfg.enable {
     hardware.uinput.enable = true;
     services.udev.extraRules = ''
@@ -32,4 +34,4 @@
       User = "kanata";
     };
   };
-}) config.myConfig.modules.kanata)
+}

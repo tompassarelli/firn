@@ -1,6 +1,13 @@
 { config, lib, pkgs, ... }:
 
-((username: ((homeDir: ((wgAddress: ((wgInterface: ((creds: ((upgradeFlake: {
+let
+  username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
+  wgAddress = "10.77.0.1";
+  wgInterface = "wg-nexus";
+  creds = " -p wa -k nexus-creds";
+  upgradeFlake = config.myConfig.modules.nexus-hardening.upgradeFlake;
+in {
   options.myConfig.modules.nexus-hardening.enable = lib.mkEnableOption "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection";
   options.myConfig.modules.nexus-hardening.upgradeFlake = lib.mkOption {
     type = lib.types.str;
@@ -129,4 +136,4 @@
     ];
     services.earlyoom.enable = true;
   };
-}) config.myConfig.modules.nexus-hardening.upgradeFlake)) " -p wa -k nexus-creds")) "wg-nexus")) "10.77.0.1")) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}

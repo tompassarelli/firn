@@ -240,7 +240,7 @@ printf 'authoring-native: Galileo check/build and intended Nix semantics\n' >&2
 (
   cd "$fixture"
   galileo check modules hosts/sample-host >"$scratch/galileo-check.out" 2>"$scratch/galileo-check.err"
-  galileo build --check modules hosts/sample-host >"$scratch/galileo-build.out" 2>"$scratch/galileo-build.err"
+  galileo build --check --layout idiomatic modules hosts/sample-host >"$scratch/galileo-build.out" 2>"$scratch/galileo-build.err"
 ) || die "authored Galileo source or generated Nix failed"
 for module_kind in sample-tool openssh sample-submodule sample-home; do
   [[ -f "$fixture/modules/$module_kind/default.nix" ]] \

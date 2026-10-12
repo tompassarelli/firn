@@ -1,6 +1,12 @@
 { config, lib, pkgs, flakeRoot, ... }:
 
-((username: ((homeDir: ((codexConfigFile: ((agentGeneration: ((providerAdapter: {
+let
+  username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
+  codexConfigFile = config.myConfig.modules.codex.configFile;
+  agentGeneration = "${homeDir}/.local/state/north/agents/current";
+  providerAdapter = adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}";
+in {
   options.myConfig.modules.codex.enable = lib.mkEnableOption "OpenAI Codex CLI (exact North managed runtime)";
   options.myConfig.modules.codex.configFile = lib.mkOption {
     type = lib.types.path;
@@ -94,4 +100,4 @@
       };
     });
   };
-}) (adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}"))) "${homeDir}/.local/state/north/agents/current")) config.myConfig.modules.codex.configFile)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}

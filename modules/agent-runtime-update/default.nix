@@ -1,6 +1,9 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+in {
   options.myConfig.modules.agent-runtime-update.enable = lib.mkEnableOption "Twice-daily agent runtime updates";
   config = lib.mkIf config.myConfig.modules.agent-runtime-update.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -47,4 +50,4 @@
       };
     });
   };
-}) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

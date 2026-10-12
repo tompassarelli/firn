@@ -1,6 +1,15 @@
 { config, lib, pkgs, ... }:
 
-((cfg: ((address: ((port: ((upstream: ((dataDir: ((wgInterface: ((domain: ((acmeEnv: {
+let
+  cfg = config.myConfig.modules.nexus-matrix;
+  address = "10.77.0.1";
+  port = 6167;
+  upstream = "http://${address}:${builtins.toString port}";
+  dataDir = "/var/lib/continuwuity";
+  wgInterface = "wg-nexus";
+  domain = cfg.serverName;
+  acmeEnv = builtins.getAttr "acme-cloudflare.env" config.sops.templates;
+in {
   options.myConfig.modules.nexus-matrix.enable = lib.mkEnableOption "continuwuity Matrix homeserver for agent chat on wg-nexus: no federation, closed registration";
   options.myConfig.modules.nexus-matrix.serverName = lib.mkOption {
     type = lib.types.str;
@@ -87,4 +96,4 @@
       };
     })
   ]);
-}) (builtins.getAttr "acme-cloudflare.env" config.sops.templates))) cfg.serverName)) "wg-nexus")) "/var/lib/continuwuity")) "http://${address}:${builtins.toString port}")) 6167)) "10.77.0.1")) config.myConfig.modules.nexus-matrix)
+}

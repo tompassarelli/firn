@@ -1,6 +1,9 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((username: ((description: {
+let
+  username = config.myConfig.modules.users.username;
+  description = "checkout-sync: every 15 min fast-forward each clean ~/code/<project>/main to origin/main on hosts where nothing lands locally";
+in {
   options.myConfig.modules.checkout-sync.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.checkout-sync.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -32,4 +35,4 @@
       };
     });
   };
-}) "checkout-sync: every 15 min fast-forward each clean ~/code/<project>/main to origin/main on hosts where nothing lands locally")) config.myConfig.modules.users.username)
+}

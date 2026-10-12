@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 
-((cfg: ((static: {
+let
+  cfg = config.myConfig.modules.networkd;
+  static = (cfg.staticSopsFile != null);
+in {
   options.myConfig.modules.networkd.enable = lib.mkEnableOption "systemd-networkd with DHCP on every wired interface";
   options.myConfig.modules.networkd.staticSopsFile = lib.mkOption {
     type = lib.types.nullOr lib.types.path;
@@ -46,4 +49,4 @@
       };
     })
   ]);
-}) (cfg.staticSopsFile != null))) config.myConfig.modules.networkd)
+}

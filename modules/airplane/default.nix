@@ -1,6 +1,9 @@
 { config, lib, pkgs, ... }:
 
-((username: ((description: {
+let
+  username = config.myConfig.modules.users.username;
+  description = "airplane: radios change only through the `airplane` command; keys never toggle rfkill";
+in {
   options.myConfig.modules.airplane.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.airplane.enable {
     systemd.tmpfiles.rules = [ "d /var/lib/airplane 0755 ${username} users -" ];
@@ -15,4 +18,4 @@
       };
     };
   };
-}) "airplane: radios change only through the `airplane` command; keys never toggle rfkill")) config.myConfig.modules.users.username)
+}

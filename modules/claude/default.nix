@@ -1,6 +1,8 @@
 { config, lib, pkgs, ... }:
 
-((username: {
+let
+  username = config.myConfig.modules.users.username;
+in {
   options.myConfig.modules.claude.enable = lib.mkEnableOption "Claude Code fallback coding agent";
   config = lib.mkIf config.myConfig.modules.claude.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -10,4 +12,4 @@
       };
     });
   };
-}) config.myConfig.modules.users.username)
+}

@@ -137,7 +137,7 @@ printf '%s\n' '{"nodes":{"root":{"inputs":{}}}}' >"$gal_repo/flake.lock"
 printf '%s\n' 'nix module' '  arguments: config, lib, ...' \
   '  option "myConfig"."modules"."demo"."enable": enable "demo"' \
   >"$gal_repo/modules/demo/default.gal"
-(cd "$gal_repo" && "$galileo_dir/galileo" build) >/dev/null \
+(cd "$gal_repo" && "$galileo_dir/galileo" build --layout idiomatic) >/dev/null \
   || die "fixture galileo build failed"
 printf '# stale\n' >>"$gal_repo/modules/demo/default.nix"
 

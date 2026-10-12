@@ -1,6 +1,24 @@
 { config, lib, pkgs, ... }:
 
-((cfg: ((homeDir: ((username: ((description: ((path: {
+let
+  cfg = config.myConfig.modules.socrates-chat;
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "Socrates chat relay for local agent sessions";
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
+    pkgs.bun
+    pkgs.gh
+    pkgs.git
+    pkgs.python3
+    pkgs.tmux
+    pkgs.websocat
+    pkgs.jq
+    pkgs.sqlite
+    pkgs.ripgrep
+    pkgs.iproute2
+    pkgs.coreutils
+  ]}";
+in {
   options.myConfig.modules.socrates-chat = {
     enable = lib.mkEnableOption description;
     homeserver = lib.mkOption {
@@ -78,16 +96,4 @@
       };
     });
   };
-}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
-    pkgs.bun
-    pkgs.gh
-    pkgs.git
-    pkgs.python3
-    pkgs.tmux
-    pkgs.websocat
-    pkgs.jq
-    pkgs.sqlite
-    pkgs.ripgrep
-    pkgs.iproute2
-    pkgs.coreutils
-  ]}")) "Socrates chat relay for local agent sessions")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.socrates-chat)
+}
