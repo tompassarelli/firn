@@ -212,7 +212,7 @@
     (if (not= check-status 0)
       (child-status bridge "galileo" check-status)
       (let [build-status Int
-            (host-run-galileo bridge root (into ["build"] files))]
+            (host-run-galileo bridge root (into ["build" "--layout" "idiomatic"] files))]
         (if (= build-status 0)
           (stage-created bridge root plan)
           (child-status bridge "galileo" build-status))))))

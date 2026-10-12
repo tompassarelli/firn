@@ -22,8 +22,8 @@ validate() {
   cd "$root"
   printf 'firn repo validate: [1/3] galileo check...\n' >&2
   "$galileo" check "${paths[@]}"
-  printf 'firn repo validate: [2/3] galileo build --check...\n' >&2
-  "$galileo" build --check "${paths[@]}"
+  printf 'firn repo validate: [2/3] galileo build --check --layout idiomatic...\n' >&2
+  "$galileo" build --check --layout idiomatic "${paths[@]}"
   printf 'firn repo validate: [3/3] evaluating every nixosConfigurations toplevel...\n' >&2
   nix eval --raw "$root#nixosConfigurations" --apply "$toplevels"
 }

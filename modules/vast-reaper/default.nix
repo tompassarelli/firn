@@ -1,6 +1,10 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor, and tear down the runner VM at the credit floor";
+in {
   options.myConfig.modules.vast-reaper.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.vast-reaper.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -31,4 +35,4 @@
       };
     });
   };
-}) "vast.ai reaper: every 5 minutes destroy vast-job instances past their deadline or without a live supervisor, and tear down the runner VM at the credit floor")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

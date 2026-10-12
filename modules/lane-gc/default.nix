@@ -1,6 +1,10 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "lane-gc: hourly retire landed, clean, idle worktrees and branches in ~/code containers; report unlanded work";
+in {
   options.myConfig.modules.lane-gc.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.lane-gc.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -77,4 +81,4 @@
       };
     });
   };
-}) "lane-gc: hourly retire landed, clean, idle worktrees and branches in ~/code containers; report unlanded work")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

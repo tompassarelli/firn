@@ -1,6 +1,10 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB";
+in {
   options.myConfig.modules.proton-log-watchdog.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.proton-log-watchdog.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -30,4 +34,4 @@
       };
     });
   };
-}) "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

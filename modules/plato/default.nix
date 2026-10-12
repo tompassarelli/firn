@@ -1,6 +1,19 @@
 { config, lib, pkgs, ... }:
 
-((username: ((home: ((run: ((service: {
+let
+  username = config.myConfig.modules.users.username;
+  home = "/home/${username}";
+  run = pkgs.writeShellApplication {
+    name = "plato-run";
+    runtimeInputs = [ pkgs.coreutils ];
+    text = builtins.readFile ./plato-run.sh;
+  };
+  service = pkgs.writeShellApplication {
+    name = "plato-service";
+    runtimeInputs = [ pkgs.tmux pkgs.bashInteractive pkgs.coreutils ];
+    text = builtins.readFile ./plato-service.sh;
+  };
+in {
   options.myConfig.modules.plato.enable = lib.mkEnableOption "Plato: Tom's proxy Claude session with Remote Control in tmux session plato (tmux -L plato)";
   config = lib.mkIf config.myConfig.modules.plato.enable {
     users.users.${username}.linger = true;
@@ -26,12 +39,4 @@
       };
     };
   };
-}) (pkgs.writeShellApplication {
-    name = "plato-service";
-    runtimeInputs = [ pkgs.tmux pkgs.bashInteractive pkgs.coreutils ];
-    text = builtins.readFile ./plato-service.sh;
-  }))) (pkgs.writeShellApplication {
-    name = "plato-run";
-    runtimeInputs = [ pkgs.coreutils ];
-    text = builtins.readFile ./plato-run.sh;
-  }))) "/home/${username}")) config.myConfig.modules.users.username)
+}

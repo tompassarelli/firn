@@ -1,6 +1,37 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((username: ((description: ((path: ((pull: ((restoreTest: {
+let
+  username = config.myConfig.modules.users.username;
+  description = "nexus-pull: daily rsync of nexus's encrypted *.age backups into ~/backups/nexus, plus a weekly restore test";
+  path = "PATH=/run/wrappers/bin:${lib.makeBinPath [
+    pkgs.openssh
+    pkgs.rsync
+    pkgs.age
+    pkgs.zstd
+    pkgs.sqlite
+    pkgs.findutils
+    pkgs.coreutils
+    pkgs.gnused
+  ]}";
+  pull = pkgs.writeShellApplication {
+    name = "nexus-pull";
+    runtimeInputs = [ pkgs.openssh pkgs.rsync pkgs.findutils pkgs.coreutils ];
+    text = builtins.readFile ./nexus-pull.sh;
+  };
+  restoreTest = pkgs.writeShellApplication {
+    name = "nexus-restore-test";
+    runtimeInputs = [
+      pkgs.openssh
+      pkgs.age
+      pkgs.zstd
+      pkgs.sqlite
+      pkgs.findutils
+      pkgs.coreutils
+      pkgs.gnused
+    ];
+    text = builtins.readFile ./nexus-restore-test.sh;
+  };
+in {
   options.myConfig.modules.nexus-pull.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.nexus-pull.enable {
     environment.systemPackages = [ pull restoreTest ];
@@ -54,29 +85,4 @@
       };
     });
   };
-}) (pkgs.writeShellApplication {
-    name = "nexus-restore-test";
-    runtimeInputs = [
-      pkgs.openssh
-      pkgs.age
-      pkgs.zstd
-      pkgs.sqlite
-      pkgs.findutils
-      pkgs.coreutils
-      pkgs.gnused
-    ];
-    text = builtins.readFile ./nexus-restore-test.sh;
-  }))) (pkgs.writeShellApplication {
-    name = "nexus-pull";
-    runtimeInputs = [ pkgs.openssh pkgs.rsync pkgs.findutils pkgs.coreutils ];
-    text = builtins.readFile ./nexus-pull.sh;
-  }))) "PATH=/run/wrappers/bin:${lib.makeBinPath [
-    pkgs.openssh
-    pkgs.rsync
-    pkgs.age
-    pkgs.zstd
-    pkgs.sqlite
-    pkgs.findutils
-    pkgs.coreutils
-    pkgs.gnused
-  ]}")) "nexus-pull: daily rsync of nexus's encrypted *.age backups into ~/backups/nexus, plus a weekly restore test")) config.myConfig.modules.users.username)
+}

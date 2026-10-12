@@ -1,6 +1,18 @@
 { config, lib, pkgs, ... }:
 
-((cfg: ((username: ((passwordFile: ((start: {
+let
+  cfg = config.myConfig.modules.keyring-headless;
+  username = config.myConfig.modules.users.username;
+  passwordFile = config.sops.secrets.keyring-password.path;
+  start = pkgs.writeShellApplication {
+    name = "keyring-headless-start";
+    runtimeInputs = [ pkgs.gnome-keyring pkgs.coreutils ];
+    text = ''
+      password=$(cat ${passwordFile})
+      exec gnome-keyring-daemon --foreground --unlock --components=secrets < <(printf %s "$password")
+    '';
+  };
+in {
   options.myConfig.modules.keyring-headless.enable = lib.mkEnableOption "headless GNOME Keyring Secret Service for a lingering user, unlocked from sops";
   options.myConfig.modules.keyring-headless.sopsFile = lib.mkOption {
     type = lib.types.path;
@@ -31,11 +43,4 @@
       };
     });
   };
-}) (pkgs.writeShellApplication {
-    name = "keyring-headless-start";
-    runtimeInputs = [ pkgs.gnome-keyring pkgs.coreutils ];
-    text = ''
-      password=$(cat ${passwordFile})
-      exec gnome-keyring-daemon --foreground --unlock --components=secrets < <(printf %s "$password")
-    '';
-  }))) config.sops.secrets.keyring-password.path)) config.myConfig.modules.users.username)) config.myConfig.modules.keyring-headless)
+}

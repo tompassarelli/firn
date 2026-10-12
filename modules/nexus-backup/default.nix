@@ -1,6 +1,15 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((cfg: ((username: ((homeDir: ((stateBackup: {
+let
+  cfg = config.myConfig.modules.nexus-backup;
+  username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
+  stateBackup = pkgs.writeShellApplication {
+    name = "state-backup";
+    runtimeInputs = [ pkgs.age pkgs.zstd pkgs.sqlite pkgs.gnutar pkgs.findutils pkgs.coreutils ];
+    text = "recipients=(${lib.escapeShellArgs cfg.recipients})\npaths=(${lib.escapeShellArgs cfg.paths})\n${builtins.readFile ./state-backup.sh}";
+  };
+in {
   options.myConfig.modules.nexus-backup.enable = lib.mkEnableOption "nexus state-backup: nightly zstd+age encrypted ledger dumps and state archives in /var/lib/nexus-backup";
   options.myConfig.modules.nexus-backup.recipients = lib.mkOption {
     type = lib.types.nonEmptyListOf lib.types.str;
@@ -47,8 +56,4 @@
 
     '';
   };
-}) (pkgs.writeShellApplication {
-    name = "state-backup";
-    runtimeInputs = [ pkgs.age pkgs.zstd pkgs.sqlite pkgs.gnutar pkgs.findutils pkgs.coreutils ];
-    text = "recipients=(${lib.escapeShellArgs cfg.recipients})\npaths=(${lib.escapeShellArgs cfg.paths})\n${builtins.readFile ./state-backup.sh}";
-  }))) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)) config.myConfig.modules.nexus-backup)
+}

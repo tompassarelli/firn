@@ -1,6 +1,9 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((username: ((homeDir: {
+let
+  username = config.myConfig.modules.users.username;
+  homeDir = config.myConfig.modules.users.homeDir;
+in {
   options.myConfig.modules.job-watch.enable = lib.mkEnableOption "job-watch: every 15 min, push an alert when a registry job with a deadline is overdue";
   config = lib.mkIf config.myConfig.modules.job-watch.enable {
     systemd.services.job-watch = {
@@ -32,4 +35,4 @@
 
     '';
   };
-}) config.myConfig.modules.users.homeDir)) config.myConfig.modules.users.username)
+}

@@ -1,6 +1,12 @@
 { config, lib, pkgs, ... }:
 
-((cfg: ((homeDir: ((username: ((notify: ((description: {
+let
+  cfg = config.myConfig.modules.laptop-runner;
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  notify = if config.myConfig.modules.nexus-alerts.enable then "nexus-notify@%n.service" else "update-notify@%n.service";
+  description = "laptop-runner: each minute and on wake, run jobs queued on the ledger for this host's placement, one at a time";
+in {
   options.myConfig.modules.laptop-runner.enable = lib.mkEnableOption description;
   options.myConfig.modules.laptop-runner.placement = lib.mkOption {
     type = lib.types.str;
@@ -45,4 +51,4 @@
       };
     });
   };
-}) "laptop-runner: each minute and on wake, run jobs queued on the ledger for this host's placement, one at a time")) (if config.myConfig.modules.nexus-alerts.enable then "nexus-notify@%n.service" else "update-notify@%n.service"))) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)) config.myConfig.modules.laptop-runner)
+}

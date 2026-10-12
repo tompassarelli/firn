@@ -1,6 +1,10 @@
 { config, lib, pkgs, ... }:
 
-((homeDir: ((username: ((description: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "Deterministic location safety alerts";
+in {
   options.myConfig.modules.watch-alerts.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.watch-alerts.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -35,4 +39,4 @@
       };
     });
   };
-}) "Deterministic location safety alerts")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

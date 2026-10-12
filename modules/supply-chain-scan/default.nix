@@ -1,6 +1,19 @@
 { config, lib, pkgs, ... }:
 
-((homeDir: ((username: ((description: ((path: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories";
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
+    pkgs.osv-scanner
+    pkgs.git
+    pkgs.jq
+    pkgs.openssh
+    pkgs.coreutils
+    pkgs.gnugrep
+    pkgs.bash
+  ]}";
+in {
   options.myConfig.modules.supply-chain-scan.enable = lib.mkEnableOption description;
   config = lib.mkIf config.myConfig.modules.supply-chain-scan.enable {
     environment.systemPackages = [ pkgs.osv-scanner ];
@@ -33,12 +46,4 @@
       };
     });
   };
-}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
-    pkgs.osv-scanner
-    pkgs.git
-    pkgs.jq
-    pkgs.openssh
-    pkgs.coreutils
-    pkgs.gnugrep
-    pkgs.bash
-  ]}")) "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

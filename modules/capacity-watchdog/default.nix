@@ -1,6 +1,13 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((rest: ((description: ((nightly: ((path: {
+let
+  homeDir = config.myConfig.modules.users.homeDir;
+  username = config.myConfig.modules.users.username;
+  rest = config.myConfig.modules.capacity-watchdog.rest;
+  description = "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance";
+  nightly = "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease";
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}";
+in {
   options.myConfig.modules.capacity-watchdog.enable = lib.mkEnableOption description;
   options.myConfig.modules.capacity-watchdog.rest.system = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -76,4 +83,4 @@
       };
     });
   };
-}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}")) "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease")) "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance")) config.myConfig.modules.capacity-watchdog.rest)) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}

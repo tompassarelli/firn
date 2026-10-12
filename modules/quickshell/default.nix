@@ -1,6 +1,9 @@
 { config, lib, pkgs, inputs, ... }:
 
-((username: ((monoFont: {
+let
+  username = config.myConfig.modules.users.username;
+  monoFont = config.stylix.fonts.monospace.name;
+in {
   options.myConfig.modules.quickshell.enable = lib.mkEnableOption "Quickshell (Qt6/QML) status bar";
   config = lib.mkIf config.myConfig.modules.quickshell.enable {
     environment.systemPackages = [
@@ -61,4 +64,4 @@
       };
     });
   };
-}) config.stylix.fonts.monospace.name)) config.myConfig.modules.users.username)
+}
