@@ -11,7 +11,7 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "home" = {
             "sessionVariables" = {
               "NORTH_DELIVERY_LIVENESS_REQUIRED" = "1";
@@ -25,7 +25,7 @@
                     "WantedBy" = [ "paths.target" ];
                   };
                   "Path" = {
-                    "PathChanged" = (("" + ((__clause_argument_0.config).home).homeDirectory) + "/code/nixos-config/main/.git/logs/HEAD");
+                    "PathChanged" = (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/main/.git/logs/HEAD");
                   };
                   "Unit" = {
                     "Description" = "Refresh Firn delivery liveness when main advances";
@@ -36,8 +36,8 @@
                 "firn-delivery-liveness" = {
                   "Service" = {
                     "Environment" = [
-                      (("NORTH_BIN=" + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/north/bin/north")
-                      (((((("PATH=" + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/firn/bin:") + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/north/bin:") + lib.makeBinPath [
+                      (("NORTH_BIN=" + ((hm.config).home).homeDirectory) + "/.local/share/north/bin/north")
+                      (((((("PATH=" + ((hm.config).home).homeDirectory) + "/.local/share/firn/bin:") + ((hm.config).home).homeDirectory) + "/.local/share/north/bin:") + lib.makeBinPath [
                         pkgs.bash
                         pkgs.coreutils
                         pkgs.gawk
@@ -47,13 +47,13 @@
                         pkgs.util-linux
                       ]) + "")
                     ];
-                    "ExecStart" = (((((((("" + builtins.toString pkgs.bash) + "/bin/bash ") + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/north/bin/job-run --path ") + lib.makeBinPath [
+                    "ExecStart" = (((((((("" + builtins.toString pkgs.bash) + "/bin/bash ") + ((hm.config).home).homeDirectory) + "/.local/share/north/bin/job-run --path ") + lib.makeBinPath [
                       pkgs.python3
                       pkgs.openssh
                       pkgs.coreutils
                       pkgs.util-linux
                       pkgs.hostname
-                    ]) + " firn-delivery-liveness -- ") + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/firn/bin/firn-liveness-floor");
+                    ]) + " firn-delivery-liveness -- ") + ((hm.config).home).homeDirectory) + "/.local/share/firn/bin/firn-liveness-floor");
                     "TimeoutStartSec" = "30m";
                     "Type" = "oneshot";
                   };

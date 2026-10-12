@@ -12,30 +12,30 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_17: {
+        ${config.myConfig.modules.users.username} = hm: {
           "home" = {
             "activation" = {
-              "linkLocalBin" = (((__clause_argument_17.config).lib).dag).entryAfter [ "linkGeneration" ] (("run " + builtins.toString (pkgs.writeShellScript "local-bin-links" (builtins.readFile ./local-bin-links.sh))) + "\n");
+              "linkLocalBin" = (((hm.config).lib).dag).entryAfter [ "linkGeneration" ] (("run " + builtins.toString (pkgs.writeShellScript "local-bin-links" (builtins.readFile ./local-bin-links.sh))) + "\n");
             };
             "file" = {
               ".local/libexec/convo/python3" = {
                 "source" = (("" + builtins.toString pkgs.python3) + "/bin/python3");
               };
               ".local/share/firn/bin" = {
-                "source" = (((__clause_argument_17.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_17.config).home).homeDirectory) + "/code/nixos-config/main/dotfiles/bin");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/main/dotfiles/bin");
               };
               ".local/share/north/bin" = {
-                "source" = (((__clause_argument_17.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_17.config).home).homeDirectory) + "/code/north/main/bin");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/north/main/bin");
               };
               ".local/share/south/bin" = {
-                "source" = (((__clause_argument_17.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_17.config).home).homeDirectory) + "/code/south/main/bin");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/south/main/bin");
               };
             };
             "packages" = lib.mkMerge [ [ pkgs.libglvnd ] ];
             "sessionPath" = [
-              (("" + ((__clause_argument_17.config).home).homeDirectory) + "/.local/share/firn/bin")
-              (("" + ((__clause_argument_17.config).home).homeDirectory) + "/.local/share/north/bin")
-              (("" + ((__clause_argument_17.config).home).homeDirectory) + "/.local/share/south/bin")
+              (("" + ((hm.config).home).homeDirectory) + "/.local/share/firn/bin")
+              (("" + ((hm.config).home).homeDirectory) + "/.local/share/north/bin")
+              (("" + ((hm.config).home).homeDirectory) + "/.local/share/south/bin")
             ];
           };
           "programs" = {

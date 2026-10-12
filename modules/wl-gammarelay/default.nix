@@ -7,7 +7,7 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_10: {
+        ${config.myConfig.modules.users.username} = hm: {
           "systemd" = {
             "user" = {
               "services" = {
@@ -34,7 +34,7 @@
           "xdg" = {
             "configFile" = {
               "wl-gammarelay/temperature-control" = {
-                "source" = (((__clause_argument_10.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_10.config).home).homeDirectory) + "/code/nixos-config/dotfiles/wl-gammarelay/temperature-control");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/dotfiles/wl-gammarelay/temperature-control");
               };
             };
           };

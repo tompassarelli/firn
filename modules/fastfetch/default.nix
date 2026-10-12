@@ -7,11 +7,11 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "xdg" = {
             "configFile" = {
               "fastfetch/config.jsonc" = {
-                "source" = (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_0.config).home).homeDirectory) + "/code/nixos-config/dotfiles/fastfetch/config.jsonc");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/dotfiles/fastfetch/config.jsonc");
               };
             };
           };

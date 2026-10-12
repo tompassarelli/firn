@@ -4,7 +4,7 @@
   config = lib.mkIf config.myConfig.modules.activity.enable {
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "systemd" = {
             "user" = {
               "services" = {
@@ -31,7 +31,7 @@
           "xdg" = {
             "configFile" = {
               "activity/activities.json" = {
-                "source" = (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink (((("" + ((__clause_argument_0.config).home).homeDirectory) + "/") + config.myConfig.modules.activity.activitiesFile) + "");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (((("" + ((hm.config).home).homeDirectory) + "/") + config.myConfig.modules.activity.activitiesFile) + "");
               };
             };
           };

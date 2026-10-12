@@ -11,11 +11,11 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_4: {
+        ${config.myConfig.modules.users.username} = hm: {
           "xdg" = {
             "configFile" = {
               "rofi/config.rasi" = {
-                "source" = (((__clause_argument_4.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_4.config).home).homeDirectory) + "/code/nixos-config/dotfiles/rofi/config.rasi");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/dotfiles/rofi/config.rasi");
               };
             };
           };

@@ -7,7 +7,7 @@
     };
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_10: {
+        ${config.myConfig.modules.users.username} = hm: {
           "systemd" = {
             "user" = {
               "services" = {

@@ -10,5 +10,5 @@ nix module
       "systemPackages": [pkgs.tealdeer]
     "home-manager"
       "users"
-        {config.myConfig.modules.users.username}: (__clause_argument_0) => {"xdg": {"configFile": {"tealdeer/config.toml": {"source": (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink(("" ++ ((__clause_argument_0.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/tealdeer/config.toml")}}}}
+        {config.myConfig.modules.users.username}: (hm) => {"xdg": {"configFile": {"tealdeer/config.toml": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/tealdeer/config.toml")}}}}
   option "myConfig"."modules"."tealdeer"."enable": enable "Enable tealdeer (tldr client)"

@@ -4,11 +4,11 @@
   config = lib.mkIf config.myConfig.modules.bunfig.enable {
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "home" = {
             "file" = {
               ".bunfig.toml" = {
-                "source" = (((__clause_argument_0.config).lib).file).mkOutOfStoreSymlink (("" + ((__clause_argument_0.config).home).homeDirectory) + "/code/nixos-config/dotfiles/bun/bunfig.toml");
+                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/dotfiles/bun/bunfig.toml");
               };
             };
           };

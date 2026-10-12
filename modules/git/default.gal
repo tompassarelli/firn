@@ -9,5 +9,5 @@ nix module
   config when config.myConfig.modules.git.enable
     "home-manager"
       "users"
-        {config.myConfig.modules.users.username}: (__clause_argument_0) => {"programs": {"delta": {"enable": true, "enableGitIntegration": true, "options": {"navigate": true}}, "git": {"enable": true, "settings": {"core": {"editor": "nvim"}, "diff": {"colorMoved": "default"}, "gc": {"auto": 0, "autoDetach": false}, "init": {"defaultBranch": "main"}, "maintenance": {"auto": false, "autoDetach": false}, "merge": {"conflictstyle": "diff3"}, "user": {"email": config.myConfig.modules.users.email, "name": config.myConfig.modules.users.fullName}}}}}
+        {config.myConfig.modules.users.username}: (hm) => {"programs": {"delta": {"enable": true, "enableGitIntegration": true, "options": {"navigate": true}}, "git": {"enable": true, "settings": {"core": {"editor": "nvim"}, "diff": {"colorMoved": "default"}, "gc": {"auto": 0, "autoDetach": false}, "init": {"defaultBranch": "main"}, "maintenance": {"auto": false, "autoDetach": false}, "merge": {"conflictstyle": "diff3"}, "user": {"email": config.myConfig.modules.users.email, "name": config.myConfig.modules.users.fullName}}}}}
   option "myConfig"."modules"."git"."enable": enable "Git configuration"

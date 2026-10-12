@@ -4,7 +4,7 @@
   config = lib.mkIf config.myConfig.modules.smashcraft-controller.enable {
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "systemd" = {
             "user" = {
               "services" = {
@@ -13,13 +13,13 @@
                     "WantedBy" = [ "niri.service" ];
                   };
                   "Service" = {
-                    "ExecStart" = (((("" + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/wc3-controller/bin/wc3-controller --service --plugin ") + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/smashcraft-build-inputs/controller/wc3-journal");
+                    "ExecStart" = (((("" + ((hm.config).home).homeDirectory) + "/.local/share/wc3-controller/bin/wc3-controller --service --plugin ") + ((hm.config).home).homeDirectory) + "/.local/share/smashcraft-build-inputs/controller/wc3-journal");
                     "Restart" = "always";
                     "RestartSec" = "5";
                   };
                   "Unit" = {
                     "After" = [ "graphical-session.target" ];
-                    "ConditionPathExists" = (("" + ((__clause_argument_0.config).home).homeDirectory) + "/.local/share/wc3-controller/bin/wc3-controller");
+                    "ConditionPathExists" = (("" + ((hm.config).home).homeDirectory) + "/.local/share/wc3-controller/bin/wc3-controller");
                     "Description" = "wc3-controller service";
                     "PartOf" = [ "graphical-session.target" ];
                   };

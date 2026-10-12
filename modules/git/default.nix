@@ -4,7 +4,7 @@
   config = lib.mkIf config.myConfig.modules.git.enable {
     "home-manager" = {
       "users" = {
-        ${config.myConfig.modules.users.username} = __clause_argument_0: {
+        ${config.myConfig.modules.users.username} = hm: {
           "programs" = {
             "delta" = {
               "enable" = true;
