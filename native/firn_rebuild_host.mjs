@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { appendFileSync, existsSync, mkdtempSync, rmdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -83,18 +83,49 @@ function review(previous, approved) {
   }
   const revision = git(['rev-parse', 'HEAD']);
   if (revision.exitCode !== 0) return revision.exitCode;
+  const start = decoder.decode(base.stdout).trim();
+  const end = decoder.decode(revision.stdout).trim();
+  const changes = git(['log', '--reverse', '--format=%H', `${start}..${end}`, '--', 'config/galileo-revision']);
+  if (changes.exitCode !== 0) return changes.exitCode;
+  const ends = [];
+  for (const change of decoder.decode(changes.stdout).trim().split('\n').filter(Boolean)) {
+    const parent = git(['rev-parse', `${change}^`]);
+    if (parent.exitCode !== 0) return parent.exitCode;
+    ends.push(decoder.decode(parent.stdout).trim());
+  }
+  ends.push(end);
+  const versions = join(process.env.FIRN_RUNTIME_ROOT ?? `${process.env.HOME}/.local/lib/firn/cli`, 'versions');
   const directory = mkdtempSync(join(tmpdir(), 'firn-review-'));
   const snapshot = join(directory, 'snapshot');
   try {
-    const added = git(['worktree', 'add', '--detach', snapshot, decoder.decode(revision.stdout).trim()]);
+    const added = git(['worktree', 'add', '--detach', snapshot, end]);
     if (added.exitCode !== 0) {
       process.stderr.write(added.stderr);
       return added.exitCode;
     }
-    const galileo = process.env.FIRN_GALILEO ?? `${process.env.FIRN_RUNTIME_BIN}/galileo`;
-    process.stdout.write(`firn rebuild: reviewing ${decoder.decode(revision.stdout).trim()} against last switched revision ${decoder.decode(base.stdout).trim()}\n`);
-    const status = Bun.spawnSync({ cmd: [galileo, 'review', '--base', decoder.decode(base.stdout).trim()], cwd: snapshot, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' }).exitCode;
-    if (status !== 0) return status;
+    let segmentStart = start;
+    for (const segmentEnd of ends) {
+      const checkout = Bun.spawnSync({ cmd: ['git', '-C', snapshot, 'checkout', '--detach', segmentEnd], stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+      if (checkout.exitCode !== 0) {
+        process.stderr.write(checkout.stderr);
+        return checkout.exitCode;
+      }
+      const pin = readFileSync(join(snapshot, 'config/galileo-revision'), 'utf8').trim();
+      const version = (existsSync(versions) ? readdirSync(versions) : []).find(name => {
+        const cachedPin = join(versions, name, 'galileo-revision');
+        return existsSync(cachedPin) && readFileSync(cachedPin, 'utf8').trim() === pin
+          && existsSync(join(versions, name, 'bin/galileo'));
+      });
+      if (version === undefined) {
+        process.stderr.write(`firn rebuild: no cached Galileo binary for pin ${pin}; review cannot approve\n`);
+        return 2;
+      }
+      const galileo = join(versions, version, 'bin/galileo');
+      process.stdout.write(`reviewing ${segmentStart}..${segmentEnd} with galileo ${pin}\n`);
+      const status = Bun.spawnSync({ cmd: [galileo, 'review', '--base', segmentStart], cwd: snapshot, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' }).exitCode;
+      if (status !== 0) return status;
+      segmentStart = segmentEnd;
+    }
     const originalRoot = process.env.FIRN_REPO;
     process.env.FIRN_REPO = snapshot;
     try {

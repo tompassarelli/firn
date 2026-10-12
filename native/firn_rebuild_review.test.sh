@@ -4,7 +4,10 @@ here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 scratch="$(mktemp -d "${TMPDIR:-$repo}/firn-review-test.XXXXXX")"
 trap 'rm -rf -- "${scratch:?}"' EXIT
-mkdir -p "$scratch/repo" "$scratch/bin" "$scratch/tmp"
+passed=0
+mkdir -p "$scratch/repo/config" "$scratch/bin" "$scratch/tmp" "$scratch/runtime/versions/current/bin"
+cp "$repo/config/galileo-revision" "$scratch/repo/config/galileo-revision"
+cp "$repo/config/galileo-revision" "$scratch/runtime/versions/current/galileo-revision"
 cat >"$scratch/repo/main.gal" <<'GAL'
 use firn/tags
 
@@ -22,14 +25,14 @@ linux is a Platform
 linux allows every module
 
 type Node
-given {node: Node} holds
+given Node holds
 Goal is a Node
 Goal holds
 requirements
   Goal holds
 GAL
 git -C "$scratch/repo" init -q
-git -C "$scratch/repo" add main.gal
+git -C "$scratch/repo" add main.gal config/galileo-revision
 git -C "$scratch/repo" -c user.name=Firn -c user.email=firn@example.invalid commit -qm baseline
 git -C "$scratch/repo" tag gen-41
 cat >"$scratch/bin/readlink" <<'SH'
@@ -38,8 +41,10 @@ printf 'system-41-link\n'
 SH
 chmod +x "$scratch/bin/readlink"
 galileo="${FIRN_GALILEO:-$HOME/.local/lib/firn/cli/current/bin/galileo}"
+ln -s "$galileo" "$scratch/runtime/versions/current/bin/galileo"
+review_repo="$scratch/repo"
 run_review() {
-  env PATH="$scratch/bin:$PATH" TMPDIR="$scratch/tmp" FIRN_REPO="$scratch/repo" \
+  env PATH="$scratch/bin:$PATH" TMPDIR="$scratch/tmp" FIRN_REPO="$review_repo" FIRN_RUNTIME_ROOT="$scratch/runtime" \
     FIRN_GALILEO="$galileo" FIRN_REBUILD_MODULE="$scratch/must-not-load.js" \
     bun "$here/firn_rebuild_host.mjs" host rebuild --dry-run >"$scratch/$1.out" 2>&1
 }
@@ -66,4 +71,88 @@ fi
 grep -Fq 'last switched revision is unavailable' "$scratch/missing.out"
 [[ "$(git -C "$scratch/repo" worktree list --porcelain | rg -c '^worktree ')" == 1 ]]
 [[ -z "$(ls -A "$scratch/tmp")" ]]
+passed=$((passed + 1))
 printf 'ok: dry-run prints both host consequences, rejects introduced failure, and retires snapshots\n'
+old_pin=8daa31d83df6688b0346d1692e56372226611a26
+current_pin="$(cat "$repo/config/galileo-revision")"
+old_galileo=
+for version in "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/versions/"*; do
+  if [[ -f "$version/galileo-revision" && "$(cat "$version/galileo-revision")" == "$old_pin" && -x "$version/bin/galileo" ]]; then
+    old_galileo="$version/bin/galileo"
+    break
+  fi
+done
+[[ -n "$old_galileo" ]] || { printf 'missing recorded scenario Galileo %s\n' "$old_pin" >&2; exit 1; }
+review_repo="$scratch/segments"
+mkdir -p "$review_repo/config" "$scratch/runtime/versions/old/bin"
+printf '%s\n' "$old_pin" >"$review_repo/config/galileo-revision"
+printf '%s\n' "$old_pin" >"$scratch/runtime/versions/old/galileo-revision"
+cat >"$review_repo/main.gal" <<'GAL'
+given flake input {name: Text} follows {input: Text} from {target: Text}
+flake input "nixpkgs" follows "nixpkgs" from "test"
+GAL
+git -C "$review_repo" init -q
+git -C "$review_repo" add main.gal config/galileo-revision
+git -C "$review_repo" -c user.name=Firn -c user.email=firn@example.invalid commit -qm 'recorded braced slots'
+git -C "$review_repo" tag gen-41
+segment_base="$(git -C "$review_repo" rev-parse HEAD)"
+printf 'flake input "firn" follows "firn" from "test"\n' >>"$review_repo/main.gal"
+sed -i 's/{name: Text}/?name: Text/; s/{input: Text}/?input: Text/; s/{target: Text}/?target: Text/' "$review_repo/main.gal"
+git -C "$review_repo" add main.gal
+git -C "$review_repo" -c user.name=Firn -c user.email=firn@example.invalid commit -qm 'old pin segment'
+segment_boundary="$(git -C "$review_repo" rev-parse HEAD)"
+printf '%s\n' "$current_pin" >"$review_repo/config/galileo-revision"
+git -C "$review_repo" add main.gal config/galileo-revision
+git -C "$review_repo" -c user.name=Firn -c user.email=firn@example.invalid commit -qm 'new pin after slot conversion'
+printf 'flake input "galileo" follows "galileo" from "test"\n' >>"$review_repo/main.gal"
+git -C "$review_repo" add main.gal
+git -C "$review_repo" -c user.name=Firn -c user.email=firn@example.invalid commit -qm 'current pin segment'
+segment_head="$(git -C "$review_repo" rev-parse HEAD)"
+rm -- "$scratch/runtime/versions/current/bin/galileo"
+cat >"$scratch/runtime/versions/old/bin/galileo" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s %s %s\n' "$(cat config/galileo-revision)" "$(git rev-parse HEAD)" "$3" >>"$FIRN_FIXTURE_CALLS"
+if [[ "${FIRN_FIXTURE_OLD_STATUS:-0}" != 0 ]]; then exit "$FIRN_FIXTURE_OLD_STATUS"; fi
+exec "$FIRN_FIXTURE_OLD_BINARY" "$@"
+SH
+cat >"$scratch/runtime/versions/current/bin/galileo" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s %s %s\n' "$(cat config/galileo-revision)" "$(git rev-parse HEAD)" "$3" >>"$FIRN_FIXTURE_CALLS"
+if [[ "${FIRN_FIXTURE_STATUS:-0}" != 0 ]]; then exit "$FIRN_FIXTURE_STATUS"; fi
+exec "$FIRN_FIXTURE_CURRENT_BINARY" "$@"
+SH
+chmod +x "$scratch/runtime/versions/"{old,current}/bin/galileo
+export FIRN_FIXTURE_CALLS="$scratch/segments.calls" FIRN_FIXTURE_OLD_BINARY="$old_galileo" FIRN_FIXTURE_CURRENT_BINARY="$galileo"
+run_review segments || { cat "$scratch/segments.out" >&2; exit 1; }
+printf '%s %s %s\n' "$old_pin" "$segment_boundary" "$segment_base" "$current_pin" "$segment_head" "$segment_boundary" >"$scratch/segments.expected"
+cmp "$scratch/segments.expected" "$FIRN_FIXTURE_CALLS"
+[[ "$(rg -c '^verdict: approve$' "$scratch/segments.out")" == 2 ]]
+for segment_status in 2 7; do
+  export FIRN_FIXTURE_STATUS="$segment_status"
+  : >"$FIRN_FIXTURE_CALLS"
+  if run_review "segment-$segment_status"; then status=0; else status=$?; fi
+  [[ "$status" == "$segment_status" ]]
+  cmp "$scratch/segments.expected" "$FIRN_FIXTURE_CALLS"
+done
+unset FIRN_FIXTURE_STATUS
+printf '%s %s %s\n' "$old_pin" "$segment_boundary" "$segment_base" >"$scratch/old.expected"
+export FIRN_FIXTURE_OLD_STATUS=2
+: >"$FIRN_FIXTURE_CALLS"
+if run_review first-unknown; then status=0; else status=$?; fi
+[[ "$status" == 2 ]]
+cmp "$scratch/old.expected" "$FIRN_FIXTURE_CALLS"
+unset FIRN_FIXTURE_OLD_STATUS
+mv "$scratch/runtime/versions/current/bin/galileo" "$scratch/current-galileo"
+: >"$FIRN_FIXTURE_CALLS"
+if run_review uncached; then status=0; else status=$?; fi
+[[ "$status" == 2 ]]
+grep -Fq "$current_pin" "$scratch/uncached.out"
+cmp "$scratch/old.expected" "$FIRN_FIXTURE_CALLS"
+mv "$scratch/current-galileo" "$scratch/runtime/versions/current/bin/galileo"
+[[ "$(git -C "$review_repo" worktree list --porcelain | rg -c '^worktree ')" == 1 ]]
+[[ -z "$(ls -A "$scratch/tmp")" ]]
+passed=$((passed + 1))
+printf 'ok: recorded two-pin syntax journey selects each segment snapshot, propagates exits 2 and 7, and rejects a missing cache\n'
+printf 'tests: %s passed, 0 failed\n' "$passed"
