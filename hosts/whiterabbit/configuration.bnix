@@ -65,7 +65,7 @@
             "wl-gammarelay.service" "emacs.service" "pipewire.service" "pipewire-pulse.service" "wireplumber.service"
             "xdg-desktop-portal*.service" "xdg-document-portal.service" "xdg-permission-store.service" "gvfs-daemon.service"
             "gcr-ssh-agent.service" "dbus-broker.service" "app-nm*applet@autostart.service" "activity-daemon.service"
-            "socrates-chat.service" "capacity-watchdog.service" "wc3-controller.service" "init.scope"
+            "socrates-chat.service" "capacity-watchdog.service" "wc3-controller.service" "dconf.service" "app-niri-*.scope" "init.scope"
             "laptop-runner.timer" "worker-ledger.timer" "agents-flow-stall.timer" "watch-alerts.timer" "vast-reaper.timer"
             "lane-gc.timer" "lane-gc-remote.timer" "nexus-pull.timer" "nexus-restore-test.timer" "machine-update.timer"
             "git-maintenance-nightly.timer" "agent-runtime-update.timer" "firn-delivery-liveness.timer" "model-watch.timer"

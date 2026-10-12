@@ -102,6 +102,8 @@
       "socrates-chat.service"
       "capacity-watchdog.service"
       "wc3-controller.service"
+      "dconf.service"
+      "app-niri-*.scope"
       "init.scope"
       "laptop-runner.timer"
       "worker-ledger.timer"
