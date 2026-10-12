@@ -1,9 +1,37 @@
 { config, lib, pkgs, jobRun, ... }:
 
-((homeDir: ((username: ((description: ((nightly: ((path: {
+((homeDir: ((username: ((rest: ((description: ((nightly: ((path: {
   options.myConfig.modules.capacity-watchdog.enable = lib.mkEnableOption description;
+  options.myConfig.modules.capacity-watchdog.rest.system = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "rest-check: system unit globs expected at rest; empty writes no rest.json";
+  };
+  options.myConfig.modules.capacity-watchdog.rest.user = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "rest-check: user unit globs expected at rest";
+  };
+  options.myConfig.modules.capacity-watchdog.rest.sockets = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "rest-check: listening socket globs, PROTO ADDR:PORT UNIT";
+  };
+  options.myConfig.modules.capacity-watchdog.rest.cores = lib.mkOption {
+    type = lib.types.float;
+    default = 0.02;
+    description = "rest-check: default per-unit CPU budget in cores";
+  };
+  options.myConfig.modules.capacity-watchdog.rest.budgets = lib.mkOption {
+    type = lib.types.attrsOf lib.types.float;
+    default = { };
+    description = "rest-check: per-unit CPU budgets in cores";
+  };
   config = lib.mkIf config.myConfig.modules.capacity-watchdog.enable {
     home-manager.users.${username} = ({ config, ... }: {
+      xdg.configFile = lib.optionalAttrs (rest.system != [ ]) {
+        "capacity-watchdog/rest.json".text = builtins.toJSON rest;
+      };
       systemd.user.services.capacity-watchdog = {
         Unit = {
           Description = description;
@@ -48,4 +76,4 @@
       };
     });
   };
-}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}")) "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease")) "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance")) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
+}) "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bun pkgs.git pkgs.coreutils pkgs.libnotify pkgs.systemd ]}")) "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease")) "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance")) config.myConfig.modules.capacity-watchdog.rest)) config.myConfig.modules.users.username)) config.myConfig.modules.users.homeDir)
