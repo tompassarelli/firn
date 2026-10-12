@@ -36,6 +36,10 @@ die() {
   exit 1
 }
 
+if ! command -v galileo >/dev/null 2>&1; then
+  export PATH="$PATH:${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin"
+fi
+
 for command in bash bun cmp find galileo git nix-instantiate rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
