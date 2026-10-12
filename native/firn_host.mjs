@@ -40,7 +40,7 @@ function fullHelp() {
   for (const node of nodeNames()) {
     graph += `${node}\n` + commands.filter(c => c.node === node).map(c => `  ${usageOf(c)}${c.gap}${c.summary}\n`).join('') + '\n';
   }
-  return `firn — config management\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host]          build + validate + switch\n  firn rollback <generation>  activate one exact prior generation\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
+  return `firn — config management\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host] [--dry-run]  review + build + validate + switch\n  firn rollback <generation>      activate one exact prior generation\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
 }
 
 const prewarm = new Set(['--print-warm-key', '--plan-detached', '--plan-reference-transaction', '--reference-transaction', '--worker']);
@@ -99,6 +99,13 @@ function finish(state) {
 }
 
 export function parseDispatch(args) {
+  if ((args[0] === 'rebuild' || (args[0] === 'host' && args[1] === 'rebuild')) && args.includes('--dry-run')) {
+    const words = args.filter(word => word !== '--dry-run');
+    const leaf = words.slice(words[0] === 'host' ? 2 : 1);
+    if (leaf.length <= 1 && leaf.every(word => !word.startsWith('-'))) {
+      return { steps: [execution(find('host', 'rebuild'), [...leaf, '--dry-run'])] };
+    }
+  }
   return finish(args.reduce(token, { kind: 'start' }));
 }
 

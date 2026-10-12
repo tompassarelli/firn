@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { appendFileSync, existsSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, rmdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const decoder = new TextDecoder();
 
@@ -56,7 +58,6 @@ globalThis.firn_host_append = (path, text) => {
 
 const modulePath = process.env.FIRN_REBUILD_MODULE
   ?? new URL('../lib/firn-rebuild/firn/rebuild-family.js', import.meta.url).pathname;
-const { run } = await import(modulePath);
 const args = Bun.argv.slice(2);
 const coreTools = ['agents', 'threads', 'safe-push', 'worker-sweep', 'capacity-watchdog', 'codex-lead'];
 
@@ -72,24 +73,72 @@ const missingCoreTools = () => {
   return missing.length > 0 || check.exitCode === 0 ? missing : ['(login shell check failed)'];
 };
 
+function review(previous, approved) {
+  const root = process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config/main`;
+  const git = words => Bun.spawnSync({ cmd: ['git', '-C', root, ...words], stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+  const base = previous === null ? null : git(['rev-parse', '--verify', `gen-${previous}^{commit}`]);
+  if (!base || base.exitCode !== 0) {
+    process.stderr.write('firn rebuild: last switched revision is unavailable; review cannot approve\n');
+    return 65;
+  }
+  const revision = git(['rev-parse', 'HEAD']);
+  if (revision.exitCode !== 0) return revision.exitCode;
+  const directory = mkdtempSync(join(tmpdir(), 'firn-review-'));
+  const snapshot = join(directory, 'snapshot');
+  try {
+    const added = git(['worktree', 'add', '--detach', snapshot, decoder.decode(revision.stdout).trim()]);
+    if (added.exitCode !== 0) {
+      process.stderr.write(added.stderr);
+      return added.exitCode;
+    }
+    const galileo = process.env.FIRN_GALILEO ?? `${process.env.FIRN_RUNTIME_BIN}/galileo`;
+    process.stdout.write(`firn rebuild: reviewing ${decoder.decode(revision.stdout).trim()} against last switched revision ${decoder.decode(base.stdout).trim()}\n`);
+    const status = Bun.spawnSync({ cmd: [galileo, 'review', '--base', decoder.decode(base.stdout).trim()], cwd: snapshot, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' }).exitCode;
+    if (status !== 0) return status;
+    const originalRoot = process.env.FIRN_REPO;
+    process.env.FIRN_REPO = snapshot;
+    try {
+      return approved();
+    } finally {
+      if (originalRoot === undefined) delete process.env.FIRN_REPO;
+      else process.env.FIRN_REPO = originalRoot;
+    }
+  } finally {
+    if (existsSync(snapshot)) {
+      const removed = git(['worktree', 'remove', '--force', snapshot]);
+      if (removed.exitCode !== 0) throw new Error(decoder.decode(removed.stderr));
+    }
+    rmdirSync(directory);
+  }
+}
+
 if (args[0] === 'host' && args[1] === 'rebuild') {
   const previous = systemGeneration();
-  const status = run(args);
-  const switched = status === 0 || systemGeneration() !== previous;
-  const missing = switched ? missingCoreTools() : [];
-  if (missing.length === 0) {
-    if (switched) process.stdout.write(`firn rebuild: core tools resolve in a login shell: ${coreTools.join(' ')}\n`);
-    process.exitCode = status;
+  const dryRun = args.includes('--dry-run');
+  const rebuildArgs = args.filter(arg => arg !== '--dry-run');
+  if (rebuildArgs.length > 3 || rebuildArgs.slice(2).some(arg => arg.startsWith('-'))) {
+    process.stderr.write('Usage: firn rebuild [host] [--dry-run]\n');
+    process.exitCode = 64;
   } else {
-    process.stderr.write(`\nfirn rebuild: !!! CORE TOOLS MISSING FROM A LOGIN SHELL'S PATH AFTER THE SWITCH: ${missing.join(' ')} !!!\n`);
-    if (previous === null) {
-      process.stderr.write('firn rebuild: previous system generation unknown; not rolling back\n');
+    const { run } = dryRun ? {} : await import(modulePath);
+    const status = review(previous, () => dryRun ? 0 : run(rebuildArgs));
+    const switched = !dryRun && (status === 0 || systemGeneration() !== previous);
+    const missing = switched ? missingCoreTools() : [];
+    if (missing.length === 0) {
+      if (switched) process.stdout.write(`firn rebuild: core tools resolve in a login shell: ${coreTools.join(' ')}\n`);
+      process.exitCode = status;
     } else {
-      process.stderr.write(`firn rebuild: switching back to system generation ${previous}\n`);
-      run(['host', 'rollback', previous]);
+      process.stderr.write(`\nfirn rebuild: !!! CORE TOOLS MISSING FROM A LOGIN SHELL'S PATH AFTER THE SWITCH: ${missing.join(' ')} !!!\n`);
+      if (previous === null) {
+        process.stderr.write('firn rebuild: previous system generation unknown; not rolling back\n');
+      } else {
+        process.stderr.write(`firn rebuild: switching back to system generation ${previous}\n`);
+        run(['host', 'rollback', previous]);
+      }
+      process.exitCode = 70;
     }
-    process.exitCode = 70;
   }
 } else {
+  const { run } = await import(modulePath);
   process.exitCode = run(args);
 }
