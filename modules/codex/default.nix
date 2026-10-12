@@ -67,6 +67,7 @@
       (providerAdapter "lib/codex_behavior.py")
       (providerAdapter "lib/spawn_capacity.py")
       (providerAdapter "lib/shellcmd.py")
+      (providerAdapter "lib/defaults.toml")
     ];
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
