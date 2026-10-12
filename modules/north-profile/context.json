@@ -1,0 +1,5 @@
+{
+  "window": 500000,
+  "autoCompactTokenLimit": 467000,
+  "modelMaxContextWindow": 872000
+}

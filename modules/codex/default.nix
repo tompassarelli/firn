@@ -4,6 +4,12 @@ let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   codexConfigFile = config.myConfig.modules.codex.configFile;
+  context = builtins.fromJSON (builtins.readFile ../north-profile/context.json);
+  contextWindow = if (context.window < context.modelMaxContextWindow) then context.window else context.modelMaxContextWindow;
+  renderedCodexConfigFile = pkgs.writeText "config.toml" (''
+    model_context_window = ${builtins.toString contextWindow}
+    model_auto_compact_token_limit = ${builtins.toString context.autoCompactTokenLimit}
+  '' + builtins.readFile codexConfigFile);
   agentGeneration = "${homeDir}/.local/state/north/agents/current";
   providerAdapter = adapterId: "L+ /etc/codex/hooks/${adapterId} - - - - ${agentGeneration}/provider-hooks/${adapterId}";
 in {
@@ -78,7 +84,7 @@ in {
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md";
-        ".codex/config.toml".source = codexConfigFile;
+        ".codex/config.toml".source = renderedCodexConfigFile;
         ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/harness/codex/prompts";
       };
       systemd.user.services.codex-keyring-default = {

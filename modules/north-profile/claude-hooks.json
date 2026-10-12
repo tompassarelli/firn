@@ -1,5 +1,4 @@
 {
-  "autoCompactWindow": 500000,
   "subagentPromptCacheTtl": "1h",
   "statusLine": {
     "type": "command",

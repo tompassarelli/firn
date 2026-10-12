@@ -7,6 +7,12 @@ nix module
   let username = config.myConfig.modules.users.username
   let homeDir = config.myConfig.modules.users.homeDir
   let codexConfigFile = config.myConfig.modules.codex.configFile
+  let context = builtins.fromJSON(builtins.readFile(../north-profile/context.json))
+  let contextWindow = if context.window < context.modelMaxContextWindow then context.window else context.modelMaxContextWindow
+  let renderedCodexConfigFile = pkgs.writeText("config.toml", '''
+    model_context_window = {{builtins.toString(contextWindow)}}
+    model_auto_compact_token_limit = {{builtins.toString(context.autoCompactTokenLimit)}}
+    ''' ++ builtins.readFile(codexConfigFile))
   let agentGeneration = "{homeDir}/.local/state/north/agents/current"
   let providerAdapter = (adapterId) => "L+ /etc/codex/hooks/{adapterId} - - - - {agentGeneration}/provider-hooks/{adapterId}"
   option myConfig.modules.codex.enable: enable "OpenAI Codex CLI (exact North managed runtime)"
@@ -44,4 +50,4 @@ nix module
     # an already-unlocked collection on every login. The secrets
     # service is D-Bus activated and publishes collections lazily,
     # so the command owns that wait rather than unit ordering.
-    home-manager.users.{username}: ({config, ...}) => {home.file: {".codex/AGENTS.md".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md"), ".codex/config.toml".source: codexConfigFile, ".codex/prompts".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/north/main/harness/codex/prompts")}, systemd.user.services.codex-keyring-default: {Unit: {Description: "Select an unlocked secret collection as the Secret Service default", After: ["dbus.service"]}, Service: {Type: "oneshot", RemainAfterExit: true, Environment: ["PATH={pkgs.bash}/bin:{pkgs.systemd}/bin:{pkgs.coreutils}/bin:{pkgs.gnugrep}/bin"], ExecStart: "{homeDir}/.local/share/north/bin/codex-keyring-default"}, Install: {WantedBy: ["default.target"]}}}
+    home-manager.users.{username}: ({config, ...}) => {home.file: {".codex/AGENTS.md".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md"), ".codex/config.toml".source: renderedCodexConfigFile, ".codex/prompts".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/north/main/harness/codex/prompts")}, systemd.user.services.codex-keyring-default: {Unit: {Description: "Select an unlocked secret collection as the Secret Service default", After: ["dbus.service"]}, Service: {Type: "oneshot", RemainAfterExit: true, Environment: ["PATH={pkgs.bash}/bin:{pkgs.systemd}/bin:{pkgs.coreutils}/bin:{pkgs.gnugrep}/bin"], ExecStart: "{homeDir}/.local/share/north/bin/codex-keyring-default"}, Install: {WantedBy: ["default.target"]}}}

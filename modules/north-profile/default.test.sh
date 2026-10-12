@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
-claude_projection=$repo/modules/north-profile/claude-hooks.json
+claude_projection_source=$repo/modules/north-profile/claude-hooks.json
 claude_projector=$repo/modules/north-profile/claude-hook-projector.sh
 
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/north-claude-hooks-test.XXXXXX")
 trap 'rm -r -- "$scratch"' EXIT
+claude_projection=$scratch/claude-hooks.json
+jq --slurpfile context "$repo/modules/north-profile/context.json" '.autoCompactWindow = ([$context[0].window, $context[0].modelMaxContextWindow] | min)' "$claude_projection_source" >"$claude_projection"
 target=$scratch/home/.claude/settings.json
 mkdir -p "${target%/*}"
 printf '%s\n' '{
