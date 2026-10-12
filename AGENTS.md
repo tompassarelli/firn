@@ -1,5 +1,3 @@
-profile: tooling
-
 # NixOS configuration
 
 - Keep host credentials in the private overlay with sops-nix (docs/secrets.md); firn holds no secrets.
