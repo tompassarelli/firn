@@ -1,6 +1,6 @@
 use firn/tags
 
-given flake input {name: Text} follows {input: Text} from {target: Text}
+given flake input ?name: Text follows ?input: Text from ?target: Text
 
 flake input "quickshell" follows "nixpkgs" from "nixpkgs"
 flake input "walker" follows "elephant" from "elephant"
