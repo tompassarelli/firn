@@ -85,7 +85,7 @@ function review(previous, approved) {
   if (revision.exitCode !== 0) return revision.exitCode;
   const start = decoder.decode(base.stdout).trim();
   const end = decoder.decode(revision.stdout).trim();
-  const changes = git(['log', '--reverse', '--format=%H', `${start}..${end}`, '--', 'config/galileo-revision']);
+  const changes = git(['rev-list', '--first-parent', '--reverse', `${start}..${end}`, '--', 'config/galileo-revision']);
   if (changes.exitCode !== 0) return changes.exitCode;
   const ends = [];
   for (const change of decoder.decode(changes.stdout).trim().split('\n').filter(Boolean)) {
@@ -110,15 +110,26 @@ function review(previous, approved) {
         process.stderr.write(checkout.stderr);
         return checkout.exitCode;
       }
-      const pin = readFileSync(join(snapshot, 'config/galileo-revision'), 'utf8').trim();
-      const version = (existsSync(versions) ? readdirSync(versions) : []).find(name => {
+      const pinFile = join(snapshot, 'config/galileo-revision');
+      if (!existsSync(pinFile)) {
+        process.stderr.write(`firn rebuild: ${segmentEnd} has no config/galileo-revision; review cannot approve\n`);
+        return 2;
+      }
+      const pin = readFileSync(pinFile, 'utf8').trim();
+      const cachedVersion = () => (existsSync(versions) ? readdirSync(versions) : []).find(name => {
         const cachedPin = join(versions, name, 'galileo-revision');
         return existsSync(cachedPin) && readFileSync(cachedPin, 'utf8').trim() === pin
           && existsSync(join(versions, name, 'bin/galileo'));
       });
+      let version = cachedVersion();
       if (version === undefined) {
-        process.stderr.write(`firn rebuild: no cached Galileo binary for pin ${pin}; review cannot approve\n`);
-        return 2;
+        const built = Bun.spawnSync({ cmd: ['bash', join(root, 'dotfiles/bin/firn-runtime-update'), 'galileo'], env: { ...process.env, FIRN_REPO: snapshot }, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
+        if (built.exitCode !== 0) return built.exitCode;
+        version = cachedVersion();
+        if (version === undefined) {
+          process.stderr.write(`firn rebuild: no cached Galileo binary for pin ${pin}; review cannot approve\n`);
+          return 2;
+        }
       }
       const galileo = join(versions, version, 'bin/galileo');
       process.stdout.write(`reviewing ${segmentStart}..${segmentEnd} with galileo ${pin}\n`);

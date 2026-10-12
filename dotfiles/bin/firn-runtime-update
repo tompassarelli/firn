@@ -11,18 +11,18 @@ next=""
 scope="${1:-full}"
 
 if [[ "$#" -gt 1 ]]; then
-  printf 'usage: firn-runtime-update [repo|full]\n' >&2
+  printf 'usage: firn-runtime-update [repo|full|galileo]\n' >&2
   exit 64
 fi
 case "$scope" in
-  repo|full) ;;
+  repo|full|galileo) ;;
   *)
     printf 'firn-runtime-update: unknown runtime scope: %s\n' "$scope" >&2
     exit 64
     ;;
 esac
 
-if [[ ! -x "$beagle" ]]; then
+if [[ "$scope" != galileo && ! -x "$beagle" ]]; then
   printf 'firn-runtime-update: BEAGLE_PATH has no executable bin/beagle: %s\n' \
     "$beagle_path" >&2
   exit 1
@@ -166,6 +166,7 @@ system_policy_sources=(
 system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
 
 case "$scope" in
+  galileo) selected_sources=() ;;
   repo)
     selected_sources=(
       "${dispatcher_sources[@]}"
@@ -212,11 +213,14 @@ firn_revision="$(git -C "$firn_repo" rev-parse HEAD)" || {
     "$firn_repo" >&2
   exit 1
 }
-beagle_revision="$(git -C "$beagle_path" rev-parse HEAD)" || {
-  printf 'firn-runtime-update: BEAGLE_PATH has no readable Git identity: %s\n' \
-    "$beagle_path" >&2
-  exit 1
-}
+beagle_revision=""
+if [[ "$scope" != galileo ]]; then
+  beagle_revision="$(git -C "$beagle_path" rev-parse HEAD)" || {
+    printf 'firn-runtime-update: BEAGLE_PATH has no readable Git identity: %s\n' \
+      "$beagle_path" >&2
+    exit 1
+  }
+fi
 
 mkdir -p "$versions"
 stage="$(mktemp -d "$runtime_root/.stage.XXXXXX")"
@@ -406,7 +410,7 @@ record_artifact bun bin/bun "$bun_source"
 declare -A galileo_store_paths=()
 galileo_build="$stage/.galileo-build"
 materialize_galileo
-materialize_dispatcher
+if [[ "$scope" != galileo ]]; then materialize_dispatcher; fi
 case "$scope" in
   repo)
     materialize_js repo-build firn-repo-build firn/repo-build-family.js \
@@ -506,6 +510,11 @@ for store_path in "${!galileo_store_paths[@]}"; do
   nix-store --add-root "$destination/.galileo-gcroots/${store_path##*/}" \
     --indirect --realise "$store_path" >/dev/null
 done
+
+if [[ "$scope" == galileo ]]; then
+  printf 'firn Galileo materialized: %s\n' "$destination/bin/galileo"
+  exit 0
+fi
 
 next="$runtime_root/.current.$$"
 ln -s "versions/$bundle_id" "$next"
