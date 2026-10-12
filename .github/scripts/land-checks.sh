@@ -24,6 +24,9 @@ if [ "$mode" = drift ]; then
   bash .github/scripts/host-diff.sh build
   exit
 fi
+if [ "$mode" = native ]; then
+  export FIRN_RUNTIME_BIN="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin"
+fi
 base=${SAFE_PUSH_LAND_BASE:?}
 head=${SAFE_PUSH_LAND_HEAD:?}
 declare -A seen=() mentions=()
