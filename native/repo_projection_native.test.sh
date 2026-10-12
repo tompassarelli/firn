@@ -7,6 +7,7 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-projection-test.XXXXXX")"
 cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 mkdir -p "$scratch/hosts" "$scratch/modules/sample" "$scratch/config"
+git init -q -b main "$scratch"
 cp "$repo/config/galileo-revision" "$scratch/config/galileo-revision"
 cp "$repo/flake.gal" "$scratch/flake.gal"
 cat >"$scratch/modules/sample/default.gal" <<'SOURCE'

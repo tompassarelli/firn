@@ -129,6 +129,7 @@ make_fixture() {
     "$root/modules/gamma" \
     "$root/modules/plain" \
     "$root/hosts/$host"
+  git init -q -b main "$root"
   cat >"$root/flake.bnix" <<'EOF'
 #lang beagle/nix
 (ns flake)

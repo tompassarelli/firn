@@ -87,6 +87,7 @@ module() {
 make_fixture() {
   local root="$1"
   mkdir -p "$root/config"
+  git init -q -b main "$root"
   printf 'use firn/tags\n\ncli-tools is a Tag\n' >"$root/config/tags.gal"
   module "$root" alpha '"zeta" from "github:zeta/project"' \
     '"alpha" from "github:alpha/project"'
