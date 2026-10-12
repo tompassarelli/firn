@@ -88,6 +88,7 @@ mkdir -p \
   "$fixture/modules/orphan" \
   "$fixture/hosts/alpha-host" \
   "$fixture/hosts/zeta-host"
+git init -q -b main "$fixture"
 
 cat >"$fixture/modules/alpha/default.bnix" <<'EOF'
 #lang beagle/nix
