@@ -134,7 +134,7 @@ function review(previous, approved) {
       const galileo = join(versions, version, 'bin/galileo');
       process.stdout.write(`reviewing ${segmentStart}..${segmentEnd} with galileo ${pin}\n`);
       const status = Bun.spawnSync({ cmd: [galileo, 'review', '--base', segmentStart], cwd: snapshot, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' }).exitCode;
-      if (status !== 0) return status;
+      if (status !== 0) return status ?? 2;
       segmentStart = segmentEnd;
     }
     const originalRoot = process.env.FIRN_REPO;
