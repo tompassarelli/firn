@@ -8,8 +8,9 @@ nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/theme-switcher/default.gal	1
 nixos-config/native/rebuild.bjs	1
 north/bin/agents	2
+north/bin/lane-gc-classify.test.sh	17
 north/bin/north-runtime-update	2
+north/bin/worker-sweep.test.sh	1
 north/harness/hooks/launch-critical-worktree-guard.test.py	8
-north/harness/hooks/launch-critical-worktree-guard.test.sh	5
 north/harness/hooks/spawn-capacity-guard.test.sh	4
 north/harness/scripts/agent-config-check.sh	1
