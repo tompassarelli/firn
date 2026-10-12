@@ -124,7 +124,7 @@ function review(previous, approved) {
       let version = cachedVersion();
       if (version === undefined) {
         const built = Bun.spawnSync({ cmd: ['bash', join(root, 'dotfiles/bin/firn-runtime-update'), 'galileo'], env: { ...process.env, FIRN_REPO: snapshot }, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
-        if (built.exitCode !== 0) return built.exitCode;
+        if (built.exitCode !== 0) return built.exitCode ?? 2;
         version = cachedVersion();
         if (version === undefined) {
           process.stderr.write(`firn rebuild: no cached Galileo binary for pin ${pin}; review cannot approve\n`);
