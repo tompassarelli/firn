@@ -162,6 +162,7 @@
 (def max-line-bytes Int 16777216)
 (def fifo-write-timeout-ms Int 500)
 (def poll-timeout-ms Int 250)
+(def idle-poll-timeout-ms Int 60000)
 (def poll-timeout-status Int -110)
 (def child-stop-timeout-ms Int 500)
 (def reconnect-delay-ms Int 2000)
@@ -1134,7 +1135,7 @@
          (event-pid Int) initial-event-pid
          (event-fd Int) initial-event-fd]
     (let [(ready Int)
-          (host-poll-readable [event-fd control-fd] poll-timeout-ms)]
+          (host-poll-readable [event-fd control-fd] idle-poll-timeout-ms)]
       (cond
         (= ready event-fd)
         (match (read-descriptor-line event-fd)

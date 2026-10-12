@@ -19,11 +19,36 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { dlopen, ptr } from 'bun:ffi';
 
 const decoder = new TextDecoder();
 const descriptors = new Map();
 const locks = new Map();
+const exited = new Set();
 let nextDescriptor = 100_000;
+const libc = dlopen('libc.so.6', {
+  poll: { args: ['ptr', 'u64', 'i32'], returns: 'i32' },
+  waitpid: { args: ['i32', 'ptr', 'i32'], returns: 'i32' },
+}).symbols;
+const waitStatus = new Int32Array(1);
+
+function reapExited() {
+  for (const pid of exited) {
+    if (libc.waitpid(pid, ptr(waitStatus), 1) !== 0) exited.delete(pid);
+  }
+}
+
+function waitReadable(fds, timeoutMilliseconds) {
+  const timeout = exited.size > 0
+    ? Math.min(timeoutMilliseconds, 50)
+    : timeoutMilliseconds;
+  const table = new Int32Array(fds.length * 2);
+  fds.forEach((fd, index) => {
+    table[index * 2] = fd;
+    table[index * 2 + 1] = 1;
+  });
+  libc.poll(ptr(table), fds.length, Math.max(0, Math.ceil(timeout)));
+}
 
 function errnoOf(error) {
   return Math.abs(Number(error?.errno ?? 5));
@@ -108,6 +133,7 @@ function unlock(descriptor) {
   locks.delete(descriptor);
   try { child.stdin.end(); } catch {}
   child.kill('SIGTERM');
+  exited.add(child.pid);
 }
 
 function spawnStdout(argv) {
@@ -125,6 +151,7 @@ function spawnStdout(argv) {
     'exec >"$2"; printf "%s\\n" "$$" >"$1"; shift 2; exec "$@"',
     'activity-event', pidPath, stdoutPath, ...argv,
   ], { stdin: 'ignore', stdout: 'ignore', stderr: 'inherit' });
+  exited.add(child.pid);
   const deadline = performance.now() + 250;
   let pid = 0;
   while (performance.now() < deadline) {
@@ -180,7 +207,7 @@ function readLineDeadline(descriptor, limit, timeoutMilliseconds) {
       entry.buffer = Buffer.alloc(0);
       return ['ok', line, false];
     }
-    sleep(5);
+    waitReadable([entry.fd], deadline - performance.now());
   }
   return ['error', 110];
 }
@@ -188,14 +215,17 @@ function readLineDeadline(descriptor, limit, timeoutMilliseconds) {
 function pollReadable(ids, timeoutMilliseconds) {
   const deadline = performance.now() + timeoutMilliseconds;
   while (performance.now() <= deadline) {
+    reapExited();
+    const fds = [];
     for (const id of ids) {
       const entry = descriptors.get(id);
       if (!entry) return -9;
       pump(entry, 16 * 1024 * 1024);
       if (entry.error) return -entry.error;
       if (entry.buffer.indexOf(10) >= 0 || entry.eof) return id;
+      fds.push(entry.fd);
     }
-    sleep(5);
+    waitReadable(fds, deadline - performance.now());
   }
   return -110;
 }
@@ -203,9 +233,11 @@ function pollReadable(ids, timeoutMilliseconds) {
 function fifoOpenRead(path) {
   try {
     const fd = openSync(path, constants.O_RDONLY | constants.O_NONBLOCK);
+    const writer = openSync(path, constants.O_WRONLY | constants.O_NONBLOCK);
     const descriptor = nextDescriptor++;
-    descriptors.set(descriptor,
-      { fd, child: null, buffer: Buffer.alloc(0), eof: false, fifo: true });
+    descriptors.set(descriptor, {
+      fd, writer, child: null, buffer: Buffer.alloc(0), eof: false, fifo: true,
+    });
     return descriptor;
   } catch (error) {
     return -errnoOf(error);
@@ -238,6 +270,7 @@ function closeDescriptor(descriptor) {
   descriptors.delete(descriptor);
   try {
     if (entry.child?.stdout) entry.child.stdout.destroy();
+    if (entry.writer !== undefined) closeSync(entry.writer);
     closeSync(entry.fd);
     return 0;
   } catch (error) {

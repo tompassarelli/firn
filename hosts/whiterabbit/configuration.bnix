@@ -13,7 +13,7 @@
    :myConfig.modules.networking.enable true
    :myConfig.modules.remmina.enable true
    :myConfig.modules.timezone.enable true
-   :myConfig.modules.ssh.enable true
+   :myConfig.modules.ssh.enable false
    :myConfig.modules.swap.enable true
    :myConfig.modules.tmp-retention.enable true
    :myConfig.modules.auto-upgrade.enable true
