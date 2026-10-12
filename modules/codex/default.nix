@@ -54,6 +54,7 @@
       (providerAdapter "git-stash-guard.sh")
       (providerAdapter "native-item-guard.sh")
       (providerAdapter "clipboard-guard.sh")
+      (providerAdapter "generated-policy-guard.sh")
       (providerAdapter "git-blind-stage-guard.sh")
       (providerAdapter "heavy-command-guard.sh")
       (providerAdapter "resource-safe-search-guard.sh")
