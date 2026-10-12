@@ -42,6 +42,8 @@
               "SOCRATES_CHAT_HOMESERVER=${cfg.homeserver}"
               "SOCRATES_CHAT_TOM_USER_ID=${cfg.tomUserId}"
               "SOCRATES_CHAT_TOKEN_FILE=${cfg.tokenFile}"
+              "Malloc=1"
+              "JSC_numberOfGCMarkers=1"
             ]
             (lib.optional (cfg.proxyPane != null) "SOCRATES_CHAT_PROXY_PANE=${cfg.proxyPane}")
             (lib.optional cfg.watches "SOCRATES_CHAT_WATCHES=1")

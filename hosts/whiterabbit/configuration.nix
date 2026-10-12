@@ -135,13 +135,13 @@
       "udp *:* -"
     ];
     cores = 0.02;
-    budgets = {
-      "auto-cpufreq.service" = 0.08;
-      "niri.service" = 0.06;
-      "activity-daemon.service" = 0.05;
-      "socrates-chat.service" = 0.04;
-      "wireguard-watchdog.service" = 0.03;
-    };
+    budgets = [
+      "auto-cpufreq.service 0.08"
+      "niri.service 0.06"
+      "activity-daemon.service 0.05"
+      "socrates-chat.service 0.04"
+      "wireguard-watchdog.service 0.03"
+    ];
   };
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = "evdev:input:b0018v32ACp0006*\n KEYBOARD_KEY_100c6=f10\n";

@@ -75,7 +75,7 @@
                "tcp 127.0.0.1:7070 kanata-*.service" "tcp 127.0.0.1:39847 mini-serve.service" "tcp 127.0.0.1:* wc3-controller.service"
                "udp *:* -"]
      :cores 0.02
-     :budgets {"auto-cpufreq.service" 0.08 "niri.service" 0.06 "activity-daemon.service" 0.05 "socrates-chat.service" 0.04 "wireguard-watchdog.service" 0.03}}
+     :budgets ["auto-cpufreq.service 0.08" "niri.service 0.06" "activity-daemon.service 0.05" "socrates-chat.service 0.04" "wireguard-watchdog.service 0.03"]}
    ;; Home Manager activates this user service during a system switch. Bound
    ;; that activation independently of a periodic worker which may be hung.
    ;; mkForce: home-manager's nixos module pins its own 5m at equal priority.

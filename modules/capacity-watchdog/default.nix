@@ -23,9 +23,9 @@
     description = "rest-check: default per-unit CPU budget in cores";
   };
   options.myConfig.modules.capacity-watchdog.rest.budgets = lib.mkOption {
-    type = lib.types.attrsOf lib.types.float;
-    default = { };
-    description = "rest-check: per-unit CPU budgets in cores";
+    type = lib.types.listOf lib.types.str;
+    default = [ ];
+    description = "rest-check: per-unit CPU budgets, UNIT CORES";
   };
   config = lib.mkIf config.myConfig.modules.capacity-watchdog.enable {
     home-manager.users.${username} = ({ config, ... }: {
@@ -42,7 +42,7 @@
           RestartSec = "10s";
           CPUWeight = 200;
           MemoryMax = "512M";
-          Environment = [ path ];
+          Environment = [ path "Malloc=1" "JSC_numberOfGCMarkers=1" ];
           ExecStart = "${homeDir}/.local/share/north/bin/capacity-watchdog sample";
         };
         Install = {
