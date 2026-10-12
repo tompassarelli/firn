@@ -79,7 +79,7 @@ in {
       home.file = {
         ".codex/AGENTS.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/codex/AGENTS.md";
         ".codex/config.toml".source = codexConfigFile;
-        ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/socrates/codex/prompts";
+        ".codex/prompts".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/harness/codex/prompts";
       };
       systemd.user.services.codex-keyring-default = {
         Unit = {

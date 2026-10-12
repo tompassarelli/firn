@@ -10,4 +10,4 @@ nix module
   config when config.myConfig.modules.claude.enable
     # Worker tiers by reasoning effort. A spawn can't set effort,
     # so escalation re-runs a task on the next tier's agent.
-    home-manager.users.{username}: ({config, ...}) => {home.file: {".claude/CLAUDE.md".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md"), ".claude/agents".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/north/main/socrates/claude/agents")}}
+    home-manager.users.{username}: ({config, ...}) => {home.file: {".claude/CLAUDE.md".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md"), ".claude/agents".source: config.lib.file.mkOutOfStoreSymlink("{config.home.homeDirectory}/code/north/main/harness/claude/agents")}}

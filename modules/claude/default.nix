@@ -8,7 +8,7 @@ in {
     home-manager.users.${username} = ({ config, ... }: {
       home.file = {
         ".claude/CLAUDE.md".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/state/north/agents/current/instructions/shared/AGENTS.md";
-        ".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/socrates/claude/agents";
+        ".claude/agents".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/harness/claude/agents";
       };
     });
   };

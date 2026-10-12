@@ -90,13 +90,13 @@ owner source.
 
 ## CI validation
 
-Tests follow `north:socrates/skills/testing/SKILL.md`; Firn's local check routes
+Tests follow `north:harness/skills/testing/SKILL.md`; Firn's local check routes
 are in `nixos-config:docs/verification.md`.
 
 **The agent config check lives in North** —
-`north:socrates/scripts/agent-config-check.sh` checks the shared instructions, skills,
+`north:harness/scripts/agent-config-check.sh` checks the shared instructions, skills,
 and hooks plus the Codex adapter. Run
-`~/code/north/main/socrates/scripts/agent-config-check.sh --local` to additionally verify live symlinks,
+`~/code/north/main/harness/scripts/agent-config-check.sh --local` to additionally verify live symlinks,
 the MCP registration, North's SubagentStop provider adapter, and installed
 North's OpenAI provider readiness. Normal output is a grouped summary;
 `--verbose` prints every assertion. This is the anti-rot gate; keep it green.
@@ -164,7 +164,7 @@ and users (`galileo help`, `galileo schema explain`, `galileo refs`,
 Native clients with measured smaller memory use may request an allowance
 through `machine-capacity`'s `--memory-gib` option; see the owning skill for
 admission and scope behavior. Its focused check is
-`north:socrates/skills/machine-capacity/scripts/machine-capacity.test.sh`.
+`north:harness/skills/machine-capacity/scripts/machine-capacity.test.sh`.
 
 Every dotfile has one source under `dotfiles/`. Prefer an out-of-store symlink
 for user-owned dotfiles, scripts, and live entrypoints. Use a store-managed copy

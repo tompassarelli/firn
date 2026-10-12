@@ -281,7 +281,7 @@
        "--description" "Firn agent configuration advisory check"
        "--property=Type=oneshot"
        "bash" "-c"
-       "exec \"$HOME/code/north/main/socrates/scripts/agent-config-check.sh\" --local"])))
+       "exec \"$HOME/code/north/main/harness/scripts/agent-config-check.sh\" --local"])))
 
 (defn starts-with?
   [text String

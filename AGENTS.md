@@ -18,7 +18,7 @@ Read `modules/north-profile/firn/docs/nixos-config-rules.md` for source/module/t
 
 ## Checks
 
-Tests follow `north:socrates/skills/testing/SKILL.md`; see `docs/verification.md`.
+Tests follow `north:harness/skills/testing/SKILL.md`; see `docs/verification.md`.
 After .gal edits, run `firn repo build` then `firn repo validate`.
-For agent policy, run `~/code/north/main/socrates/scripts/agent-config-check.sh`.
-For activation, run `~/code/north/main/socrates/scripts/agent-config-check.sh --local`.
+For agent policy, run `~/code/north/main/harness/scripts/agent-config-check.sh`.
+For activation, run `~/code/north/main/harness/scripts/agent-config-check.sh --local`.

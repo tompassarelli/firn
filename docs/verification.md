@@ -1,6 +1,6 @@
 # Verification
 
-Automated tests follow `north:socrates/skills/testing/SKILL.md`: keep only its
+Automated tests follow `north:harness/skills/testing/SKILL.md`: keep only its
 five kinds with a unique mutant kill; delete scaffolding. Run affected tests
 once locally and suites, sweeps and properties on CI or the farm on every push.
 Never retry flakes to green, weaken expectations or use wall time as a budget.
