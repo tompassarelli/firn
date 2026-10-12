@@ -19,7 +19,7 @@
   };
   options.myConfig.modules.capacity-watchdog.rest.cores = lib.mkOption {
     type = lib.types.float;
-    default = 0.02;
+    default = builtins.fromJSON "0.02";
     description = "rest-check: default per-unit CPU budget in cores";
   };
   options.myConfig.modules.capacity-watchdog.rest.budgets = lib.mkOption {

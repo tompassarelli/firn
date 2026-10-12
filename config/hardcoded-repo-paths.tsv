@@ -8,9 +8,9 @@ nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/theme-switcher/default.bnix	1
 nixos-config/modules/theme-switcher/default.gal	1
 nixos-config/native/rebuild.bjs	1
+north/bin/agents	2
 north/bin/north-runtime-update	2
 north/socrates/hooks/launch-critical-worktree-guard.test.py	8
 north/socrates/hooks/launch-critical-worktree-guard.test.sh	5
 north/socrates/hooks/spawn-capacity-guard.test.sh	4
 north/socrates/scripts/agent-config-check.sh	1
-north/bin/agents	1

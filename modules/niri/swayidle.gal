@@ -2,7 +2,8 @@ nix module
   arguments: config, lib, pkgs, ...
   let username = config.myConfig.modules.users.username
   let busy = "{config.myConfig.modules.users.homeDir}/.local/share/north/bin/agents-busy"
+  let capacity = "{pkgs.bun}/bin/bun {config.myConfig.modules.users.homeDir}/.claude/skills/machine-capacity/scripts/machine-capacity.mjs mode"
   config when config.myConfig.modules.niri.enable
     # Idle never locks or blanks the screen while an agent
     # workflow is running; suspend still locks.
-    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.swayidle: {Unit: {Description: "Idle manager for Wayland", PartOf: ["graphical-session.target"], After: ["graphical-session.target"], Requisite: ["graphical-session.target"]}, Service: {ExecStart: "{pkgs.swayidle}/bin/swayidle -w timeout 601 '{busy} || niri msg action power-off-monitors' timeout 600 '{busy} || swaylock -f' before-sleep 'swaylock -f'", Restart: "on-failure"}, Install: {WantedBy: ["niri.service"]}}}
+    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.swayidle: {Unit: {Description: "Idle manager for Wayland", PartOf: ["graphical-session.target"], After: ["graphical-session.target"], Requisite: ["graphical-session.target"]}, Service: {ExecStart: "{pkgs.swayidle}/bin/swayidle -w timeout 601 '{busy} || niri msg action power-off-monitors' timeout 600 '{busy} || swaylock -f' timeout 600 '{capacity} away >/dev/null' resume '{capacity} present >/dev/null' before-sleep 'swaylock -f'", Restart: "on-failure"}, Install: {WantedBy: ["niri.service"]}}}
