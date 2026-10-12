@@ -31,6 +31,7 @@ in {
               pkgs.openssh
               pkgs.python3
               pkgs.git
+              pkgs.bun
             ]}:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin"
             "LAPTOP_RUNNER_PLACEMENT=${cfg.placement}"
           ];
