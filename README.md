@@ -6,16 +6,18 @@
   </picture>
 </p>
 
-**firn is a NixOS framework. Modules are written in Beagle (`.bnix`) or Clause, and the `firn` CLI catches option typos and type errors at the source line, before `nixos-rebuild` runs.**
+**firn is a NixOS framework. Modules are written in Galileo (`.gal`), and the `firn` CLI catches option typos and type errors at the source line, before `nixos-rebuild` runs.**
 
-It keeps the standard NixOS module model and adds a small Racket DSL
-([beagle/nix](https://github.com/tompassarelli/beagle)) for authoring.
+It keeps the standard NixOS module model. A module or host is a Galileo
+source that states facts (`firefox is tagged browsers`, `whiterabbit turns on
+pipewire`) and the NixOS module it compiles to; `galileo build` writes the
+committed `.nix`.
 
 ```
 $ firn rebuild
-modules/printing/default.bnix:6:7: unknown option services.pipwire.alsa.enable
+modules/printing/default.gal:6:7: unknown option services.pipwire.alsa.enable
   did you mean: services.pipewire.alsa.enable or services.pipewire.pulse.enable?
-hosts/whiterabbit/configuration.bnix:11:47: type mismatch at boot.loader.systemd-boot.consoleMode:
+hosts/whiterabbit/configuration.gal:11:47: type mismatch at boot.loader.systemd-boot.consoleMode:
   "atuo" not in enum {…} — did you mean "auto"?
 ```
 
@@ -73,15 +75,19 @@ enabled without an overlay value fails evaluation. See [docs/secrets.md](docs/se
 
 ```bash
 nix flake init -t github:tompassarelli/firn     # drops template/ in cwd
-git clone https://github.com/tompassarelli/beagle ../beagle    # compiler + validator
+git clone https://github.com/tompassarelli/galileo ../galileo  # firn's compiler and checker
+git clone https://github.com/tompassarelli/beagle ../beagle    # compiles the CLI's native/*.bjs
+firn-runtime-update                              # builds galileo at config/galileo-revision
 # rename the template's placeholder host to <host>: its directory under hosts/
 # and its nixosConfigurations entry in flake.nix
 cp /etc/nixos/hardware-configuration.nix hosts/<host>/hardware-configuration.nix
-# edit hosts/<host>/configuration.bnix and hosts/<host>/enabled-tags.bnix
+# edit hosts/<host>/configuration.gal
 firn repo build && nixos-rebuild switch --flake .#<host>
 ```
 
-`BEAGLE_PATH` overrides the sibling-clone location (default `~/code/beagle/main`).
+`FIRN_GALILEO_REPO` and `BEAGLE_PATH` override the sibling-clone locations
+(defaults `~/code/galileo/main` and `~/code/beagle/main`). Beagle compiles only
+the CLI's `native/*.bjs` until that code is ported to TypeScript.
 On macOS, `lib.mkDarwinSystem` builds a `darwinConfigurations` entry instead.
 
 ## Agent tooling
@@ -100,7 +106,7 @@ for the full grid, or `firn <node>` for one entity.
 ```bash
 firn rebuild [host]           # build, validate and switch the current host
 firn rollback <generation>    # activate one exact prior generation
-firn repo build               # regenerate .nix from .bnix
+firn repo build               # regenerate .nix from .gal
 firn repo validate            # lint, option paths, types and packages
 firn repo diff all            # re-emit .nix and diff it against the committed copy
 firn host impact [<host>]     # what a rebuild would change
@@ -116,10 +122,13 @@ firn secret list all          # encrypted secret names under secrets/
 ## Architecture
 
 **Module** = atom (one package or service, in `modules/<name>/`).
-**Tags** = composition (a module declares `:tags`; hosts select tags; the
-resolver unions memberships minus a per-host disabled list).
-**Host** = leaf (`configuration.bnix` + `enabled-tags.bnix`). `.bnix` is the
-source and `.nix` is generated; both are committed. Edit the `.bnix`.
+**Tags** = composition (a module states `firefox is tagged browsers`; a host's
+`_generated-enables.gal` states `whiterabbit enables desktop`, `adds river to
+desktop` and `drops mako from desktop`; the resolver unions the enabled tags'
+members with those edits).
+**Host** = leaf (`configuration.gal`, which may also state `whiterabbit turns on
+pipewire` or `turns off`). `.gal` is the source and `.nix` is generated; both
+are committed. Edit the `.gal`.
 
 → [docs/architecture.md](docs/architecture.md) for the resolver chain and repo layout,
 and [docs/TAGS.md](docs/TAGS.md) for tag composition.
@@ -128,14 +137,14 @@ and [docs/TAGS.md](docs/TAGS.md) for tag composition.
 
 - [docs/secrets.md](docs/secrets.md): key layout and the bring-your-own-key recipe
 - [docs/TAGS.md](docs/TAGS.md): tag-driven composition and resolution
-- [tompassarelli/beagle](https://github.com/tompassarelli/beagle): the DSL, compiler, validator and schema extractor
+- [tompassarelli/galileo](https://github.com/tompassarelli/galileo): the language, compiler, checker and schema extractor
 - `firn --help` and `firn schema explain <path>`: the CLI is self-documenting
 
 ## Tradeoffs
 
-- One sibling-repo dependency (`../beagle`).
-- Two languages: Racket s-expressions and Nix concepts.
-- Two artifacts per file (`.bnix` and `.nix`, both committed).
+- Two sibling-repo dependencies (`../galileo` for configuration, `../beagle` for the CLI until its port).
+- Two languages: Galileo sources and the Nix module concepts they compile to.
+- Two artifacts per file (`.gal` and `.nix`, both committed).
 
 ## Inspired by
 

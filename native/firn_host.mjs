@@ -40,7 +40,7 @@ function fullHelp() {
   for (const node of nodeNames()) {
     graph += `${node}\n` + commands.filter(c => c.node === node).map(c => `  ${usageOf(c)}${c.gap}${c.summary}\n`).join('') + '\n';
   }
-  return `firn — config management\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host] [--dry-run]  review + build + validate + switch\n  firn rollback <generation>      activate one exact prior generation\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
+  return `firn — config management with galileo\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host] [--dry-run]  review + build + validate + switch\n  firn rollback <generation>      activate one exact prior generation\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
 }
 
 const prewarm = new Set(['--print-warm-key', '--plan-detached', '--plan-reference-transaction', '--reference-transaction', '--worker']);

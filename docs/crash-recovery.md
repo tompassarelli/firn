@@ -28,7 +28,7 @@ fix; dropped in 7a5e18d). Crashes predate the flag (stable 9-day runs happened
 *without* it), so it was never the cause. The BIOS UMA buffer is the legit
 "give the iGPU dedicated VRAM" knob; `sg_display` is unrelated.
 
-**Capture config in place** (`modules/boot/default.bnix`) — the live stack turns a
+**Capture config in place** (`modules/boot/default.gal`) — the live stack turns a
 silent freeze into a captured PANIC, then auto-reboots:
 
 - **watchdog→panic** — `kernel.hardlockup_panic=1`, `kernel.softlockup_panic=1`,

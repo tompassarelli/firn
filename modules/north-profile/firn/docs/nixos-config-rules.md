@@ -26,7 +26,7 @@ loop for live tools.
   the bytes. An edit that can safely take effect through reload or restart must
   not require a generation merely to copy those bytes into the store.
 - A rebuild is for a real system-generation change. It is never the delivery
-  channel for North, Beagle, or another hot-loop checkout. A request whose
+  channel for North, Galileo, or another hot-loop checkout. A request whose
   purpose is code adoption identifies a missing promotion/reload channel.
 - Purity applies when publishing a generation: the rebuild consumes a committed
   snapshot and switches the exact verified closure. It does not require the
@@ -116,8 +116,8 @@ cannot disagree:
   the provider CLI's own launch environment — exporting inside a running
   session does nothing.
 
-Killed = every authoring guard no-ops (beagle SessionStart handshake,
-Firn system policy, agent-spawn guard, and tripwire)
+Killed = every authoring guard no-ops (Firn system policy, agent-spawn
+guard, and tripwire)
 — used to pin a neutral, confound-free session.
 
 ## Adding new wiring
@@ -146,18 +146,19 @@ and users (`galileo help`, `galileo schema explain`, `galileo refs`,
 ## Configuration architecture
 
 - Use the `myConfig.modules.*` namespace and keep one package or service per
-  module. Multi-file modules separate option declarations in `default.bnix`
-  from guarded configuration in `<name>.bnix`.
-- Compose modules only through declared `:tags`, `:tags-opt-in`, and
-  `:tag-overrides`. Hosts enable tags; explicit host disables subtract from the
+  module. Multi-file modules separate option declarations in `default.gal`
+  from guarded configuration in `<name>.gal`.
+- Compose modules only through `firn/tags` facts: `<module> is tagged <tag>`,
+  `<module> can opt into <tag>` and `<tag> sets <path> to <value> for
+  <module>`. Hosts enable tags; explicit host disables subtract from the
   union. Nothing proxies enablement through a bundle.
 - Add new modules to `whiterabbit` unless the operator names another host.
 - Let the flake's dynamic imports discover a new module directory; do not edit
   the flake to register it.
-- Git-add every new `.bnix` and generated `.nix` before evaluation. Untracked
+- Git-add every new `.gal` and generated `.nix` before evaluation. Untracked
   files are invisible to Nix flakes.
-- Co-locate flake inputs in module `:flake-inputs`; never hand-edit generated
-  input sections in `flake.bnix`.
+- Co-locate flake inputs in the module as `<module> needs flake input "<name>"
+  from "<url>"`; never hand-edit generated input sections in `flake.nix`.
 
 ## Dotfiles and commands
 

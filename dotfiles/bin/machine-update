@@ -70,7 +70,7 @@ if [[ -z "$(git status --porcelain)" ]]; then
 else
   while IFS= read -r -d '' path; do
     case "$path" in
-      flake.lock|*.bnix|*.gal|*.nix) git add -- "$path" ;;
+      flake.lock|*.gal|*.nix) git add -- "$path" ;;
       *) printf 'machine-update: unexpected generated change: %s\n' "$path" >&2; exit 1 ;;
     esac
   done < <(git ls-files --modified --others --exclude-standard -z)

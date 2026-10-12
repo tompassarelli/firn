@@ -1,334 +1,127 @@
 # Tags — composition model
 
 Tags are the **only** composition primitive in firn. A module joins zero or
-more tags by declaring them in its `.bnix` source; a host enables a list of
-tags; the resolver computes the active module set by union-then-subtract.
+more tags with facts in its `.gal` source; a host enables tags with facts in
+its `_generated-enables.gal`; the resolver computes the active module set by
+union-then-subtract. The vocabulary is Galileo's `firn/tags` library, which
+every source loads with `use firn/tags`.
 
 The legacy `myConfig.bundles.*` pattern (per-bundle sub-options + `mkDefault`
-proxies) has been removed — both the `bundles/` directory and the `bundle` CLI
-node are gone. The audit that drove the schema decisions still lives at the
-bottom of this document for historical context.
+proxies) has been removed; both the `bundles/` directory and the `bundle` CLI
+node are gone.
 
 ---
 
 ## TL;DR
 
-```clojure
-;; modules/firefox/default.bnix — module joins tags
-:tags [browsers gui-only]
-:tag-overrides {browsers {:myConfig.modules.firefox.default true}}
+```
+# modules/firefox/default.gal — module joins a tag
+firefox is tagged browsers
 
-;; hosts/whiterabbit/enabled-tags.bnix — host enables tags
-{:enabled  [terminal
-            [browsers -gjoa]
-            [theming -nerd-fonts]]
- :disabled [piper]}
+# modules/chrome/default.gal — module joins a tag only when a host adds it
+chrome can opt into browsers
+
+# hosts/whiterabbit/_generated-enables.gal — host enables tags and edits them
+whiterabbit enables desktop
+whiterabbit adds river to desktop
+whiterabbit drops mako from desktop
+whiterabbit disables blender
 ```
 
-Resolution: every module that declares a tag in `:tags` is enabled when the
-host enables that tag, unless the host writes `-<module>` in that tag's edit
-list or lists the module in `:disabled`. Modules with `:tags-opt-in` only join
-when the host writes `+<module>` in a matching tag.
+Resolution: every module tagged with an enabled tag is on, unless the host
+drops it from that tag or disables it. A module that can only opt into a tag
+joins when the host adds it to that tag.
 
 ---
 
-## Module-side shape
+## Module-side facts
 
-`modules/<name>/default.bnix` may carry three tag-related clauses. All three are
-optional; a module with no tags is reachable only via direct host wiring or via
-another module's `imports`.
+All are optional; a module with no tags is reachable only through a host's
+`turns on` fact or another module's `imports`.
 
-```clojure
-#lang beagle/nix
-(ns default)
+- `<module> is tagged <tag>`: default-on membership. When a host enables the
+  tag, the module is on unless the host drops or disables it.
+- `<module> can opt into <tag>`: opt-in membership. The module joins only when
+  the host states `<host> adds <module> to <tag>`. Use it for "this module
+  makes sense for tag T, but not every T host should get it", such as a second
+  browser under `browsers`.
+- `<module> supports <platform>`: on a platform that does not allow every
+  module (`darwin`), only supported modules can be enabled. `config/tags.gal`
+  declares the tags and platforms.
 
-(nix/module [config lib pkgs ...]
-  {:options.myConfig.modules.firefox.enable
-    (lib.mkEnableOption "Enable Firefox browser")
+Tags are flat, kebab-case and declared once in `config/tags.gal` as
+`<tag> is a Tag`.
 
-   ;; ---- TAG MEMBERSHIP ----
-   :tags        [browsers gui-only]              ;; default-on memberships
-   :tags-opt-in [headless-ok]                    ;; opt-in-only memberships
-   :tag-overrides                                ;; per-tag value-overrides
-     {browsers {:myConfig.modules.firefox.default true}}
-
-   :config
-     (lib.mkIf config.myConfig.modules.firefox.enable
-       { ;; package + service wiring …
-        })})
-```
-
-### `:tags`
-
-A vector of bare symbols. Each entry is a tag this module joins by default.
-When a host enables one of these tags, the module is enabled — unless the host
-explicitly writes `-firefox` in that tag's edit list or lists `firefox` in
-`:disabled`.
-
-Naming convention: kebab-case, no namespace prefix. Tags are flat; there is no
-hierarchy.
-
-### `:tags-opt-in`
-
-Same shape as `:tags`, but the membership only activates when the host writes
-`+firefox` in the tag's edit list. This is for "this module makes sense for tag
-T but I don't want every T host to get it by default" — e.g. a beta browser
-under `browsers`, or a heavy LSP variant under `dev`.
-
-Omit the clause when empty. Do not write `:tags-opt-in []`.
-
-### `:tag-overrides`
-
-A map keyed by tag-symbol. Each value is an attrset of `option-path => value`
-pairs that should be applied (as `mkDefault`) when the module is enabled
-**because of that tag**. The audit found 9 cases that need this:
-
-- 8 in `bundles/browsers/default.bnix` — every browser module exports a
-  `.default` bool (mark-as-default-browser) and the bundle proxied a
-  `<browser>.default` slot through. Under the new model, the `firefox` module
-  declares `:tag-overrides {browsers {:myConfig.modules.firefox.default true}}`
-  and the resolver sets `firefox.default = true` whenever `browsers` is the
-  reason firefox is on.
-- 1 in `bundles/theming/default.bnix` — `stylix.chosenTheme` is a string-enum
-  value-override, modelled the same way.
-
-The remaining 132 mkDefault hits in the legacy bundles are pure enable-wiring
-and collapse into plain `:tags` membership — no override needed.
-
-Overrides apply only when the tag is the *default-on* reason for the module
-being active. A module pulled in via `+name` does **not** get the override.
-This keeps "I opted in manually" semantically distinct from "the tag claimed
-me."
+A tag can also set a value for a module it enabled by default:
+`<tag> sets <path> to <value> for <module>`. The host then gets that value; a
+module added with `adds` does not.
 
 ---
 
-## Host-side shape
+## Host-side facts
 
-`hosts/<host>/enabled-tags.bnix`:
+`hosts/<host>/_generated-enables.gal` holds the host's tag facts; `firn tag`
+and `firn module` edit it.
 
-```clojure
-#lang beagle/nix
-(ns enabled-tags)
+- `<host> enables <tag>`: turn on the tag's default-on members.
+- `<host> drops <module> from <tag>`: remove the module from this tag's
+  contribution only; another enabled tag that includes it still counts.
+- `<host> adds <module> to <tag>`: add an opt-in member. The checker rejects it
+  unless the module `can opt into` that tag and is supported on the host.
+- `<host> disables <module>`: off no matter which tags would pull it in.
 
-{:enabled
-  [terminal                                            ;; bare = defaults, no edits
-   [browsers -gjoa +qutebrowser-experimental]          ;; vector = edits applied
-   [theming -nerd-fonts]
-   dev]
- :disabled [piper auto-upgrade]}
-```
-
-### `:enabled`
-
-A vector of entries. Each entry is either:
-
-- A **bare tag symbol** (`terminal`, `dev`) — enable the tag with no edits.
-  Every module that lists this tag in `:tags` is activated.
-- A **vector** `[<tag> <flag>…]` — enable the tag with per-tag edits. Each flag
-  is a symbol prefixed `-` or `+`:
-  - `-mname` removes `mname` from this tag's default-on set. Scoped to this
-    tag — if `mname` is also pulled in by another enabled tag, that one still
-    counts. To kill the module everywhere, put it in `:disabled`.
-  - `+mname` adds `mname` to this tag, but only if `mname`'s `:tags-opt-in`
-    list includes this tag. Otherwise the validator errors out.
-
-### `:disabled`
-
-A vector of module names. Applied **after** the union. A module here is off no
-matter how many tags would activate it. Use for "I never want this module on
-this machine," independent of tag mix.
+`hosts/<host>/configuration.gal` may also state `<host> turns on <module>` or
+`<host> turns off <module>`. `turns on` enables a module with no tag;
+`turns off` wins over every tag. A host may not state both for one module.
 
 ---
 
-## Resolution algorithm
+## Resolution
 
 ```
-active := union over each enabled-tag T of (
-  defaults := { m | T ∈ m.:tags }
-  minuses  := { x | -x ∈ T's edit-flags }
-  pluses   := { x | +x ∈ T's edit-flags AND T ∈ x.:tags-opt-in }
-  (defaults \ minuses) ∪ pluses
-)
-enabled-modules := active \ host.:disabled
+enabled by default through T := host enables T, module is tagged T,
+                                 and host does not drop module from T
+enabled by T                  := enabled by default through T,
+                                 or host enables T, adds module to T,
+                                 and module can opt into T
+tag-enabled                   := enabled by some T, supported on the host,
+                                 not disabled and not turned off
+enabled                       := tag-enabled, or turned on
 ```
 
-Notes:
-
-- **Per-tag minus.** `-firefox` under `browsers` only removes firefox from
-  browsers' contribution; if `gui-only` also lists firefox, firefox stays on.
-- **Validated plus.** `+qutebrowser-experimental` under `browsers` fails the
-  validator if the `qutebrowser-experimental` module doesn't list `browsers`
-  in `:tags-opt-in`.
-- **Disabled is absolute.** `:disabled` wins over every tag, opt-in or
-  otherwise.
-
-For each active module M, the resolver also walks each tag T where M ∈ T's
-defaults (not pluses), and applies any `M.:tag-overrides[T]` entries as
-`mkDefault` on M's options. The host's own settings beat `mkDefault`, so any
-explicit value the host writes in its `configuration.bnix` still wins.
+Galileo's `firn/tags` library states these as rules; `galileo build` writes
+the result to `hosts/<host>/_generated-enables.nix` as
+`myConfig.modules.<module>.enable` settings.
 
 ---
 
 ## Worked examples
 
-### 1. Kitchen-sink: enable a tag, get everything by default
-
-Modules:
-
-```clojure
-;; modules/git/default.bnix
-:tags [dev terminal]
-
-;; modules/ripgrep/default.bnix
-:tags [dev terminal]
-
-;; modules/firefox/default.bnix
-:tags [browsers gui-only]
-```
-
-Host:
-
-```clojure
-;; hosts/whiterabbit/enabled-tags.bnix
-{:enabled [dev terminal browsers]}
-```
-
-Resolved active set: `{git, ripgrep, firefox}`. No edits, no opt-ins, no
-disables. The host gets the tag's full default-on roster.
-
-### 2. Edited tag: enable a tag minus one module
-
-Modules (same as above).
-
-Host:
-
-```clojure
-{:enabled [dev
-           [browsers -firefox]]}
-```
-
-Resolved: `{git, ripgrep}`. Firefox is on `browsers` by default, but the host
-subtracted it under `browsers`. Note that if firefox also had `:tags [gui-only]`
-and the host enabled `gui-only`, firefox would still be active via that tag.
-
-### 3. Opt-in plus: pull in a module that isn't default-on
-
-Modules:
-
-```clojure
-;; modules/qutebrowser-experimental/default.bnix
-:tags-opt-in [browsers]                  ;; never on by default
-```
-
-Host:
-
-```clojure
-{:enabled [[browsers +qutebrowser-experimental]]}
-```
-
-Resolved active set includes `qutebrowser-experimental`. Without the `+`,
-enabling `browsers` alone would not pull it in (because it lives in
-`:tags-opt-in`, not `:tags`).
-
-If the host wrote `+qutebrowser-experimental` under a tag the module does
-**not** list in `:tags-opt-in` (e.g. `[terminal +qutebrowser-experimental]`),
-the validator rejects the host config with a `tag/opt-in mismatch` error.
-
-### 4. Hard disable: tag would pull a module in, but `:disabled` wins
-
-Modules:
-
-```clojure
-;; modules/piper/default.bnix
-:tags [dev]
-```
-
-Host:
-
-```clojure
-{:enabled  [dev]
- :disabled [piper]}
-```
-
-Resolved: piper is **off**. Even though `dev` would activate it by default,
-the global `:disabled` list applies last and outranks every tag-based
-contribution.
-
-This is the right tool when you want a module gone everywhere it touches —
-no matter how many tags would otherwise pull it in.
-
-### 5. Tag-override interaction (browsers case)
-
-```clojure
-;; modules/firefox/default.bnix
-:tags [browsers gui-only]
-:tag-overrides {browsers {:myConfig.modules.firefox.default true}}
-```
-
-Host A:
-
-```clojure
-{:enabled [browsers]}
-```
-
-Resolved: `firefox` is on (via `browsers` defaults), and `firefox.default` is
-set to `true` via the override. The host can still write
-`:myConfig.modules.firefox.default false` in its `configuration.bnix` to win
-over the `mkDefault`.
-
-Host B:
-
-```clojure
-{:enabled [gui-only]}
-```
-
-Resolved: `firefox` is on (via `gui-only` defaults), but `firefox.default` is
-**not** set by the override — the `:tag-overrides` map only fires for the
-specific tag that listed it, and `gui-only` has no override entry.
-
-Host C:
-
-```clojure
-{:enabled [[browsers +firefox]]}   ;; hypothetical: firefox in :tags-opt-in
-```
-
-If `firefox` lived in `:tags-opt-in [browsers]` rather than `:tags [browsers]`,
-a `+firefox` plus would **not** trigger the override. Overrides apply to
-default-on memberships only.
+1. **Enable a tag.** `whiterabbit enables browsers` turns on every module
+   tagged `browsers`.
+2. **Drop one member.** Add `whiterabbit drops firefox from browsers`: firefox
+   is off unless another enabled tag also includes it.
+3. **Opt in.** `chrome can opt into browsers` keeps chrome off until
+   `whiterabbit adds chrome to browsers`. Adding it to a tag it cannot opt into
+   fails the check.
+4. **Hard disable.** `whiterabbit disables piper` keeps piper off whatever tags
+   are enabled.
 
 ---
 
 ## Editing host tags from the CLI
 
 ```bash
-firn tag enable  <tag>            # add <tag> to :enabled (no flags)
-firn tag disable <tag>            # remove <tag> from :enabled entirely
-firn tag opt-in  <tag> <module>   # add +<module> under <tag>
-firn tag opt-out <tag> <module>   # add -<module> under <tag>
-firn tag status                   # show :enabled / :disabled + resolved active set
+firn tag enable  <tag>            # add "<host> enables <tag>"
+firn tag disable <tag>            # remove it
+firn tag opt-in  <tag>+<module>   # add "<host> adds <module> to <tag>"
+firn tag opt-out <tag>+<module>   # add "<host> drops <module> from <tag>"
+firn tag status <host>            # the host's tag facts and resolved modules
 
-firn module enable  <module>      # remove <module> from :disabled (un-blacklist)
-firn module disable <module>      # append <module> to :disabled (hard off)
+firn module enable  <module>      # remove "<host> disables <module>"
+firn module disable <module>      # add "<host> disables <module>"
 ```
 
-Tag edits mutate `hosts/<current-host>/enabled-tags.bnix` in place through the
-AST-aware, idempotent tag-edit parser. Module enable/disable edits the host's
-`:disabled` set directly.
-
----
-
-## Validation
-
-- `firn repo validate` checks each module's `:tags` and `:tags-opt-in` entries are
-  bare symbols, that `:tag-overrides` paths exist in the schema, and that no
-  module declares the same tag in both `:tags` and `:tags-opt-in`.
-- `firn repo validate` checks each host's `:enabled` flags reference real modules,
-  that every `+name` flag matches a module whose `:tags-opt-in` lists this
-  tag, and that every name in `:disabled` is a real module.
-- `firn tag resolve <host>` is the runtime debugger — it prints the per-tag
-  contributions, the unions, the disabled subtraction, and the final active
-  set.
-
-The reference fixture lives at
-[`docs/fixtures/tags-example.bnix`](fixtures/tags-example.bnix) and is the
-canonical syntax that the parser must accept.
+`firn tag resolve <host>` prints which tag enabled each module; use it when
+"why is module X enabled?" is not obvious. `firn repo validate` runs
+`galileo check`, which enforces the requirements in `firn/tags`.

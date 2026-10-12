@@ -10,7 +10,7 @@ There's a tiered loop — pick the right rung for the change.
 **Rung 1 — fast (~5s, default for most edits):**
 
 ```bash
-firn repo build       # regenerate any .nix whose .bnix changed
+firn repo build       # regenerate any .nix whose .gal changed
 firn repo validate    # schema-driven path + type check
 ```
 
@@ -19,7 +19,7 @@ firn repo validate    # schema-driven path + type check
 **Rung 2 — drift check (when refactoring source or checking generated output):**
 
 ```bash
-firn repo diff             # re-emit every .bnix and unified-diff vs committed .nix
+firn repo diff             # re-emit every .gal and unified-diff vs committed .nix
 ```
 
 **Rung 3 — full evaluation (only when Rung 1 isn't sufficient — e.g. you touched flake inputs, complex module logic, evaluation-time conditionals, or anything the static checker can't see):**
@@ -55,17 +55,14 @@ reused, and builds only changed derivations. `select` reports the same compariso
 without building. Removed hosts are reported; added hosts are built. A change
 touching only `docs/` or `*.test.sh`/`*.test.py` skips host evaluation. Both
 snapshots evaluate in parallel, and the base result is reused from
-`~/.cache/firn/host-drvs` by Git tree hash and Nix version. Compiler drift is
-skipped when a committed clean tree's compiler input hash (every `.bnix`,
-`.clause`, `.nix` and `native/` blob, the installed runtime version and the
-Beagle revision) already passed, recorded in `~/.cache/firn/compiler-drift`.
+`~/.cache/firn/host-drvs` by Git tree hash and Nix version.
 
 Snapshots use path flakes to exclude Git revision metadata from the comparison;
 deployment still uses committed snapshots through `firn rebuild`. File references
 must use individual paths rather than strings carrying the entire flake root.
 `checks.x86_64-linux.host-whiterabbit` also exposes the system build as a reusable
 check. The syntax check hashes only Nix files, so docs edits reuse it. Compiler
-drift remains outside the pure checks because its Beagle and Clause runtimes are
+drift remains outside the pure checks because the Galileo runtime is
 installed out of store.
 
 The schema transaction suite keeps the SHA-256 `abc` vector from
@@ -76,7 +73,7 @@ Generated pure-core properties use fixed seeds: 128 inputs locally and 512
 in CI (rebuild uses 16 and 64). Fixed scenario tables run once; changing only
 an identifier is not a generated property. Views checks child-result
 conservation with generated statuses and streams. Decoder references use
-recorded Beagle schemas and NixOS generation output in `native/fixtures/`.
+recorded schema-extractor captures and NixOS generation output in `native/fixtures/`.
 Authoring checks real Git staging and compiled Galileo/Nix behavior.
 
 `modules/nexus-checks/default.test.sh` checks recorded OpenSSH/loginctl output

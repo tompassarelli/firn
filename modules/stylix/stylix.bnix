@@ -1,9 +1,0 @@
-#lang beagle/nix
-
-(ns stylix)
-
-(nix/module [config lib pkgs ...]
-  {:config
-    (lib.mkIf config.myConfig.modules.stylix.enable
-      {:environment.systemPackages
-        (nix/with pkgs [adwaita-icon-theme gnome-themes-extra])})})
