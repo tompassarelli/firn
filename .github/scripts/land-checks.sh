@@ -26,7 +26,7 @@ if [ "$mode" = drift ]; then
 fi
 base=${SAFE_PUSH_LAND_BASE:?}
 head=${SAFE_PUSH_LAND_HEAD:?}
-declare -A seen=()
+declare -A seen=() mentions=()
 mapfile -t native_tests < <(git ls-files -- 'native/*.test.sh')
 while IFS= read -r -d '' path; do
   tests=()
@@ -43,8 +43,10 @@ while IFS= read -r -d '' path; do
       name=${path##*/}
       stem=${name%%.*}
       stem=${stem%_host}; stem=${stem%_test}; stem=${stem%_driver}; stem=${stem%_family}; stem=${stem%_native}
+      mentions=()
+      while IFS= read -r test; do mentions[$test]=1; done < <(rg -lF -- "$name" "${native_tests[@]}")
       for test in "${native_tests[@]}"; do
-        if [[ "${test##*/}" == "$stem"*.test.sh ]] || rg -Fq -- "$name" "$test"; then tests+=("$test"); fi
+        if [[ "${test##*/}" == "$stem"*.test.sh ]] || [ -n "${mentions[$test]:-}" ]; then tests+=("$test"); fi
       done
       ;;
     *) continue ;;
