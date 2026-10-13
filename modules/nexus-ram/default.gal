@@ -1,0 +1,25 @@
+use firn/tags
+
+nexus-ram is a Module
+nexus-ram is tagged server
+
+nix module
+  arguments: config, lib, pkgs, ...
+  let username = config.myConfig.modules.users.username
+  let homeDir = config.myConfig.modules.users.homeDir
+  option myConfig.modules.nexus-ram.enable: enable "nexus-ram: every minute append memory, swap, zram, PSI and resident agent CLI usage to ~/.local/state/nexus-ram"
+  config when config.myConfig.modules.nexus-ram.enable
+    systemd.services.nexus-ram
+      description: "Append one nexus-ram row: MemAvailable, swap, zram, memory PSI and resident agent CLI PSS"
+      path: [pkgs.python3, pkgs.coreutils]
+      serviceConfig
+        Type: "oneshot"
+        User: username
+        Nice: 10
+        TimeoutStartSec: "50s"
+        ExecStart: "{homeDir}/.local/share/north/bin/nexus-ram record"
+    systemd.timers.nexus-ram
+      wantedBy: ["timers.target"]
+      timerConfig
+        OnCalendar: "minutely"
+        AccuracySec: "1s"
