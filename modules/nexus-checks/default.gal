@@ -11,13 +11,14 @@ nix module
   let checks = pkgs.writeShellApplication({name: "nexus-checks", runtimeInputs: [pkgs.coreutils, pkgs.gnugrep, pkgs.gnused, pkgs.gawk, pkgs.systemd, pkgs.openssh, pkgs.lynis, pkgs.jq, "/run/current-system/sw"], runtimeEnv: {WG_PEERS: "10.77.0.2=laptop 10.77.0.3=phone 10.77.0.4=gex45", AUTHORIZED_KEYS: authorizedKeys, USER_NAME: username, BACKUP_MARKER: "/var/lib/nexus-backup/last-ok", SECURITY_LOCK: "{config.myConfig.modules.users.homeDir}/code/nixos-config/main/flake.lock"}, text: builtins.readFile(./nexus-checks.sh)})
   let heartbeat = pkgs.writeShellApplication({name: "nexus-heartbeat", runtimeInputs: [pkgs.coreutils, pkgs.gnugrep, "/run/current-system/sw"], runtimeEnv: {CHECKS_STATE: stateDir, HEARTBEAT_REPO: "tompassarelli/firn"}, text: builtins.readFile(./nexus-heartbeat.sh)})
   let timer = (calendar) => {wantedBy: ["timers.target"], timerConfig: {OnCalendar: calendar, Persistent: true, RandomizedDelaySec: "2m"}}
+  let notifyMask = pkgs.writeTextDir("lib/systemd/system/nexus-checks.service.d/10-nexus-notify.conf", "")
   option myConfig.modules.nexus-checks.enable: enable "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat"
   config when config.myConfig.modules.nexus-checks.enable
+    systemd.packages: [notifyMask]
     environment.systemPackages: [checks]
     systemd.services
       "nexus-checks"
         description: "Run the nexus standing checks and push alerts on change"
-        unitConfig.OnFailure: ""
         serviceConfig
           Type: "oneshot"
           StateDirectory: "nexus-checks"

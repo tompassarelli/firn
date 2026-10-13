@@ -5,14 +5,15 @@ nexus-vulnix is a Module
 nix module
   arguments: config, lib, pkgs, jobRun, ...
   let scanner = pkgs.writeShellApplication({name: "nexus-vulnix", runtimeInputs: [pkgs.vulnix, pkgs.python3, "/run/current-system/sw"], text: "exec python3 {./nexus-vulnix.py} \"$@\""})
+  let notifyMask = pkgs.writeTextDir("lib/systemd/system/nexus-vulnix.service.d/10-nexus-notify.conf", "")
   option myConfig.modules.nexus-vulnix.enable: enable "Weekly system vulnerability report with alerts for new high/critical CVSSv3 findings"
   config when config.myConfig.modules.nexus-vulnix.enable
+    systemd.packages: [notifyMask]
     environment.systemPackages: [scanner]
     systemd.services."nexus-vulnix"
       description: "Scan the system closure for new high/critical vulnerabilities"
       wants: ["network-online.target"]
       after: ["network-online.target"]
-      unitConfig.OnFailure: ""
       serviceConfig
         Type: "oneshot"
         StateDirectory: "nexus-vulnix"

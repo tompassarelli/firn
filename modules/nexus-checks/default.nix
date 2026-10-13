@@ -43,14 +43,15 @@ let
       RandomizedDelaySec = "2m";
     };
   };
+  notifyMask = pkgs.writeTextDir "lib/systemd/system/nexus-checks.service.d/10-nexus-notify.conf" "";
 in {
   options.myConfig.modules.nexus-checks.enable = lib.mkEnableOption "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat";
   config = lib.mkIf config.myConfig.modules.nexus-checks.enable {
+    systemd.packages = [ notifyMask ];
     environment.systemPackages = [ checks ];
     systemd.services = {
       "nexus-checks" = {
         description = "Run the nexus standing checks and push alerts on change";
-        unitConfig.OnFailure = "";
         serviceConfig = {
           Type = "oneshot";
           StateDirectory = "nexus-checks";

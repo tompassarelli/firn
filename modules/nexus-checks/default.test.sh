@@ -94,3 +94,45 @@ jq -n --argjson now "$(date +%s)" '{root:"root",nodes:{root:{inputs:{nixpkgs:"se
 run_checks "$work" >/dev/null
 [[ "$alerts" == 2 && "$(cat "$work/status")" == ok ]]
 printf 'ok: stale-lock owning job fails, deduplicates and recovers\n'
+
+nix build --impure --no-link --json --expr '
+  let
+    flake = builtins.getFlake (toString ./.);
+    pkgs = import flake.inputs.nixpkgs { system = builtins.currentSystem; };
+    config.myConfig.modules = {
+      nexus-alerts.enable = true;
+      nexus-checks.enable = true;
+      nexus-vulnix.enable = true;
+    };
+    module = name: (import (./modules + "/${name}/default.nix") {
+      inherit config pkgs;
+      lib = pkgs.lib;
+      jobRun = name: command: command;
+    }).config.content.systemd.packages;
+  in pkgs.symlinkJoin {
+    name = "nexus-notification-dropins";
+    paths = builtins.concatLists (map module ["nexus-alerts" "nexus-checks" "nexus-vulnix"]);
+  }
+' > "$work/dropins.json"
+root="$work/systemd-root"
+mkdir -p "$root/etc/systemd/system"
+cp -rL --no-preserve=mode "$(jq -r '.[0].outputs.out' "$work/dropins.json")/lib/systemd/system/." "$root/etc/systemd/system/"
+printf '#!/bin/sh\nexit 0\n' > "$root/fixture"
+chmod +x "$root/fixture"
+for unit in nexus-checks nexus-vulnix control 'nexus-notify@'; do
+  printf '[Unit]\nDefaultDependencies=no\n[Service]\nType=oneshot\nExecStart=/fixture\n' > "$root/etc/systemd/system/$unit.service"
+done
+SYSTEMD_LOG_LEVEL=debug systemd-analyze verify --root="$root" --generators=no \
+  nexus-checks.service nexus-vulnix.service control.service > "$work/systemd-parse.log" 2>&1
+python3 - "$work/systemd-parse.log" <<'PYTHON'
+from pathlib import Path
+import re
+import sys
+log = Path(sys.argv[1]).read_text()
+for name in ("nexus-checks", "nexus-vulnix", "control"):
+    match = re.search(r"→ Unit " + name + r"\.service:\n(.*?)(?=\n\s*→ Unit |\Z)", log, re.S)
+    assert match, f"systemd did not parse {name}"
+    failures = re.findall(r"^\s*OnFailure: (.*)$", match[1], re.M)
+    assert bool(failures) == (name == "control"), (name, failures)
+print("ok: systemd type-wide notification remains on control and is masked for both deduplicating jobs")
+PYTHON
