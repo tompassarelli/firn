@@ -73,6 +73,7 @@ in {
       (providerAdapter "heavy-command-guard.sh")
       (providerAdapter "resource-safe-search-guard.sh")
       (providerAdapter "modern-search-guard.sh")
+      (providerAdapter "worker-tier-guard.sh")
       (providerAdapter "session-kill-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
       (providerAdapter "chat-post.sh")
