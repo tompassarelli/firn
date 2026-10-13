@@ -66,6 +66,8 @@ in {
       (providerAdapter "git-stash-guard.sh")
       (providerAdapter "native-item-guard.sh")
       (providerAdapter "clipboard-guard.sh")
+      (providerAdapter "desktop-action-guard.sh")
+      (providerAdapter "lib/desktop_action.py")
       (providerAdapter "generated-policy-guard.sh")
       (providerAdapter "git-blind-stage-guard.sh")
       (providerAdapter "heavy-command-guard.sh")
