@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.libreoffice-fresh ];
     };
   };
-  options."myConfig"."modules"."libreoffice"."enable" = lib.mkEnableOption "Enable LibreOffice office suite";
+  options.myConfig.modules.libreoffice.enable = lib.mkEnableOption "libreoffice";
 }

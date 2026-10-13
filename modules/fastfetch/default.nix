@@ -19,5 +19,5 @@
       };
     };
   };
-  options."myConfig"."modules"."fastfetch"."enable" = lib.mkEnableOption "Enable fastfetch system info display";
+  options.myConfig.modules.fastfetch.enable = lib.mkEnableOption "fastfetch";
 }

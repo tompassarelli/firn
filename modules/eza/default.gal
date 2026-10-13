@@ -5,4 +5,3 @@ tags: cli-tools
 config
   "environment"
     "systemPackages": [pkgs.eza]
-"enable": "Enable eza (modern ls replacement)"

@@ -26,4 +26,3 @@ config
 option "myConfig"."modules"."nyxt"."default": Bool
   default: false
   description: "Set Nyxt as the default browser via MIME types"
-"enable": "Enable Nyxt browser"

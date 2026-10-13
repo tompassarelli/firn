@@ -22,5 +22,5 @@
     default = false;
     description = "Set Chrome as the default browser via MIME types";
   };
-  options."myConfig"."modules"."chrome"."enable" = lib.mkEnableOption "Enable Google Chrome browser";
+  options.myConfig.modules.chrome.enable = lib.mkEnableOption "chrome";
 }

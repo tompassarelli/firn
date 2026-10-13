@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.btop ];
     };
   };
-  options."myConfig"."modules"."btop"."enable" = lib.mkEnableOption "Enable btop system monitor";
+  options.myConfig.modules.btop.enable = lib.mkEnableOption "btop";
 }

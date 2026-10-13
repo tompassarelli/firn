@@ -5,4 +5,3 @@ tags: cli-tools
 config
   "environment"
     "systemPackages": [pkgs.dust]
-"enable": "Enable dust disk usage analyzer"

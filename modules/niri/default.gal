@@ -124,7 +124,6 @@ let niri-viewport-nav = pkgs.writers.writePython3Bin("niri-viewport-nav", {libra
   if __name__ == "__main__":
       main()
   ''')
-enable: "Enable niri compositor configuration"
 imports: [./xwayland-satellite.nix, ./swaybg.nix, ./swayidle.nix]
 config
   programs.niri.enable: true

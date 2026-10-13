@@ -47,5 +47,5 @@
     default = false;
     description = "Set Nyxt as the default browser via MIME types";
   };
-  options."myConfig"."modules"."nyxt"."enable" = lib.mkEnableOption "Enable Nyxt browser";
+  options.myConfig.modules.nyxt.enable = lib.mkEnableOption "nyxt";
 }

@@ -19,5 +19,5 @@
       };
     };
   };
-  options."myConfig"."modules"."tealdeer"."enable" = lib.mkEnableOption "Enable tealdeer (tldr client)";
+  options.myConfig.modules.tealdeer.enable = lib.mkEnableOption "tealdeer";
 }

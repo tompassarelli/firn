@@ -5,4 +5,3 @@ tags: cli-tools
 config
   "environment"
     "systemPackages": [pkgs.procs]
-"enable": "Enable procs (modern ps replacement)"

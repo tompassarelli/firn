@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.eza ];
     };
   };
-  options."myConfig"."modules"."eza"."enable" = lib.mkEnableOption "Enable eza (modern ls replacement)";
+  options.myConfig.modules.eza.enable = lib.mkEnableOption "eza";
 }

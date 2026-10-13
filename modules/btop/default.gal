@@ -5,4 +5,3 @@ tags: cli-tools
 config
   "environment"
     "systemPackages": [pkgs.btop]
-"enable": "Enable btop system monitor"

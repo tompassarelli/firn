@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.bc ];
     };
   };
-  options."myConfig"."modules"."bc"."enable" = lib.mkEnableOption "Enable bc arbitrary-precision calculator language";
+  options.myConfig.modules.bc.enable = lib.mkEnableOption "bc";
 }

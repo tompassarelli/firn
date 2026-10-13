@@ -5,4 +5,3 @@ tags: cli-tools
 config
   "environment"
     "systemPackages": [pkgs.tree]
-"enable": "Enable tree file tree display utility"

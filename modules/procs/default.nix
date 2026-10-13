@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.procs ];
     };
   };
-  options."myConfig"."modules"."procs"."enable" = lib.mkEnableOption "Enable procs (modern ps replacement)";
+  options.myConfig.modules.procs.enable = lib.mkEnableOption "procs";
 }

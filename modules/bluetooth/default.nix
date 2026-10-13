@@ -23,5 +23,5 @@
       };
     };
   };
-  options."myConfig"."modules"."bluetooth"."enable" = lib.mkEnableOption "Enable Bluetooth configuration";
+  options.myConfig.modules.bluetooth.enable = lib.mkEnableOption "bluetooth";
 }

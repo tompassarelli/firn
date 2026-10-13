@@ -3,7 +3,6 @@ use firn/tags
 tags: browsers
 firefox needs flake input "nur" from "github:nix-community/NUR"
 
-enable: "Enable Firefox browser"
 option myConfig.modules.firefox.default: Bool
   default: false
   description: "Set Firefox as the default browser via MIME types"

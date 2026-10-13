@@ -6,5 +6,5 @@
       "systemPackages" = [ pkgs.dust ];
     };
   };
-  options."myConfig"."modules"."dust"."enable" = lib.mkEnableOption "Enable dust disk usage analyzer";
+  options.myConfig.modules.dust.enable = lib.mkEnableOption "dust";
 }

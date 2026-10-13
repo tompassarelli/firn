@@ -16,4 +16,3 @@ config
 option "myConfig"."modules"."librewolf"."default": Bool
   default: false
   description: "Set LibreWolf as the default browser via MIME types"
-"enable": "Enable LibreWolf browser"

@@ -15,4 +15,3 @@ config
   "services"
     "blueman"
       "enable": true
-"enable": "Enable Bluetooth configuration"

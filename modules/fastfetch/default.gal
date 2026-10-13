@@ -8,4 +8,3 @@ config
   "home-manager"
     "users"
       {config.myConfig.modules.users.username}: (hm) => {"xdg": {"configFile": {"fastfetch/config.jsonc": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/fastfetch/config.jsonc")}}}}
-"enable": "Enable fastfetch system info display"

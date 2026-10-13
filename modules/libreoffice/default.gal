@@ -5,4 +5,3 @@ tags: office
 config
   "environment"
     "systemPackages": [pkgs.libreoffice-fresh]
-"enable": "Enable LibreOffice office suite"

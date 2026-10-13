@@ -16,4 +16,3 @@ config
 option "myConfig"."modules"."chrome"."default": Bool
   default: false
   description: "Set Chrome as the default browser via MIME types"
-"enable": "Enable Google Chrome browser"

@@ -22,5 +22,5 @@
     default = false;
     description = "Set Qutebrowser as the default browser via MIME types";
   };
-  options."myConfig"."modules"."qutebrowser"."enable" = lib.mkEnableOption "Enable Qutebrowser";
+  options.myConfig.modules.qutebrowser.enable = lib.mkEnableOption "qutebrowser";
 }
