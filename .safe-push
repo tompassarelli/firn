@@ -1,6 +1,6 @@
 [ci]
 	budget = tests.yml 345
 [land]
-	check = native/,.github/scripts/host-diff.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --class heavy --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh native
-	check = modules/,hosts/,native/nix/,flake.bnix,flake.nix,flake.lock,.github/scripts/host-diff.sh,.github/scripts/land-checks.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --class heavy --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh drift
+	check = native/,.github/scripts/host-diff.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh native
+	check = modules/,hosts/,native/nix/,flake.bnix,flake.nix,flake.lock,.github/scripts/host-diff.sh,.github/scripts/land-checks.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh drift
 	check = dotfiles/bin/ :: bash .github/scripts/land-checks.sh dotfiles

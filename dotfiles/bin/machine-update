@@ -40,11 +40,6 @@ select_lock() {
 main() {
   local mode=${1:---write} source_dir repo state candidates work south container lane branch south_branch south_lane
   case "$mode" in --write|--apply|--plan) ;; *) echo 'usage: machine-update [--write|--apply|--plan]' >&2; return 2 ;; esac
-  if [[ "$mode" != --plan && "${MACHINE_UPDATE_ADMITTED:-0}" != 1 ]]; then
-    exec bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
-      --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
-      env MACHINE_UPDATE_ADMITTED=1 "$0" "$@"
-  fi
   source_dir="$(dirname "$(readlink -f "$0")")"
   repo="$(git -C "$source_dir" rev-parse --show-toplevel)"
   state="${XDG_STATE_HOME:-$HOME/.local/state}/machine-updates"
@@ -86,8 +81,10 @@ main() {
     jq -e --argjson now "$(date +%s)" '. as $l | $l.nodes[$l.nodes[$l.root].inputs.nixpkgs].locked.lastModified | type == "number" and ($now - . <= 259200)' flake.lock >/dev/null || {
       echo 'machine-update: selected nixpkgs is older than three days; refusing a missing security bump' >&2; return 1;
     }
-    firn repo build
-    firn repo validate
+    bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
+      --owner automatic-machine-update-build --timeout-seconds 1800 -- firn repo build
+    bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
+      --owner automatic-machine-update-validate --timeout-seconds 1800 -- firn repo validate
     if [[ -n "$(git status --porcelain)" ]]; then
       while IFS= read -r -d '' path; do
         case "$path" in
@@ -129,4 +126,11 @@ main() {
   fi
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then main "$@"; fi
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  if [[ "${1:---write}" == --apply ]]; then
+    exec bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
+      --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
+      bash -c 'source "$0"; main "$@"' "$0" "$@"
+  fi
+  main "$@"
+fi
