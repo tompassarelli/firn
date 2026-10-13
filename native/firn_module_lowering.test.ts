@@ -30,7 +30,7 @@ test('module loader reports authoritative compact and literal Unicode source loc
       const refs = run('refs', name);
       expect(refs.exitCode, refs.stderr.toString()).toBe(0);
       const output = refs.stdout.toString();
-      expect(output).toContain(`${path}:${enable ? 3 : 4}: implied option ${name}`);
+      expect(output).toContain(`${path}:${enable ? 3 : 6}: implied option ${name}`);
       expect(output).toContain(`${path}:6:1: implied config.${name}`);
       const line = source.split('\n')[6];
       const column = [...line.slice(0, line.indexOf(`config.${name}`))].length + 1;

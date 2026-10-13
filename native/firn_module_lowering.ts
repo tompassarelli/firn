@@ -96,7 +96,8 @@ export function lowerModuleSourceMapped(name: string, source: string, declaredEl
       });
       if (file === 'default' && explicit < 0 && !hasEnable) {
         const ending = lowered.at(-1)?.text === '' ? lowered.length - 1 : lowered.length;
-        lowered.splice(ending, 0, synthetic(`  option myConfig.modules.${module}.enable: enable "${module}"`));
+        const config = lines.slice(boundary).find(line => line.text === 'config')?.parts[0] ?? anchor;
+        lowered.splice(ending, 0, lineOf(generated(`  option myConfig.modules.${module}.enable: enable "${module}"`, config)));
       }
       output = [...facts, explicit >= 0 ? lines[explicit] : synthetic('nix module'), ...lowered];
     }
