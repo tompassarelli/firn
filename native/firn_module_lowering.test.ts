@@ -45,6 +45,11 @@ test('module loader reports authoritative compact and literal Unicode source loc
       expect(stderr).toContain(`${path}:8:${errorColumn}:`);
       expect(stderr).toContain('    ' + broken.split('\n')[7]);
       expect(stderr).not.toContain('    ' + '  ' + broken.split('\n')[7]);
+      writeFileSync(join(root, path), source.replace('option count: Int', 'option count: Int\noption count: Int'));
+      const duplicate = run('build');
+      expect(duplicate.exitCode).not.toBe(0);
+      expect(duplicate.stderr.toString()).toContain(`${path}:6:1:`);
+      expect(duplicate.stderr.toString()).toContain(`already declared at ${path}:5`);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
