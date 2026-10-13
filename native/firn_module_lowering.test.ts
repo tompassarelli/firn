@@ -51,6 +51,44 @@ test('module loader reports authoritative compact and literal Unicode source loc
       expect(duplicate.stderr.toString()).toContain(`${path}:6:1:`);
       expect(duplicate.stderr.toString()).toContain(`already declared at ${path}:5`);
     }
+    const proofSource = `use firn/tags
+type Node
+given Node is seeded
+derived Node holds
+Seed is a Node
+Gate is a Node
+Goal is a Node
+Seed is seeded
+rule seeded: ?n holds
+  when ?n is seeded
+rule bypass: Goal holds
+  when Seed holds
+requirements
+  Goal holds requires Gate holds
+enable: "sample"
+config
+  message: "sample"
+`;
+    const git = (...args: string[]) => {
+      const result = Bun.spawnSync(['git', ...args], { cwd: root });
+      expect(result.exitCode, result.stderr.toString()).toBe(0);
+    };
+    git('init', '-q');
+    writeFileSync(join(root, path), proofSource.replace('Seed is seeded\n', ''));
+    git('add', 'config/galileo-revision', 'flake.gal', path);
+    git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Proof baseline');
+    writeFileSync(join(root, path), proofSource);
+    for (const result of [run('check'), run('review', '--base', 'HEAD')]) {
+      expect(result.exitCode, result.stderr.toString()).toBe(1);
+      const output = result.stdout.toString();
+      expect(output).toContain('Goal holds requires Gate holds');
+      expect(output).toContain('modules/sample/default/bypass (modules/sample/default:11)');
+      expect(output).toContain('modules/sample/default/seeded (modules/sample/default:9)');
+      expect(output).toContain('Seed is seeded    modules/sample/default:8');
+    }
+    const why = run('why', 'Goal', 'holds');
+    expect(why.exitCode, why.stderr.toString()).toBe(0);
+    expect(why.stdout.toString()).toContain('modules/sample/default/bypass (modules/sample/default.gal:11)');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
