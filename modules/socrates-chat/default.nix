@@ -15,6 +15,7 @@ let
     pkgs.jq
     pkgs.sqlite
     pkgs.ripgrep
+    pkgs.gitleaks
     pkgs.iproute2
     pkgs.coreutils
   ]}";
@@ -37,6 +38,11 @@ in {
       type = lib.types.nullOr lib.types.str;
       default = null;
       description = "Optional proxy tmux socket and pane, in socket:pane form";
+    };
+    laptopCommand = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Answer laptop open|close|status from Tom in Matrix; enable it on the placement ledger host only";
     };
     watches = lib.mkOption {
       type = lib.types.bool;
@@ -65,6 +71,7 @@ in {
             ]
             (lib.optional (cfg.proxyPane != null) "SOCRATES_CHAT_PROXY_PANE=${cfg.proxyPane}")
             (lib.optional cfg.watches "SOCRATES_CHAT_WATCHES=1")
+            (lib.optional cfg.laptopCommand "SOCRATES_CHAT_LAPTOP=1")
           ];
           ExecStart = "${homeDir}/.local/share/north/bin/socrates-chat run";
         };

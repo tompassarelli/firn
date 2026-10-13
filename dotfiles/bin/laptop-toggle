@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -uo pipefail
+if out=$(laptop toggle 2>&1); then
+  exec notify-send --app-name=laptop 'Laptop availability' "${out#laptop: }"
+fi
+notify-send --app-name=laptop --urgency=critical 'Laptop toggle failed' "$out"
+exit 1

@@ -109,7 +109,7 @@ in {
       restartUnits = [ "ntfy-sh.service" ];
       content = ''
         NTFY_AUTH_USERS='phone:${ph.ntfy-phone-hash}:user,nexus:${ph.ntfy-publisher-hash}:user'
-        NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw'
+        NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw,phone:socrates-laptop:ro,nexus:socrates-laptop:wo'
         NTFY_AUTH_TOKENS='phone:${ph.ntfy-phone-token}:phone,nexus:${ph.ntfy-publisher-token}:publisher'
 
       '';
