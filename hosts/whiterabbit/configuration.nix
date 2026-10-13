@@ -104,7 +104,7 @@
       "activity-daemon.service"
       "socrates-chat.service"
       "capacity-watchdog.service"
-      "wc3-controller.service"
+      "padbridge.service"
       "dconf.service"
       "app-niri-*.scope"
       "init.scope"
@@ -136,7 +136,7 @@
       "* *:5355 systemd-resolved.service"
       "tcp 127.0.0.1:7070 kanata-*.service"
       "tcp 127.0.0.1:39847 mini-serve.service"
-      "tcp 127.0.0.1:* wc3-controller.service"
+      "tcp 127.0.0.1:* padbridge.service"
       "udp *:* -"
     ];
     cores = builtins.fromJSON "0.02";
