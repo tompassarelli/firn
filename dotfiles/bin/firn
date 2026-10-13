@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == rebuild && "${2:-}" == --landed ]]; then
+  if [[ "$#" != 3 ]]; then
+    printf 'usage: firn rebuild --landed SHA\n' >&2
+    exit 64
+  fi
+  firn_source="$(dirname "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")")"
+  exec /run/current-system/sw/bin/python3 "$firn_source/modules/landed-rebuild/landed-rebuild.py" client "$3"
+fi
+
 firn_repo="${FIRN_REPO:-}"
 if [[ -z "$firn_repo" ]]; then
   checkout="$(git rev-parse --show-toplevel 2>/dev/null || true)"
