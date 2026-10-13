@@ -1,0 +1,72 @@
+{ config, lib, pkgs, ... }:
+
+let
+  cfg = config.myConfig.modules.nexus-paperclip-notify;
+  username = config.myConfig.modules.users.username;
+  notify = pkgs.writeShellApplication {
+    name = "nexus-paperclip-notify";
+    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.coreutils ];
+    runtimeEnv = {
+      PAPERCLIP_API = cfg.apiUrl;
+      PAPERCLIP_COMPANY = cfg.company;
+      PAPERCLIP_LINK_BASE = cfg.linkBase;
+      NTFY_URL = "http://10.77.0.1:2586";
+      NTFY_TOPIC = cfg.topic;
+      NTFY_TOKEN_FILE = config.sops.secrets.ntfy-publisher-token.path;
+      FAIL_GRACE_SECONDS = "600";
+    };
+    text = builtins.readFile ./nexus-paperclip-notify.sh;
+  };
+in {
+  options.myConfig.modules.nexus-paperclip-notify.enable = lib.mkEnableOption "push each new Paperclip item waiting on Tom (questions, confirmations, approvals, blocked issues) to ntfy once, with a deep link";
+  options.myConfig.modules.nexus-paperclip-notify.company = lib.mkOption {
+    type = lib.types.str;
+    description = "Paperclip company id whose attention feed is watched";
+  };
+  options.myConfig.modules.nexus-paperclip-notify.apiUrl = lib.mkOption {
+    type = lib.types.str;
+    default = "http://127.0.0.1:3100";
+    description = "Loopback Paperclip API base";
+  };
+  options.myConfig.modules.nexus-paperclip-notify.linkBase = lib.mkOption {
+    type = lib.types.str;
+    default = "http://10.77.0.1:3100";
+    description = "Paperclip UI base the notification click link points at";
+  };
+  options.myConfig.modules.nexus-paperclip-notify.topic = lib.mkOption {
+    type = lib.types.str;
+    default = "normal";
+    description = "ntfy topic the phone already reads";
+  };
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = [ notify ];
+    systemd.services.nexus-paperclip-notify = {
+      description = "Push new Paperclip items waiting on Tom to ntfy";
+      after = [ "ntfy-sh.service" ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = username;
+        StateDirectory = "nexus-paperclip-notify";
+        StateDirectoryMode = "0700";
+        ExecStart = "${notify}/bin/nexus-paperclip-notify";
+      };
+    };
+    systemd.timers.nexus-paperclip-notify = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "1min";
+        OnUnitActiveSec = "30s";
+        AccuracySec = "5s";
+      };
+    };
+    security.polkit.extraConfig = ''
+      polkit.addRule(function(action, subject) {
+        if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&
+            action.lookup('unit') == 'nexus-paperclip-notify.service' && action.lookup('verb') == 'start') {
+          return polkit.Result.YES;
+        }
+      });
+
+    '';
+  };
+}
