@@ -333,6 +333,6 @@ globalThis.activity_host_call = (operation, args) => {
 };
 
 const modulePath = process.env.FIRN_ACTIVITY_MODULE
-  ?? new URL('../lib/firn-activity/activity/native.js', import.meta.url).pathname;
+  ?? new URL('../lib/firn-activity/activity/activity_native.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 process.exitCode = run(Bun.argv.slice(2));

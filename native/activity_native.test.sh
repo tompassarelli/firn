@@ -3,20 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'activity-native: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
-
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-activity-native.XXXXXX")"
 daemon_one=""
 daemon_two=""
@@ -68,41 +54,25 @@ for command in awk bash cmp git jq od rg seq timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle-build-all" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
-
-json="$beagle/native-core/src/native/json.bjs"
-core="$repo/native/activity_core.bjs"
-driver="$repo/native/activity_driver.bjs"
-focus_test="$repo/native/activity_focus_test.bjs"
-native="$repo/native/activity_native.bjs"
+core="$repo/native/activity_core.ts"
+driver="$repo/native/activity_driver.ts"
+focus_test="$repo/native/activity_focus_test.ts"
+native="$repo/native/activity_native.ts"
+json="$repo/native/native_json.ts"
 host="$repo/native/activity_host.mjs"
 bun="${FIRN_BUN:-$(command -v bun || true)}"
 executable="$scratch/activity"
 modules="$scratch/modules"
 [[ -n "$bun" && -x "$bun" ]] || die "Bun runtime is unavailable"
 
-printf 'activity-native: building controlled Beagle/JS modules\n' >&2
+printf 'activity-native: staging controlled Bun/TypeScript modules\n' >&2
 mkdir -p "$modules/activity"
-timeout --foreground 120 "$beagle/bin/beagle-build-all" \
-  "$json" "$core" "$driver" "$focus_test" "$native" --out "$modules" \
-  >"$scratch/build.out" 2>"$scratch/build.err" \
-  || {
-    sed -n '1,300p' "$scratch/build.err" >&2
-    die "Beagle/JS compilation failed"
-  }
-[[ -f "$modules/activity/native.js" ]] \
-  || die "activity JS module was not produced"
-mkdir -p "$modules/node_modules/beagle"
-cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-  "$modules/node_modules/beagle/core.js"
-printf '%s\n' '{"type":"module"}' \
-  >"$modules/node_modules/beagle/package.json"
+cp -- "$core" "$driver" "$focus_test" "$native" "$json" "$modules/activity/"
 
 printf 'activity-native: post-reorder focus behavior\n' >&2
-FIRN_ACTIVITY_TEST_MODULE="$modules/activity/focus-test.js" \
+FIRN_ACTIVITY_TEST_MODULE="$modules/activity/activity_focus_test.ts" \
 timeout --foreground 30 "$bun" --eval \
-  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m["run-scenarios"]();' \
+  'const m = await import(process.env.FIRN_ACTIVITY_TEST_MODULE); process.exitCode = m.runScenarios();' \
   >"$scratch/focus-test.out" 2>"$scratch/focus-test.err" \
   || die "post-reorder focus behavior failed"
 [[ ! -s "$scratch/focus-test.err" ]] \
@@ -111,7 +81,7 @@ timeout --foreground 30 "$bun" --eval \
 cat >"$executable" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-export FIRN_ACTIVITY_MODULE='$modules/activity/native.js'
+export FIRN_ACTIVITY_MODULE='$modules/activity/activity_native.ts'
 exec '$bun' '$host' "\$@"
 EOF
 chmod +x "$executable"
@@ -311,4 +281,4 @@ set -e
 [[ ! -s "$scratch/unreachable.err" ]] \
   || die "unreachable daemon wrote stderr"
 
-printf 'ok: Beagle/JS Activity preserves FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'
+printf 'ok: Bun/TypeScript Activity preserves FIFO order, reconnect, lease takeover, persistence, snapshot, and CLI timeout\n'

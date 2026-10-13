@@ -11,10 +11,11 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import type { AuthoringBridge } from './authoring_native.ts';
 
-const ok = fields => Object.freeze({ tag: 'ok', ...fields });
-const failure = error => Object.freeze({ tag: 'error', errno: errnoOf(error) });
-const errnoOf = error => {
+const ok = (fields: Record<string, unknown>) => Object.freeze({ tag: 'ok' as const, ...fields });
+const failure = (error: unknown) => Object.freeze({ tag: 'error' as const, errno: errnoOf(error) });
+const errnoOf = (error: any) => {
   const value = Number(error?.errno);
   if (Number.isInteger(value) && value !== 0) return Math.abs(value);
   const known = { E2BIG: 7, EACCES: 13, EEXIST: 17, EFBIG: 27, EINVAL: 22,
@@ -22,26 +23,7 @@ const errnoOf = error => {
   return known[error?.code] ?? 5;
 };
 
-globalThis.host_getenv = (bridge, name) => bridge.getenv(name);
-globalThis.host_path_kind = (bridge, path) => bridge.pathKind(path);
-globalThis.host_read_text_bounded = (bridge, path, limit) =>
-  bridge.readTextBounded(path, limit);
-globalThis.host_make_parent_directories = (bridge, path) =>
-  bridge.makeParentDirectories(path);
-globalThis.host_write_text_atomic = (bridge, path, text) =>
-  bridge.writeTextAtomic(path, text);
-globalThis.host_list_directory_bounded = (bridge, path, limit) =>
-  bridge.listDirectoryBounded(path, limit);
-globalThis.host_run_inherit = (bridge, argv) => bridge.runInherit(argv);
-globalThis.host_run_galileo = (bridge, root, argv) => bridge.runGalileo(root, argv);
-globalThis.host_out = (bridge, text) => bridge.out(text);
-globalThis.host_err = (bridge, text) => bridge.err(text);
-globalThis.host_result_tag = result => String(result.tag);
-globalThis.host_result_int = (result, field) => Number(result[field]);
-globalThis.host_result_string = (result, field) => String(result[field]);
-globalThis.host_result_strings = (result, field) => result[field];
-
-const bridge = Object.freeze({
+const bridge: AuthoringBridge = Object.freeze({
   getenv(name) { return process.env[name] ?? null; },
   out(text) { process.stdout.write(text); },
   err(text) { process.stderr.write(text); },
@@ -112,6 +94,6 @@ const bridge = Object.freeze({
 });
 
 const modulePath = process.env.FIRN_AUTHORING_MODULE
-  ?? new URL('../lib/firn-authoring-native.js', import.meta.url).pathname;
+  ?? new URL('./authoring_native.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 process.exitCode = run(bridge, Bun.argv.slice(2));

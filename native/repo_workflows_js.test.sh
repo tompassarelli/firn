@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'repo-workflows-native: cannot locate Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-repo-workflows-js.XXXXXX")"
 
 cleanup() {
@@ -36,28 +23,10 @@ die() {
   exit 1
 }
 
-json="$beagle/native-core/src/native/json.bjs"
-quality="$repo/native/repo_quality.bjs"
-workflows="$repo/native/repo_workflows.bjs"
-runtime="$repo/native/repo_workflows_runtime.bjs"
-mkdir -p "$scratch/modules/node_modules/beagle"
-timeout --foreground 90 "$beagle/bin/beagle-build-all" \
-  "$json" "$quality" \
-  "$workflows" "$runtime" \
-  --out "$scratch/modules" \
-  >"$scratch/build.out" 2>"$scratch/build.err" || {
-    sed -n '1,240p' "$scratch/build.err" >&2
-    die "module graph compilation failed"
-  }
-cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-  "$scratch/modules/node_modules/beagle/core.js"
-cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
-  "$scratch/modules/node_modules/beagle/host.js"
-printf '%s\n' '{"type":"module"}' \
-  >"$scratch/modules/node_modules/beagle/package.json"
+runtime="${FIRN_REPO_WORKFLOW_MODULE:-$repo/native/repo_workflows_runtime.ts}"
 
 set +e
-FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+FIRN_REPO_WORKFLOW_MODULE="$runtime" \
   bun "$repo/native/repo_workflows_host.mjs" repo unknown \
   >"$scratch/usage.out" 2>"$scratch/usage.err"
 usage_status=$?
@@ -100,7 +69,7 @@ run_pin_ancestry() {
   timeout --foreground 30 env \
     HOME="$fixture_home" \
     FIRN_REPO="$fixture_repo" \
-    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+    FIRN_REPO_WORKFLOW_MODULE="$runtime" \
     bun "$repo/native/repo_workflows_host.mjs" repo pin-ancestry \
     >"$result.out" 2>"$result.err"
   local status=$?
@@ -149,7 +118,7 @@ run_repo() {
     PATH="$repo/dotfiles/bin:$inotify_bin:$PATH" \
     FIRN_RUNTIME_BIN="$galileo_dir" \
     FIRN_REPO="$gal_repo" \
-    FIRN_REPO_WORKFLOW_MODULE="$scratch/modules/firn/repo-workflows-runtime.js" \
+    FIRN_REPO_WORKFLOW_MODULE="$runtime" \
     bun "$repo/native/repo_workflows_host.mjs" repo "$@" \
     >"$result.out" 2>"$result.err"
   printf '%s\n' "$?" >"$result.status"

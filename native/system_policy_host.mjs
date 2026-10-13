@@ -15,17 +15,6 @@ const errno = error => errnoByCode[error?.code] ?? 5;
 const ok = fields => Object.freeze({ tag: 'ok', ...fields });
 const failure = error => Object.freeze({ tag: 'error', errno: errno(error) });
 
-globalThis.host_getenv = (bridge, name) => bridge.getenv(name);
-globalThis.host_read_text_bounded = (bridge, path, limit) => bridge.readTextBounded(path, limit);
-globalThis.host_path_kind = (bridge, path) => bridge.pathKind(path);
-globalThis.host_write_text_atomic = (bridge, path, text) => bridge.writeTextAtomic(path, text);
-globalThis.host_real_path = (bridge, path) => bridge.realPath(path);
-globalThis.host_read_stdin_bounded = (bridge, limit) => bridge.readStdinBounded(limit);
-globalThis.host_out = (bridge, text) => bridge.out(text);
-globalThis.host_result_tag = result => String(result.tag);
-globalThis.host_result_int = (result, field) => Number(result[field]);
-globalThis.host_result_string = (result, field) => String(result[field]);
-
 const stdinBytes = await Bun.stdin.bytes();
 
 const bridge = Object.freeze({
@@ -64,6 +53,6 @@ const bridge = Object.freeze({
 });
 
 const modulePath = process.env.FIRN_SYSTEM_POLICY_MODULE
-  ?? new URL('../lib/firn/system-policy-native.js', import.meta.url).pathname;
+  ?? new URL('./system_policy_native.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 process.exitCode = run(bridge);

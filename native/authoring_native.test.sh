@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'authoring-native: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-authoring-native.XXXXXX")"
 
 cleanup() {
@@ -44,42 +31,19 @@ for command in bash bun cmp find galileo git nix-instantiate rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle-build-all" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
-
-json="$beagle/native-core/src/native/json.bjs"
-core="$repo/native/authoring.bjs"
-pure="$repo/native/authoring_test.bjs"
-native="$repo/native/authoring_native.bjs"
-bridge="$repo/native/authoring_host.mjs"
-
-printf 'authoring-js: building one closed typed family graph\n' >&2
-mkdir -p "$scratch/build"
-timeout --foreground 120 "$beagle/bin/beagle-build-all" \
-  "$json" "$core" "$pure" "$native" --out "$scratch/build" \
-  >"$scratch/build.out" 2>"$scratch/build.err" \
-  || {
-    sed -n '1,240p' "$scratch/build.err" >&2
-    die "closed JS family build failed"
-  }
-pure_js="$(find "$scratch/build" -name authoring-test.js -print -quit)"
-native_js="$(find "$scratch/build" -name authoring-native.js -print -quit)"
-[[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
-[[ -n "$native_js" && -f "$native_js" ]] || die "authoring module was not emitted"
-mkdir -p "$scratch/build/node_modules/beagle"
-cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-  "$scratch/build/node_modules/beagle/core.js"
-printf '%s\n' '{"name":"beagle","type":"module"}' \
-  >"$scratch/build/node_modules/beagle/package.json"
+core="$repo/native/authoring.ts"
+pure="$repo/native/authoring_test.ts"
+native="$repo/native/authoring_native.ts"
+bridge="$repo/native/authoring_host.ts"
 
 cat >"$scratch/authoring-test" <<EOF
 #!/usr/bin/env bash
-exec env FIRN_AUTHORING_TEST_MODULE='$pure_js' bun -e \
-  'const m = await import(process.env.FIRN_AUTHORING_TEST_MODULE); process.exitCode = m["run-scenarios"]();'
+exec env FIRN_AUTHORING_TEST_MODULE='$pure' bun -e \
+  'const m = await import(process.env.FIRN_AUTHORING_TEST_MODULE); process.exitCode = m.runScenarios();'
 EOF
 cat >"$scratch/authoring-native" <<EOF
 #!/usr/bin/env bash
-exec env FIRN_AUTHORING_MODULE='$native_js' bun '$bridge' "\$@"
+exec env FIRN_AUTHORING_MODULE='$native' bun '$bridge' "\$@"
 EOF
 chmod +x "$scratch/authoring-test" "$scratch/authoring-native"
 
@@ -115,17 +79,17 @@ exit "${FIRN_FAKE_SOPS_STATUS:-0}"
 EOF
 chmod +x "$fakebin/sops"
 
-FIRN_AUTHORING_CORE="$scratch/build/firn/authoring.js" FIRN_SCHEMA_CAPTURE="$fixture/.beagle-cache/schema.json" bun - <<'JS'
+FIRN_AUTHORING_CORE="$core" FIRN_SCHEMA_CAPTURE="$fixture/.beagle-cache/schema.json" bun - <<'JS'
 import assert from 'node:assert/strict';
 const core = await import(process.env.FIRN_AUTHORING_CORE);
 const text = await Bun.file(process.env.FIRN_SCHEMA_CAPTURE).text();
 const expected = JSON.parse(text);
-const parsed = core['schema-entries-from-json'](text);
+const parsed = core.schemaEntriesFromJson(text);
 assert.equal(parsed._tag, 'SchemaParsed');
 assert.deepEqual(parsed.entries.map(row => [row.name,row.type]), expected.map(row => [row.name,row.t]));
 const incomplete = {...expected[0]};
 delete incomplete.t;
-assert.equal(core['schema-entries-from-json'](JSON.stringify([incomplete])).entries[0].type, '?');
+assert.equal(core.schemaEntriesFromJson(JSON.stringify([incomplete])).entries[0].type, '?');
 JS
 
 last_status=0

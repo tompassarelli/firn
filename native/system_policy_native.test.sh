@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'system-policy-native: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-system-policy-native.XXXXXX")"
 
 cleanup() {
@@ -37,41 +24,22 @@ die() {
   exit 1
 }
 
-for command in find git jq rg timeout; do
+for command in jq timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
 bun="${FIRN_BUN:-$(command -v bun || true)}"
 [[ -n "$bun" && -x "$bun" ]] || die "Bun runtime is unavailable"
 
-json="$beagle/native-core/src/native/json.bjs"
-policy="$repo/native/system_policy.bjs"
-pure="$repo/native/system_policy_test.bjs"
-driver="$repo/native/system_policy_native.bjs"
+pure="$repo/native/system_policy_test.ts"
+driver="$repo/native/system_policy_native.ts"
 bridge="$repo/native/system_policy_host.mjs"
+pure_js="$pure"
+driver_js="$driver"
 
-printf 'system-policy-js: building one closed typed family graph\n' >&2
-mkdir -p "$scratch/build"
-timeout --foreground 180 "$beagle/bin/beagle-build-all" \
-  "$json" "$policy" "$pure" "$driver" --out "$scratch/build" \
-  >"$scratch/build.out" 2>"$scratch/build.err" \
-  || {
-    sed -n '1,260p' "$scratch/build.err" >&2
-    die "closed JS family build failed"
-  }
-mkdir -p "$scratch/build/node_modules/beagle"
-cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-  "$scratch/build/node_modules/beagle/core.js"
-printf '%s\n' '{"type":"module"}' \
-  >"$scratch/build/node_modules/beagle/package.json"
-pure_js="$(find "$scratch/build" -name system-policy-test.js -print -quit)"
-driver_js="$(find "$scratch/build" -name system-policy-native.js -print -quit)"
-[[ -n "$pure_js" && -f "$pure_js" ]] || die "pure test module was not emitted"
-[[ -n "$driver_js" && -f "$driver_js" ]] || die "system policy module was not emitted"
+printf 'system-policy-ts: running one closed typed family graph\n' >&2
 FIRN_SYSTEM_POLICY_TEST_MODULE="$pure_js" timeout --foreground 30 "$bun" --eval \
-  'const m = await import(process.env.FIRN_SYSTEM_POLICY_TEST_MODULE); process.exitCode = m["run-scenarios"]() + m["run-properties"](process.env.CI ? 512 : 128);' \
+  'const m = await import(process.env.FIRN_SYSTEM_POLICY_TEST_MODULE); process.exitCode = m.runScenarios() + m.runProperties(process.env.CI ? 512 : 128);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die "pure policy fixtures failed"
 
@@ -97,7 +65,7 @@ write_activation() {
     [ "$active" = true ] && permission=on
   fi
   cat >"$NORTH_AGENT_STATE_ROOT/current/activation.json" <<JSON
-{"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.bjs"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","claude"],"owner":{"repo":"nixos-config","path":"dotfiles/agents/hooks/firn-system-policy"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
+{"schema":"$schema","catalogDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","generationId":"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","units":[{"id":"firn-system-policy","kind":"hook","title":"Firn system policy","triggerDescription":"Protect Firn authoring and system switching.","permission":"$permission","active":$active,"owner":{"repo":"nixos-config","path":"native/system_policy_native.ts"},"members":[],"supports":["firn"],"distributions":[{"type":"providerAdapter","targets":["firn","codex","claude"],"owner":{"repo":"nixos-config","path":"dotfiles/agents/hooks/firn-system-policy"},"adapterId":"firn-system-policy"}],"activationPaths":[["firn-system-policy"]]}]}
 JSON
 }
 
@@ -119,10 +87,10 @@ run_case pass \
 [[ ! -s "$scratch/pass.out" ]] || die "pass emitted output"
 
 mkdir -p "$scratch/checkout/code/nixos-config/native"
-: >"$scratch/checkout/code/nixos-config/native/system_policy.bjs"
+: >"$scratch/checkout/code/nixos-config/native/system_policy.ts"
 ln -s "$scratch/checkout/code/nixos-config" "$scratch/repo-through-symlink"
 inject_payload="$(printf \
-  '{"tool_name":"Edit","tool_input":{"file_path":"%s/native/system_policy.bjs"},"session_id":"inject/session"}' \
+  '{"tool_name":"Edit","tool_input":{"file_path":"%s/native/system_policy.ts"},"session_id":"inject/session"}' \
   "$scratch/repo-through-symlink")"
 run_case inject "$inject_payload"
 jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and (.hookSpecificOutput.additionalContext | type) == "string"' "$scratch/inject.out" >/dev/null
@@ -135,13 +103,13 @@ run_case inject-second "$inject_payload"
   || die "second edit in one session repeated the intro"
 
 write_payload="$(printf \
-  '{"tool_name":"Write","tool_input":{"filePath":"%s/native/system_policy.bjs"},"session_id":"write-session"}' \
+  '{"tool_name":"Write","tool_input":{"filePath":"%s/native/system_policy.ts"},"session_id":"write-session"}' \
   "$scratch/repo-through-symlink")"
 run_case write "$write_payload"
 jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and (.hookSpecificOutput.additionalContext | type) == "string"' "$scratch/write.out" >/dev/null
 
 multiedit_payload="$(printf \
-  '{"tool_name":"MultiEdit","tool_input":{"file_path":"%s/native/system_policy.bjs"},"session_id":"multiedit-session"}' \
+  '{"tool_name":"MultiEdit","tool_input":{"file_path":"%s/native/system_policy.ts"},"session_id":"multiedit-session"}' \
   "$scratch/repo-through-symlink")"
 run_case multiedit "$multiedit_payload"
 jq -e '.hookSpecificOutput.hookEventName == "PreToolUse" and (.hookSpecificOutput.additionalContext | type) == "string"' "$scratch/multiedit.out" >/dev/null
@@ -208,4 +176,4 @@ AGENT_NO_AUTHORING_HOOKS=1 run_case killed \
   '{"tool_name":"Bash","tool_input":{"command":"nixos-rebuild switch"},"session_id":"killed"}'
 [[ ! -s "$scratch/killed.out" ]] || die "kill-switch did not disable the guard"
 
-printf 'system-policy-js: activation edit/write/multiedit apply-patch-omitted bash kill-switch fail-open Bun-host PASS\n'
+printf 'system-policy-ts: activation edit/write/multiedit apply-patch-omitted bash kill-switch fail-open Bun-host PASS\n'

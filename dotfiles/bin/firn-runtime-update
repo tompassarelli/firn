@@ -115,16 +115,15 @@ inventory_sources=(
 )
 inventory_bridge="$firn_repo/native/inventory_host.mjs"
 authoring_sources=(
-  "$native_json"
-  "$firn_repo/native/authoring.bjs"
-  "$firn_repo/native/authoring_native.bjs"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/authoring.ts"
+  "$firn_repo/native/authoring_native.ts"
 )
-authoring_bridge="$firn_repo/native/authoring_host.mjs"
+authoring_bridge="$firn_repo/native/authoring_host.ts"
 views_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$firn_repo/native/firn_views.bjs"
-  "$firn_repo/native/firn_views_native.bjs"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/firn_views.ts"
+  "$firn_repo/native/firn_views_native.ts"
 )
 views_bridge="$firn_repo/native/firn_views_host.mjs"
 repo_build_sources=(
@@ -142,10 +141,10 @@ repo_build_sources=(
 )
 repo_build_bridge="$firn_repo/native/repo_build_host.mjs"
 repo_workflow_sources=(
-  "$native_json"
-  "$firn_repo/native/repo_quality.bjs"
-  "$firn_repo/native/repo_workflows.bjs"
-  "$firn_repo/native/repo_workflows_runtime.bjs"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/repo_quality.ts"
+  "$firn_repo/native/repo_workflows.ts"
+  "$firn_repo/native/repo_workflows_runtime.ts"
 )
 repo_workflow_bridge="$firn_repo/native/repo_workflows_host.mjs"
 rebuild_sources=(
@@ -159,9 +158,9 @@ rebuild_bridge="$firn_repo/native/firn_rebuild_host.mjs"
 prewarm_source="$firn_repo/native/prewarm.ts"
 prewarm_bridge="$firn_repo/native/prewarm_host.mjs"
 system_policy_sources=(
-  "$native_json"
-  "$firn_repo/native/system_policy.bjs"
-  "$firn_repo/native/system_policy_native.bjs"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/system_policy.ts"
+  "$firn_repo/native/system_policy_native.ts"
 )
 system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
 
@@ -352,7 +351,7 @@ materialize_js() {
 
   mkdir -p "$output_root"
   case "$component" in
-    tag|inventory|repo-build|flake-input|rebuild)
+    tag|inventory|repo-build|flake-input|rebuild|system-policy|views|repo-workflow)
       for source in "$@"; do
         cp -- "$source" "$output_root/${source##*/}"
         record_artifact "$component-source" \
@@ -407,6 +406,30 @@ EOF
     "$component" "$component" "$module_relative" "$binary" >>"$manifest"
 }
 
+materialize_authoring() {
+  local source
+  local relative
+  local output_root="$stage/lib/authoring"
+  local launcher="$stage/bin/firn-authoring"
+  mkdir -p "$output_root"
+  for source in "${authoring_sources[@]}" "$authoring_bridge"; do
+    relative="lib/authoring/$(basename "$source")"
+    cp -- "$source" "$stage/$relative"
+    record_artifact authoring-source "$relative" "$source"
+  done
+  cat >"$launcher" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec env FIRN_AUTHORING_MODULE="$here/../lib/authoring/authoring_native.ts" \
+  "$here/bun" "$here/../lib/authoring/authoring_host.ts" "$@"
+EOF
+  chmod +x "$launcher"
+  record_generated_artifact authoring-launcher bin/firn-authoring
+  binaries+=(firn-authoring)
+  printf 'component=authoring module=lib/authoring/authoring_native.ts executable=bin/firn-authoring runtime=bun\n' >>"$manifest"
+}
+
 if [[ -n "$bun_store_path" ]]; then
   ln -s "$bun_source" "$stage/bin/bun"
 else
@@ -430,20 +453,19 @@ case "$scope" in
       FIRN_FLAKE_INPUT_MODULE "$flake_input_bridge" "${flake_input_sources[@]}"
     materialize_js inventory firn-inventory inventory_family.ts \
       FIRN_INVENTORY_MODULE "$inventory_bridge" "${inventory_sources[@]}"
-    materialize_js authoring firn-authoring firn/authoring-native.js \
-      FIRN_AUTHORING_MODULE "$authoring_bridge" "${authoring_sources[@]}"
-    materialize_js views firn-views firn/views-native.js \
+    materialize_authoring
+    materialize_js views firn-views firn_views_native.ts \
       FIRN_VIEWS_MODULE "$views_bridge" "${views_sources[@]}"
     materialize_js repo-build firn-repo-build repo_build_family.ts \
       FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
-    materialize_js repo-workflow firn-repo-workflow firn/repo-workflows-runtime.js \
+    materialize_js repo-workflow firn-repo-workflow repo_workflows_runtime.ts \
       FIRN_REPO_WORKFLOW_MODULE "$repo_workflow_bridge" "${repo_workflow_sources[@]}"
     materialize_js rebuild firn-rebuild firn_rebuild_family.ts \
       FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
     materialize_js prewarm firn-prewarm prewarm.ts \
       FIRN_PREWARM_MODULE "$prewarm_bridge" "$prewarm_source" \
       "$galileo_build/lib/firn/prewarm.gal"
-    materialize_js system-policy firn-system-policy firn/system-policy-native.js \
+    materialize_js system-policy firn-system-policy system_policy_native.ts \
       FIRN_SYSTEM_POLICY_MODULE "$system_policy_bridge" \
       "${system_policy_sources[@]}"
     ;;

@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'firn-views-native: cannot locate Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-views-native.XXXXXX")"
 
 cleanup() {
@@ -40,33 +27,12 @@ for command in bash bun cmp diff find git rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
-[[ -x "$beagle/bin/beagle" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
-
-json="$beagle/native-core/src/native/json.bjs"
-datum="$beagle/native-core/src/beagle/datum_reader.bjs"
-core="$repo/native/firn_views.bjs"
-pure="$repo/native/firn_views_test.bjs"
-native="$repo/native/firn_views_native.bjs"
+core="$repo/native/firn_views.ts"
+pure_js="$repo/native/firn_views_test.ts"
+native_js="$repo/native/firn_views_native.ts"
 bridge="$repo/native/firn_views_host.mjs"
 
-printf 'firn-views-js: building one closed typed family graph\n' >&2
-mkdir -p "$scratch/build"
-timeout --foreground 240 "$beagle/bin/beagle-build-all" \
-  "$json" "$datum" "$core" "$pure" "$native" --out "$scratch/build" \
-  >"$scratch/build.out" 2>"$scratch/build.err" || {
-    sed -n '1,260p' "$scratch/build.err" >&2
-    die 'closed Beagle/JS family build failed'
-  }
-pure_js="$(find "$scratch/build" -name views-test.js -print -quit)"
-native_js="$(find "$scratch/build" -name views-native.js -print -quit)"
-[[ -n "$native_js" && -f "$native_js" ]] || die 'views host module was not emitted'
-mkdir -p "$scratch/build/node_modules/beagle"
-cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-  "$scratch/build/node_modules/beagle/core.js"
-printf '%s\n' '{"name":"beagle","type":"module"}' \
-  >"$scratch/build/node_modules/beagle/package.json"
-
+printf 'firn-views-ts: running typed Bun family\n' >&2
 cat >"$scratch/firn-views-native" <<EOF
 #!/usr/bin/env bash
 exec env FIRN_VIEWS_MODULE='$native_js' bun '$bridge' "\$@"
@@ -75,18 +41,18 @@ chmod +x "$scratch/firn-views-native"
 
 FIRN_VIEWS_TEST_MODULE="$pure_js" \
 timeout --foreground 30 bun --eval \
-  'const m = await import(process.env.FIRN_VIEWS_TEST_MODULE); process.exitCode = m["run-scenarios"]() + m["run-properties"](process.env.CI ? 512 : 128);' \
+  'const m = await import(process.env.FIRN_VIEWS_TEST_MODULE); process.exitCode = m.runScenarios() + m.runProperties(process.env.CI ? 512 : 128);' \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die 'pure fixture executable failed'
 [[ ! -s "$scratch/pure.err" ]] || die 'pure fixtures wrote stderr'
 
-FIRN_VIEWS_CORE="$scratch/build/firn/views.js" FIRN_REAL_LOCK="$repo/flake.lock" \
+FIRN_VIEWS_CORE="$core" FIRN_REAL_LOCK="$repo/flake.lock" \
   timeout --foreground 30 bun - <<'JS'
 import assert from 'node:assert/strict';
 const p = await import(process.env.FIRN_VIEWS_CORE);
 const text = await Bun.file(process.env.FIRN_REAL_LOCK).text();
 const lock = JSON.parse(text);
-const rows = p['flake-rows'](text, 2000000000);
+const rows = p.flakeRows(text, 2000000000);
 assert.equal(rows._tag, 'FlakeRows');
 const inputs = lock.nodes[lock.root].inputs;
 assert.deepEqual(rows.rows.map(row => row.name).sort(), Object.keys(inputs).sort());
@@ -95,12 +61,12 @@ for (const row of rows.rows) {
   assert.equal(row.revision, node.locked?.rev?.slice(0,8) ?? '?');
   assert.equal(row.frozen, typeof node.original?.rev === 'string');
   assert.equal(row.broken, node.original?.type === 'path' && node.original.path.startsWith('/'));
-  assert.equal(row.age_seconds, node.locked?.lastModified === undefined ? -1 : 2000000000-node.locked.lastModified);
+  assert.equal(row.ageSeconds, node.locked?.lastModified === undefined ? -1 : 2000000000-node.locked.lastModified);
   assert.deepEqual(row.follows.map(follow => [follow.input,follow.target]).sort(),
     Object.entries(node.inputs ?? {}).filter(([,target]) => Array.isArray(target)).map(([name,target]) => [name,target.at(-1)]).sort());
 }
-const plain = p['render-flake-rows'](rows.rows,false);
-const tty = p['render-flake-rows'](rows.rows,true);
+const plain = p.renderFlakeRows(rows.rows,false);
+const tty = p.renderFlakeRows(rows.rows,true);
 assert.ok(!plain.includes('\u001b['));
 assert.ok(tty.includes('\u001b['));
 let seed = 73421;
@@ -112,30 +78,30 @@ for (let index=0; index<(process.env.CI ? 512 : 128); index++) {
   const supported = ['darwin', ...(linuxEverywhere ? [] : ['linux'])]
     .flatMap(platform => modules.filter(() => random()%2 === 0).map(m => [m,platform]));
   const rows = [...everywhere, ...supported];
-  const toRows = list => list.map(([m,platform]) => p['->PlatformRow'](m, platform));
-  const matrix = p['platform-matrix'](modules, rows.map(([m,platform]) => p['->PlatformRow'](m, platform)));
+  const toRows = list => list.map(([m,platform]) => p.platformRow(m, platform));
+  const matrix = p.platformMatrix(modules, rows.map(([m,platform]) => p.platformRow(m, platform)));
   const expected = modules.map(m => {
     const lacks = ['darwin','linux'].filter(platform => !rows.some(([n,q]) => n === m && q === platform));
     return {kind: lacks.length === 0 ? 'both' : lacks.length === 2 ? 'neither' : `${lacks[0] === 'darwin' ? 'linux' : 'darwin'}-only`, blockers: lacks};
   });
   assert.deepEqual(matrix.map(row => [String(row.verdict).replace(/^:/,'').replaceAll('_','-'),row.blockers]), expected.map(row => [row.kind,row.blockers]));
-  const listed = p['render-platform-list']('all',matrix);
+  const listed = p.renderPlatformList('all',matrix);
   assert.equal(listed.status, 0);
   assert.ok(!listed.stdout.includes('Sources:'));
   assert.deepEqual(listed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), modules);
-  const darwinListed = p['render-platform-list']('darwin',matrix);
+  const darwinListed = p.renderPlatformList('darwin',matrix);
   assert.deepEqual(darwinListed.stdout.split('\n').filter(line => /^\s+module[0-9]+\s*$/.test(line)).map(line => line.trim()).sort(), rows.filter(([,q]) => q === 'darwin').map(([m]) => m).sort());
-  const safelist = p['render-platform-safelist'](toRows(everywhere), toRows(supported));
+  const safelist = p.renderPlatformSafelist(toRows(everywhere), toRows(supported));
   assert.equal(safelist.status, 0);
   assert.equal(safelist.stdout, ['darwin','linux'].filter(platform => !(linuxEverywhere && platform === 'linux')).map(platform => {
     const names = supported.filter(([,q]) => q === platform).map(([m]) => m).sort();
     return names.length === 0 ? '' : `${names.length === 1 ? names[0] : `[${names.join(', ')}]`} supports ${platform}\n`;
   }).join(''));
-  const shown = p['render-platform-show']('module0', matrix);
+  const shown = p.renderPlatformShow('module0', matrix);
   assert.equal(shown.status, 0);
   assert.equal(shown.stdout.split('unsupported on:\n')[1] ?? '', expected[0].blockers.map(platform => `  ${platform}\n`).join(''));
 }
-console.log('ok: recorded Beagle/flake decoders and generated platform model');
+console.log('ok: recorded flake decoders and generated platform model');
 JS
 
 fixture="$scratch/repo"
