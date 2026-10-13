@@ -1,19 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 conf="${XDG_CONFIG_HOME:-$HOME/.config}/fontconfig/conf.d/60-external-subpixel.conf"
-rgba=none
-if niri msg outputs | rg -q '^Output .*\((DP|HDMI)-'; then
-  rgba=rgb
-fi
-want="<?xml version=\"1.0\"?>
+
+apply() {
+  local rgba=none
+  if niri msg outputs | rg -q '^Output .*\((DP|HDMI)-'; then
+    rgba=rgb
+  fi
+  local want="<?xml version=\"1.0\"?>
 <!DOCTYPE fontconfig SYSTEM \"urn:fontconfig:fonts.dtd\">
 <fontconfig>
   <match target=\"pattern\">
     <edit name=\"rgba\" mode=\"assign\"><const>$rgba</const></edit>
   </match>
 </fontconfig>"
-if [ "$(cat "$conf" 2>/dev/null || true)" != "$want" ]; then
-  mkdir -p "$(dirname "$conf")"
-  printf '%s\n' "$want" >"$conf"
-fi
-echo "subpixel $rgba"
+  if [ "$(cat "$conf" 2>/dev/null || true)" != "$want" ]; then
+    mkdir -p "$(dirname "$conf")"
+    printf '%s\n' "$want" >"$conf"
+  fi
+  echo "subpixel $rgba"
+}
+
+apply
+[ "${1:-}" = watch ] || exit 0
+udevadm monitor -u --subsystem-match=drm | while read -r _; do
+  sleep 2
+  apply
+done
