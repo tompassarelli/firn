@@ -1,11 +1,8 @@
 use firn/tags
 
-pandoc is a Module
-pandoc is tagged office
+tags: office
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.pandoc.enable
-    "environment"
-      "systemPackages": [pkgs.pandoc]
-  option "myConfig"."modules"."pandoc"."enable": enable "Pandoc document converter"
+config
+  "environment"
+    "systemPackages": [pkgs.pandoc]
+"enable": "Pandoc document converter"

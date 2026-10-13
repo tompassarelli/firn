@@ -1,11 +1,8 @@
 use firn/tags
 
-forgejo-cli is a Module
-forgejo-cli is tagged development
+tags: development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.forgejo-cli.enable
-    "environment"
-      "systemPackages": [pkgs.forgejo-cli]
-  option "myConfig"."modules"."forgejo-cli"."enable": enable "Forgejo CLI for repo / issue / CI ops against codeberg + other Forgejo instances"
+config
+  "environment"
+    "systemPackages": [pkgs.forgejo-cli]
+"enable": "Forgejo CLI for repo / issue / CI ops against codeberg + other Forgejo instances"

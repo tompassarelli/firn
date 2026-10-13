@@ -1,6 +1,5 @@
 use firn/tags
 
-job-run is a Module
 
 nix file
   arguments: config, lib, pkgs, ...

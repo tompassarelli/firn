@@ -1,11 +1,8 @@
 use firn/tags
 
-rustfmt is a Module
-rustfmt is tagged rust
+tags: rust
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.rustfmt.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.rustfmt]
-  option "myConfig"."modules"."rustfmt"."enable": enable "Rust formatter"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.rustfmt]
+"enable": "Rust formatter"

@@ -1,17 +1,14 @@
 use firn/tags
 
-smashcraft-test-pads is a Module
-smashcraft-test-pads is tagged desktop
+tags: desktop
 
 # Smashcraft's virtual test pads, from smashcraft:ts/scripts/integrity/linux.ts,
 # keep root-only /dev/input nodes, so Steam and every other desktop program
 # can't open them; the test helpers read a twin node in /dev/smashcraft-pads.
 # The file sorts before 70-uaccess.rules, which gives joysticks to the seat
 # user.
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.smashcraft-test-pads.enable
-    "services"
-      "udev"
-        "packages": [pkgs.writeTextDir("lib/udev/rules.d/69-smashcraft-test-pads.rules", ((((((((((((("ACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*|js*\", ATTRS\{name}==\"Smashcraft Event Retention Virtual Gamepad\", ENV\{ID_INPUT_JOYSTICK}=\"\", GROUP:=\"root\", MODE:=\"0600\"\nACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS\{name}==\"Smashcraft Event Retention Virtual Gamepad\", ENV\{SMASHCRAFT_TEST_PAD_NODE}=\"/dev/smashcraft-pads/%k\", RUN+=\"" ++ ("" ++ builtins.toString(pkgs.bash)) ++ "/bin/sh") ++ " -c '") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mkdir -p /dev/smashcraft-pads && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/rm -f /dev/smashcraft-pads/.%k && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mknod -m 0660 /dev/smashcraft-pads/.%k c $major $minor && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/chgrp input /dev/smashcraft-pads/.%k && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mv -f /dev/smashcraft-pads/.%k /dev/smashcraft-pads/%k'\"\nACTION==\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ENV\{SMASHCRAFT_TEST_PAD_NODE}==\"?*\", RUN+=\"") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/rm -f $env\{SMASHCRAFT_TEST_PAD_NODE}\"\n")]
-  option "myConfig"."modules"."smashcraft-test-pads"."enable": enable "Smashcraft test pads: hidden from Steam and the desktop, readable by the test helpers"
+config
+  "services"
+    "udev"
+      "packages": [pkgs.writeTextDir("lib/udev/rules.d/69-smashcraft-test-pads.rules", ((((((((((((("ACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*|js*\", ATTRS\{name}==\"Smashcraft Event Retention Virtual Gamepad\", ENV\{ID_INPUT_JOYSTICK}=\"\", GROUP:=\"root\", MODE:=\"0600\"\nACTION!=\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ATTRS\{name}==\"Smashcraft Event Retention Virtual Gamepad\", ENV\{SMASHCRAFT_TEST_PAD_NODE}=\"/dev/smashcraft-pads/%k\", RUN+=\"" ++ ("" ++ builtins.toString(pkgs.bash)) ++ "/bin/sh") ++ " -c '") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mkdir -p /dev/smashcraft-pads && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/rm -f /dev/smashcraft-pads/.%k && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mknod -m 0660 /dev/smashcraft-pads/.%k c $major $minor && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/chgrp input /dev/smashcraft-pads/.%k && ") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/mv -f /dev/smashcraft-pads/.%k /dev/smashcraft-pads/%k'\"\nACTION==\"remove\", SUBSYSTEM==\"input\", KERNEL==\"event*\", ENV\{SMASHCRAFT_TEST_PAD_NODE}==\"?*\", RUN+=\"") ++ ("" ++ builtins.toString(pkgs.coreutils)) ++ "/bin") ++ "/rm -f $env\{SMASHCRAFT_TEST_PAD_NODE}\"\n")]
+"enable": "Smashcraft test pads: hidden from Steam and the desktop, readable by the test helpers"

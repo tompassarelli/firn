@@ -1,19 +1,16 @@
 use firn/tags
 
-kanata is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.kanata.enable: enable "Kanata keyboard remapping"
-  option myConfig.modules.kanata.devices: List Text
-    default: []
-    description: "Input device paths for kanata to capture. Find yours with: ls /dev/input/by-id/"
-  option myConfig.modules.kanata.configFile: Path
-    description: "Path to kanata .kbd config file"
-  option myConfig.modules.kanata.port: maybe Port
-    default: null
-    description: "TCP port for kanata server (e.g. for glide integration)"
-  option myConfig.modules.kanata.extraArgs: List Text
-    default: []
-    description: "Extra command-line args for kanata (e.g. --debug, --log-layer-changes for diagnosing layer/spacebar seizures)"
-  imports: [./kanata.nix]
+enable: "Kanata keyboard remapping"
+option myConfig.modules.kanata.devices: List Text
+  default: []
+  description: "Input device paths for kanata to capture. Find yours with: ls /dev/input/by-id/"
+option myConfig.modules.kanata.configFile: Path
+  description: "Path to kanata .kbd config file"
+option myConfig.modules.kanata.port: maybe Port
+  default: null
+  description: "TCP port for kanata server (e.g. for glide integration)"
+option myConfig.modules.kanata.extraArgs: List Text
+  default: []
+  description: "Extra command-line args for kanata (e.g. --debug, --log-layer-changes for diagnosing layer/spacebar seizures)"
+imports: [./kanata.nix]

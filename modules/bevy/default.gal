@@ -1,14 +1,11 @@
 use firn/tags
 
-bevy is a Module
 bevy can opt into rust
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.bevy.enable
-    "environment"
-      "systemPackages": [pkgs.alsa-lib, pkgs.vulkan-loader, pkgs.vulkan-tools, pkgs.wayland, pkgs.libxkbcommon, pkgs.xorg.libX11, pkgs.xorg.libXcursor, pkgs.xorg.libXrandr, pkgs.xorg.libXi, pkgs.libudev-zero]
-    "programs"
-      "nix-ld"
-        "libraries": [pkgs.alsa-lib, pkgs.vulkan-loader, pkgs.vulkan-tools, pkgs.wayland, pkgs.libxkbcommon, pkgs.xorg.libX11, pkgs.xorg.libXcursor, pkgs.xorg.libXrandr, pkgs.xorg.libXi, pkgs.libudev-zero]
-  option "myConfig"."modules"."bevy"."enable": enable "Bevy game engine development libraries"
+config
+  "environment"
+    "systemPackages": [pkgs.alsa-lib, pkgs.vulkan-loader, pkgs.vulkan-tools, pkgs.wayland, pkgs.libxkbcommon, pkgs.xorg.libX11, pkgs.xorg.libXcursor, pkgs.xorg.libXrandr, pkgs.xorg.libXi, pkgs.libudev-zero]
+  "programs"
+    "nix-ld"
+      "libraries": [pkgs.alsa-lib, pkgs.vulkan-loader, pkgs.vulkan-tools, pkgs.wayland, pkgs.libxkbcommon, pkgs.xorg.libX11, pkgs.xorg.libXcursor, pkgs.xorg.libXrandr, pkgs.xorg.libXi, pkgs.libudev-zero]
+"enable": "Bevy game engine development libraries"

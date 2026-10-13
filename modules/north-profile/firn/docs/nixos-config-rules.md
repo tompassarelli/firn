@@ -148,6 +148,10 @@ and users (`galileo help`, `galileo schema explain`, `galileo refs`,
 - Use the `myConfig.modules.*` namespace and keep one package or service per
   module. Multi-file modules separate option declarations in `default.gal`
   from guarded configuration in `<name>.gal`.
+- `modules/<name>/default.gal` implies the Module fact. Module sources imply
+  the standard Nix module arguments and enable guard; `tags:` and `enable:`
+  retain tag membership and custom option descriptions. Explicit declarations,
+  argument lists and guards override those defaults.
 - Compose modules only through `firn/tags` facts: `<module> is tagged <tag>`,
   `<module> can opt into <tag>` and `<tag> sets <path> to <value> for
   <module>`. Hosts enable tags; explicit host disables subtract from the

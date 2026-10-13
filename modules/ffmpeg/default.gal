@@ -1,11 +1,8 @@
 use firn/tags
 
-ffmpeg is a Module
-ffmpeg is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.ffmpeg.enable
-    "environment"
-      "systemPackages": [pkgs.ffmpeg]
-  option "myConfig"."modules"."ffmpeg"."enable": enable "FFmpeg video processing"
+config
+  "environment"
+    "systemPackages": [pkgs.ffmpeg]
+"enable": "FFmpeg video processing"

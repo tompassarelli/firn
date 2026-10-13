@@ -1,6 +1,5 @@
 use firn/tags
 
-capacity-watchdog is a Module
 
 nix file
   arguments: config, lib, pkgs, jobRun, ...

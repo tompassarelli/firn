@@ -1,12 +1,9 @@
 use firn/tags
 
-element-desktop is a Module
-element-desktop is tagged communication
+tags: communication
 
 # Electron cannot detect gnome-keyring under niri; without this flag Element stops at "System unsupported".
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.element-desktop.enable
-    "environment"
-      "systemPackages": [pkgs.element-desktop.override({"commandLineArgs": "--password-store=gnome-libsecret"})]
-  option "myConfig"."modules"."element-desktop"."enable": enable "Element Matrix desktop client"
+config
+  "environment"
+    "systemPackages": [pkgs.element-desktop.override({"commandLineArgs": "--password-store=gnome-libsecret"})]
+"enable": "Element Matrix desktop client"

@@ -1,11 +1,8 @@
 use firn/tags
 
-gnumake is a Module
-gnumake is tagged doom-emacs
+tags: doom-emacs
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.gnumake.enable
-    "environment"
-      "systemPackages": [pkgs.gnumake]
-  option "myConfig"."modules"."gnumake"."enable": enable "GNU Make build tool"
+config
+  "environment"
+    "systemPackages": [pkgs.gnumake]
+"enable": "GNU Make build tool"

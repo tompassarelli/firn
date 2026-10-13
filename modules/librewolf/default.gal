@@ -1,22 +1,19 @@
 use firn/tags
 
-librewolf is a Module
 librewolf can opt into browsers
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.librewolf.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.librewolf]
-    "xdg"
-      "mime"
-        "defaultApplications" when config.myConfig.modules.librewolf.default
-          "text/html": "librewolf.desktop"
-          "x-scheme-handler/about": "librewolf.desktop"
-          "x-scheme-handler/http": "librewolf.desktop"
-          "x-scheme-handler/https": "librewolf.desktop"
-          "x-scheme-handler/unknown": "librewolf.desktop"
-  option "myConfig"."modules"."librewolf"."default": Bool
-    default: false
-    description: "Set LibreWolf as the default browser via MIME types"
-  option "myConfig"."modules"."librewolf"."enable": enable "Enable LibreWolf browser"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.librewolf]
+  "xdg"
+    "mime"
+      "defaultApplications" when config.myConfig.modules.librewolf.default
+        "text/html": "librewolf.desktop"
+        "x-scheme-handler/about": "librewolf.desktop"
+        "x-scheme-handler/http": "librewolf.desktop"
+        "x-scheme-handler/https": "librewolf.desktop"
+        "x-scheme-handler/unknown": "librewolf.desktop"
+option "myConfig"."modules"."librewolf"."default": Bool
+  default: false
+  description: "Set LibreWolf as the default browser via MIME types"
+"enable": "Enable LibreWolf browser"

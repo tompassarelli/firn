@@ -1,12 +1,10 @@
 use firn/tags
 
-polkit is a Module
-polkit is tagged auth
+tags: auth
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.polkit.enable
-    "security"
-      "polkit"
-        "enable": true
-  option "myConfig"."modules"."polkit"."enable": enable "Polkit security configuration"
+arguments: config, lib, ...
+config
+  "security"
+    "polkit"
+      "enable": true
+"enable": "Polkit security configuration"

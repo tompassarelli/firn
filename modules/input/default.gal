@@ -1,11 +1,9 @@
 use firn/tags
 
-input is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.input.enable
-    "services"
-      "libinput"
-        "enable": true
-  option "myConfig"."modules"."input"."enable": enable "touchpad support (libinput)"
+arguments: config, lib, ...
+config
+  "services"
+    "libinput"
+      "enable": true
+"enable": "touchpad support (libinput)"

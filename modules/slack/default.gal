@@ -1,11 +1,8 @@
 use firn/tags
 
-slack is a Module
-slack is tagged communication
+tags: communication
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.slack.enable
-    "environment"
-      "systemPackages": [pkgs.slack]
-  option "myConfig"."modules"."slack"."enable": enable "Slack messaging"
+config
+  "environment"
+    "systemPackages": [pkgs.slack]
+"enable": "Slack messaging"

@@ -1,11 +1,8 @@
 use firn/tags
 
-wowup is a Module
-wowup is tagged gaming
+tags: gaming
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.wowup.enable
-    "environment"
-      "systemPackages": [pkgs.wowup-cf]
-  option "myConfig"."modules"."wowup"."enable": enable "WowUp-CF addon manager"
+config
+  "environment"
+    "systemPackages": [pkgs.wowup-cf]
+"enable": "WowUp-CF addon manager"

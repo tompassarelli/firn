@@ -1,11 +1,8 @@
 use firn/tags
 
-eyedropper is a Module
-eyedropper is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.eyedropper.enable
-    "environment"
-      "systemPackages": [pkgs.eyedropper]
-  option "myConfig"."modules"."eyedropper"."enable": enable "Wayland color picker"
+config
+  "environment"
+    "systemPackages": [pkgs.eyedropper]
+"enable": "Wayland color picker"

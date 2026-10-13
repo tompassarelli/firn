@@ -1,13 +1,10 @@
 use firn/tags
 
-g203-led is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.g203-led.enable
-    "environment"
-      "systemPackages": [pkgs.g203-led]
-    "services"
-      "udev"
-        "extraRules": ("ACTION==\"add\", SUBSYSTEM==\"usb\", ATTR\{idVendor}==\"046d\", ATTR\{idProduct}==\"c092\", RUN+=\"" ++ builtins.toString(pkgs.g203-led)) ++ "/bin/g203-led lightsync solid 000000\"\n\n"
-  option "myConfig"."modules"."g203-led"."enable": enable "Logitech G102/G203 LED control"
+config
+  "environment"
+    "systemPackages": [pkgs.g203-led]
+  "services"
+    "udev"
+      "extraRules": ("ACTION==\"add\", SUBSYSTEM==\"usb\", ATTR\{idVendor}==\"046d\", ATTR\{idProduct}==\"c092\", RUN+=\"" ++ builtins.toString(pkgs.g203-led)) ++ "/bin/g203-led lightsync solid 000000\"\n\n"
+"enable": "Logitech G102/G203 LED control"

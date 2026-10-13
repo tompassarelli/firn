@@ -1,10 +1,7 @@
 use firn/tags
 
-bitwarden-desktop is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.bitwarden-desktop.enable
-    "environment"
-      "systemPackages": [pkgs.bitwarden-desktop]
-  option "myConfig"."modules"."bitwarden-desktop"."enable": enable "Bitwarden desktop app"
+config
+  "environment"
+    "systemPackages": [pkgs.bitwarden-desktop]
+"enable": "Bitwarden desktop app"

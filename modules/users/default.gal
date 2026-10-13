@@ -1,6 +1,5 @@
 use firn/tags
 
-users is a Module
 
 nix module
   arguments: lib, ...

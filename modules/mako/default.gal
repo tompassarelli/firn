@@ -1,22 +1,20 @@
 use firn/tags
 
-mako is a Module
-mako is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.mako.enable
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}
-          "services"
-            "mako"
-              "enable": true
-              "settings"
-                "app-name=Spotify"
-                  "invisible": 1
-                "app-name=kitty"
-                  "default-timeout": 0
+arguments: config, lib, ...
+config
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}
+        "services"
+          "mako"
+            "enable": true
+            "settings"
+              "app-name=Spotify"
+                "invisible": 1
+              "app-name=kitty"
                 "default-timeout": 0
-                "icons": 0
-  option "myConfig"."modules"."mako"."enable": enable "Mako notification daemon"
+              "default-timeout": 0
+              "icons": 0
+"enable": "Mako notification daemon"

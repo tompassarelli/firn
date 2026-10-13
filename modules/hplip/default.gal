@@ -1,12 +1,9 @@
 use firn/tags
 
-hplip is a Module
-hplip is tagged printing
+tags: printing
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.hplip.enable
-    "services"
-      "printing"
-        "drivers": [pkgs.hplip]
-  option "myConfig"."modules"."hplip"."enable": enable "HP printer drivers"
+config
+  "services"
+    "printing"
+      "drivers": [pkgs.hplip]
+"enable": "HP printer drivers"

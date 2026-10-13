@@ -1,22 +1,20 @@
 use firn/tags
 
-direnv is a Module
-direnv is tagged development
+tags: development
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.direnv.enable
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}
-          "programs"
-            "direnv"
+arguments: config, lib, ...
+config
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}
+        "programs"
+          "direnv"
+            "enable": true
+            "nix-direnv"
               "enable": true
-              "nix-direnv"
-                "enable": true
-    "programs"
-      "direnv"
+  "programs"
+    "direnv"
+      "enable": true
+      "nix-direnv"
         "enable": true
-        "nix-direnv"
-          "enable": true
-  option "myConfig"."modules"."direnv"."enable": enable "direnv for automatic dev shell activation"
+"enable": "direnv for automatic dev shell activation"

@@ -1,11 +1,8 @@
 use firn/tags
 
-curl is a Module
-curl is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.curl.enable
-    "environment"
-      "systemPackages": [pkgs.curl]
-  option "myConfig"."modules"."curl"."enable": enable "curl HTTP client"
+config
+  "environment"
+    "systemPackages": [pkgs.curl]
+"enable": "curl HTTP client"

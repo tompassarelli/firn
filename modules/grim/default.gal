@@ -1,11 +1,8 @@
 use firn/tags
 
-grim is a Module
-grim is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.grim.enable
-    "environment"
-      "systemPackages": [pkgs.grim]
-  option "myConfig"."modules"."grim"."enable": enable "Grim screenshot tool"
+config
+  "environment"
+    "systemPackages": [pkgs.grim]
+"enable": "Grim screenshot tool"

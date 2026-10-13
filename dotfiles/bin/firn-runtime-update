@@ -265,11 +265,18 @@ materialize_galileo() {
   nix develop "path:$galileo_build" --command cargo build --locked --release \
     --manifest-path "$galileo_build/Cargo.toml" --target-dir "$galileo_build/target" \
     -p galileo-cli
-  cp -- "$galileo_build/target/release/galileo" "$stage/bin/galileo"
+  cp -- "$galileo_build/target/release/galileo" "$stage/bin/galileo-core"
+  cp -- "$firn_repo/native/firn-galileo" "$stage/bin/galileo"
+  cp -- "$firn_repo/native/firn-module-lowering" "$stage/bin/firn-module-lowering"
+  cp -- "$firn_repo/native/firn_module_lowering.ts" "$stage/lib/firn-module-lowering.ts"
+  chmod +x "$stage/bin/galileo" "$stage/bin/firn-module-lowering"
   printf '%s\n' "$galileo_revision" >"$stage/galileo-revision"
-  record_generated_artifact galileo bin/galileo
+  record_generated_artifact galileo-core bin/galileo-core
+  record_artifact galileo bin/galileo "$firn_repo/native/firn-galileo"
+  record_artifact firn-module-lowering bin/firn-module-lowering "$firn_repo/native/firn-module-lowering"
+  record_artifact firn-module-lowering-source lib/firn-module-lowering.ts "$firn_repo/native/firn_module_lowering.ts"
   record_artifact galileo-revision galileo-revision "$firn_repo/config/galileo-revision"
-  binaries+=(galileo)
+  binaries+=(galileo galileo-core firn-module-lowering)
   mkdir -p "$stage/lib/firn"
   for policy in dispatch host-list; do
     cp -- "$galileo_build/lib/firn/$policy.gal" "$stage/lib/firn/$policy.gal"
@@ -277,7 +284,7 @@ materialize_galileo() {
       "$galileo_build/lib/firn/$policy.gal"
   done
 
-  dependencies="$(ldd "$stage/bin/galileo")"
+  dependencies="$(ldd "$stage/bin/galileo-core")"
   if [[ "$dependencies" == *'not found'* ]]; then
     printf 'firn-runtime-update: Galileo runtime dependencies are unavailable\n%s\n' \
       "$dependencies" >&2

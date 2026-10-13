@@ -1,11 +1,8 @@
 use firn/tags
 
-obsidian is a Module
-obsidian is tagged notes
+tags: notes
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.obsidian.enable
-    "environment"
-      "systemPackages": [pkgs.obsidian]
-  option "myConfig"."modules"."obsidian"."enable": enable "Obsidian note-taking"
+config
+  "environment"
+    "systemPackages": [pkgs.obsidian]
+"enable": "Obsidian note-taking"

@@ -1,11 +1,8 @@
 use firn/tags
 
-pomodoro is a Module
-pomodoro is tagged tasks
+tags: tasks
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.pomodoro.enable
-    "environment"
-      "systemPackages": [pkgs.pomodoro-gtk]
-  option "myConfig"."modules"."pomodoro"."enable": enable "Pomodoro timer"
+config
+  "environment"
+    "systemPackages": [pkgs.pomodoro-gtk]
+"enable": "Pomodoro timer"

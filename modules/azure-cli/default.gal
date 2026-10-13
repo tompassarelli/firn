@@ -1,10 +1,7 @@
 use firn/tags
 
-azure-cli is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.azure-cli.enable
-    "environment"
-      "systemPackages": [pkgs.azure-cli]
-  option "myConfig"."modules"."azure-cli"."enable": enable "Azure CLI (az) for Entra / Microsoft Graph admin"
+config
+  "environment"
+    "systemPackages": [pkgs.azure-cli]
+"enable": "Azure CLI (az) for Entra / Microsoft Graph admin"

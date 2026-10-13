@@ -1,11 +1,8 @@
 use firn/tags
 
-libtool is a Module
-libtool is tagged doom-emacs
+tags: doom-emacs
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.libtool.enable
-    "environment"
-      "systemPackages": [pkgs.libtool]
-  option "myConfig"."modules"."libtool"."enable": enable "GNU Libtool"
+config
+  "environment"
+    "systemPackages": [pkgs.libtool]
+"enable": "GNU Libtool"

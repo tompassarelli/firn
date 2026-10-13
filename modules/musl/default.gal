@@ -1,11 +1,8 @@
 use firn/tags
 
-musl is a Module
-musl is tagged development
+tags: development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.musl.enable
-    "environment"
-      "systemPackages": [pkgs.musl.dev]
-  option "myConfig"."modules"."musl"."enable": enable "musl C compiler toolchain"
+config
+  "environment"
+    "systemPackages": [pkgs.musl.dev]
+"enable": "musl C compiler toolchain"

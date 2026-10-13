@@ -1,11 +1,8 @@
 use firn/tags
 
-imagemagick is a Module
-imagemagick is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.imagemagick.enable
-    "environment"
-      "systemPackages": [pkgs.imagemagick]
-  option "myConfig"."modules"."imagemagick"."enable": enable "ImageMagick image processing"
+config
+  "environment"
+    "systemPackages": [pkgs.imagemagick]
+"enable": "ImageMagick image processing"

@@ -1,11 +1,8 @@
 use firn/tags
 
-vim is a Module
-vim is tagged development
+tags: development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.vim.enable
-    "environment"
-      "systemPackages": [pkgs.vim]
-  option "myConfig"."modules"."vim"."enable": enable "Vim text editor"
+config
+  "environment"
+    "systemPackages": [pkgs.vim]
+"enable": "Vim text editor"

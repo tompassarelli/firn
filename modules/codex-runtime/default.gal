@@ -1,17 +1,14 @@
 use firn/tags
 
-codex-runtime is a Module
 
 # Owns the Nix store roots that keep out-of-store Codex runtimes executable.
-nix module
-  arguments: config, lib, pkgs, ...
-  let username = config.myConfig.modules.users.username
-  let homeDir = config.myConfig.modules.users.homeDir
-  option myConfig.modules.codex-runtime.enable: enable "Codex provider runtime (runtime store roots)"
-  config when config.myConfig.modules.codex-runtime.enable
-    # one still resolves its ELF interpreter and RUNPATH from
-    # /nix/store. Nothing else roots those paths, so a garbage
-    # collection silently breaks every runtime.
-    # A user unit inherits no dev-shell PATH, and patchelf is
-    # not in the system profile. Pin it explicitly.
-    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.codex-runtime-gcroots: {Unit: {Description: "Root the Nix store dependencies of installed Codex runtimes"}, Service: {Type: "oneshot", Environment: ["PATH={pkgs.patchelf}/bin:/run/current-system/sw/bin"], ExecStart: "{homeDir}/.local/share/north/bin/codex-runtime-gcroots"}, Install: {WantedBy: ["default.target"]}}}
+let username = config.myConfig.modules.users.username
+let homeDir = config.myConfig.modules.users.homeDir
+enable: "Codex provider runtime (runtime store roots)"
+config
+  # one still resolves its ELF interpreter and RUNPATH from
+  # /nix/store. Nothing else roots those paths, so a garbage
+  # collection silently breaks every runtime.
+  # A user unit inherits no dev-shell PATH, and patchelf is
+  # not in the system profile. Pin it explicitly.
+  home-manager.users.{username}: ({config, ...}) => {systemd.user.services.codex-runtime-gcroots: {Unit: {Description: "Root the Nix store dependencies of installed Codex runtimes"}, Service: {Type: "oneshot", Environment: ["PATH={pkgs.patchelf}/bin:/run/current-system/sw/bin"], ExecStart: "{homeDir}/.local/share/north/bin/codex-runtime-gcroots"}, Install: {WantedBy: ["default.target"]}}}

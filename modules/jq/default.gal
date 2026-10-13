@@ -1,11 +1,8 @@
 use firn/tags
 
-jq is a Module
-jq is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.jq.enable
-    "environment"
-      "systemPackages": [pkgs.jq]
-  option "myConfig"."modules"."jq"."enable": enable "jq command-line JSON processor"
+config
+  "environment"
+    "systemPackages": [pkgs.jq]
+"enable": "jq command-line JSON processor"

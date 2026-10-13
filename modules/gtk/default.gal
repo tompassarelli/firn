@@ -1,12 +1,9 @@
 use firn/tags
 
-gtk is a Module
-gtk is tagged theming
+tags: theming
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.gtk.enable
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"dconf": {"settings": {"org/gnome/desktop/interface": {"color-scheme": lib.mkForce(if config.stylix.polarity == "dark" then "prefer-dark" else "prefer-light")}}}, "gtk": {"enable": true}, "home": {"packages": [pkgs.gsettings-desktop-schemas, pkgs.gtk3]}, "xdg": {"configFile": {"gtk-3.0/settings.ini": {"text": lib.mkForce(((((((("[Settings]\ngtk-application-prefer-dark-theme=" ++ (if config.stylix.polarity == "dark" then "1" else "0")) ++ "\ngtk-font-name=") ++ (((hm.config).gtk).font).name) ++ " ") ++ builtins.toString((((hm.config).gtk).font).size)) ++ "\ngtk-theme-name=") ++ (((hm.config).gtk).theme).name) ++ "\n\n")}, "gtk-4.0/settings.ini": {"text": lib.mkForce(((((((("[Settings]\ngtk-application-prefer-dark-theme=" ++ (if config.stylix.polarity == "dark" then "1" else "0")) ++ "\ngtk-font-name=") ++ (((hm.config).gtk).font).name) ++ " ") ++ builtins.toString((((hm.config).gtk).font).size)) ++ "\ngtk-theme-name=") ++ (((hm.config).gtk).theme).name) ++ "\n\n")}}}}
-  option "myConfig"."modules"."gtk"."enable": enable "GTK theming configuration"
+config
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"dconf": {"settings": {"org/gnome/desktop/interface": {"color-scheme": lib.mkForce(if config.stylix.polarity == "dark" then "prefer-dark" else "prefer-light")}}}, "gtk": {"enable": true}, "home": {"packages": [pkgs.gsettings-desktop-schemas, pkgs.gtk3]}, "xdg": {"configFile": {"gtk-3.0/settings.ini": {"text": lib.mkForce(((((((("[Settings]\ngtk-application-prefer-dark-theme=" ++ (if config.stylix.polarity == "dark" then "1" else "0")) ++ "\ngtk-font-name=") ++ (((hm.config).gtk).font).name) ++ " ") ++ builtins.toString((((hm.config).gtk).font).size)) ++ "\ngtk-theme-name=") ++ (((hm.config).gtk).theme).name) ++ "\n\n")}, "gtk-4.0/settings.ini": {"text": lib.mkForce(((((((("[Settings]\ngtk-application-prefer-dark-theme=" ++ (if config.stylix.polarity == "dark" then "1" else "0")) ++ "\ngtk-font-name=") ++ (((hm.config).gtk).font).name) ++ " ") ++ builtins.toString((((hm.config).gtk).font).size)) ++ "\ngtk-theme-name=") ++ (((hm.config).gtk).theme).name) ++ "\n\n")}}}}
+"enable": "GTK theming configuration"

@@ -1,10 +1,7 @@
 use firn/tags
 
-poppler-utils is a Module
-poppler-utils is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.poppler-utils.enable: enable "Poppler PDF rendering and text extraction tools"
-  config when config.myConfig.modules.poppler-utils.enable
-    environment.systemPackages: with pkgs: [poppler-utils]
+enable: "Poppler PDF rendering and text extraction tools"
+config
+  environment.systemPackages: with pkgs: [poppler-utils]

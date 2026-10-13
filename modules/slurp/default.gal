@@ -1,11 +1,8 @@
 use firn/tags
 
-slurp is a Module
-slurp is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.slurp.enable
-    "environment"
-      "systemPackages": [pkgs.slurp]
-  option "myConfig"."modules"."slurp"."enable": enable "Wayland region selector"
+config
+  "environment"
+    "systemPackages": [pkgs.slurp]
+"enable": "Wayland region selector"

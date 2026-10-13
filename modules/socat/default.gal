@@ -1,10 +1,7 @@
 use firn/tags
 
-socat is a Module
 socat can opt into development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.socat.enable: enable "socat"
-  config when config.myConfig.modules.socat.enable
-    environment.systemPackages: [pkgs.socat]
+enable: "socat"
+config
+  environment.systemPackages: [pkgs.socat]

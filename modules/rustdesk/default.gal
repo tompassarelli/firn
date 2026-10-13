@@ -1,10 +1,7 @@
 use firn/tags
 
-rustdesk is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.rustdesk.enable
-    "environment"
-      "systemPackages": [pkgs.rustdesk-flutter]
-  option "myConfig"."modules"."rustdesk"."enable": enable "RustDesk remote desktop"
+config
+  "environment"
+    "systemPackages": [pkgs.rustdesk-flutter]
+"enable": "RustDesk remote desktop"

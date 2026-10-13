@@ -1,11 +1,8 @@
 use firn/tags
 
-duf is a Module
-duf is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.duf.enable
-    "environment"
-      "systemPackages": [pkgs.duf]
-  option "myConfig"."modules"."duf"."enable": enable "duf disk usage viewer"
+config
+  "environment"
+    "systemPackages": [pkgs.duf]
+"enable": "duf disk usage viewer"

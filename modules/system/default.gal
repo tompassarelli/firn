@@ -1,6 +1,5 @@
 use firn/tags
 
-system is a Module
 
 nix module
   arguments: config, lib, ...

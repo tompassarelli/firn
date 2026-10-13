@@ -1,11 +1,8 @@
 use firn/tags
 
-libsecret is a Module
-libsecret is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.libsecret.enable
-    "environment"
-      "systemPackages": [pkgs.libsecret]
-  option "myConfig"."modules"."libsecret"."enable": enable "secret-tool CLI for the login-keyring secret service"
+config
+  "environment"
+    "systemPackages": [pkgs.libsecret]
+"enable": "secret-tool CLI for the login-keyring secret service"

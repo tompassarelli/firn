@@ -1,11 +1,8 @@
 use firn/tags
 
-clojure is a Module
-clojure is tagged lisp
+tags: lisp
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.clojure.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.clj-kondo, pkgs.unstable.clojure-lsp, pkgs.unstable.jet, pkgs.unstable.cljfmt]
-  option "myConfig"."modules"."clojure"."enable": enable "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.clj-kondo, pkgs.unstable.clojure-lsp, pkgs.unstable.jet, pkgs.unstable.cljfmt]
+"enable": "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)"

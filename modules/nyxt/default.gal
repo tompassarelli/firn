@@ -1,32 +1,29 @@
 use firn/tags
 
-nyxt is a Module
 nyxt can opt into browsers
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.nyxt.enable
-    "environment"
-      "systemPackages": [pkgs.nyxt4]
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"xdg": {"configFile": {"nyxt/config.lisp": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/nyxt/config.lisp")}}}}
-    "myConfig"
-      "modules"
-        "fuse"
-          "enable": lib.mkDefault(true)
-    "programs"
-      "appimage"
-        "enable": true
-    "xdg"
-      "mime"
-        "defaultApplications" when config.myConfig.modules.nyxt.default
-          "text/html": "nyxt.desktop"
-          "x-scheme-handler/about": "nyxt.desktop"
-          "x-scheme-handler/http": "nyxt.desktop"
-          "x-scheme-handler/https": "nyxt.desktop"
-          "x-scheme-handler/unknown": "nyxt.desktop"
-  option "myConfig"."modules"."nyxt"."default": Bool
-    default: false
-    description: "Set Nyxt as the default browser via MIME types"
-  option "myConfig"."modules"."nyxt"."enable": enable "Enable Nyxt browser"
+config
+  "environment"
+    "systemPackages": [pkgs.nyxt4]
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"xdg": {"configFile": {"nyxt/config.lisp": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/nyxt/config.lisp")}}}}
+  "myConfig"
+    "modules"
+      "fuse"
+        "enable": lib.mkDefault(true)
+  "programs"
+    "appimage"
+      "enable": true
+  "xdg"
+    "mime"
+      "defaultApplications" when config.myConfig.modules.nyxt.default
+        "text/html": "nyxt.desktop"
+        "x-scheme-handler/about": "nyxt.desktop"
+        "x-scheme-handler/http": "nyxt.desktop"
+        "x-scheme-handler/https": "nyxt.desktop"
+        "x-scheme-handler/unknown": "nyxt.desktop"
+option "myConfig"."modules"."nyxt"."default": Bool
+  default: false
+  description: "Set Nyxt as the default browser via MIME types"
+"enable": "Enable Nyxt browser"

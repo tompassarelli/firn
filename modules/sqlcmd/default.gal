@@ -1,11 +1,8 @@
 use firn/tags
 
-sqlcmd is a Module
-sqlcmd is tagged csharp
+tags: csharp
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.sqlcmd.enable
-    "environment"
-      "systemPackages": [pkgs.sqlcmd]
-  option "myConfig"."modules"."sqlcmd"."enable": enable "sqlcmd for Microsoft SQL Server"
+config
+  "environment"
+    "systemPackages": [pkgs.sqlcmd]
+"enable": "sqlcmd for Microsoft SQL Server"

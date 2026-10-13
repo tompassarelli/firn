@@ -1,22 +1,20 @@
 use firn/tags
 
-thermal-management is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.thermal-management.enable
-    "boot"
-      "kernelParams": ["amd_pstate=active"]
-    "services"
-      "auto-cpufreq"
-        "enable": true
-        "settings"
-          "battery"
-            "energy_performance_preference": "power"
-            "governor": "powersave"
-            "turbo": "never"
-          "charger"
-            "energy_performance_preference": "balance_performance"
-            "governor": "performance"
-            "turbo": "never"
-  option "myConfig"."modules"."thermal-management"."enable": enable "CPU thermal management for sustained builds"
+arguments: config, lib, ...
+config
+  "boot"
+    "kernelParams": ["amd_pstate=active"]
+  "services"
+    "auto-cpufreq"
+      "enable": true
+      "settings"
+        "battery"
+          "energy_performance_preference": "power"
+          "governor": "powersave"
+          "turbo": "never"
+        "charger"
+          "energy_performance_preference": "balance_performance"
+          "governor": "performance"
+          "turbo": "never"
+"enable": "CPU thermal management for sustained builds"

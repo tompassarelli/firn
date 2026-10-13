@@ -1,11 +1,8 @@
 use firn/tags
 
-zathura is a Module
-zathura is tagged media
+tags: media
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.zathura.enable
-    "environment"
-      "systemPackages": [pkgs.zathura]
-  option "myConfig"."modules"."zathura"."enable": enable "Zathura PDF viewer"
+config
+  "environment"
+    "systemPackages": [pkgs.zathura]
+"enable": "Zathura PDF viewer"

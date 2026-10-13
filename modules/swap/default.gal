@@ -1,22 +1,20 @@
 use firn/tags
 
-swap is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.swap.enable
-    "boot"
-      "kernel"
-        "sysctl"
-          "vm.page-cluster": 0
-          "vm.swappiness": 60
-          "vm.watermark_boost_factor": 0
-          "vm.watermark_scale_factor": 125
-      "kernelParams": ["resume_offset=347227782"]
-      "resumeDevice": "/dev/mapper/cryptroot"
-    "swapDevices": [{"device": "/swap/swapfile", "priority": 0}]
-    "zramSwap"
-      "algorithm": "zstd"
-      "enable": true
-      "memoryPercent": 50
-  option "myConfig"."modules"."swap"."enable": enable "zram-based compressed swap"
+arguments: config, lib, ...
+config
+  "boot"
+    "kernel"
+      "sysctl"
+        "vm.page-cluster": 0
+        "vm.swappiness": 60
+        "vm.watermark_boost_factor": 0
+        "vm.watermark_scale_factor": 125
+    "kernelParams": ["resume_offset=347227782"]
+    "resumeDevice": "/dev/mapper/cryptroot"
+  "swapDevices": [{"device": "/swap/swapfile", "priority": 0}]
+  "zramSwap"
+    "algorithm": "zstd"
+    "enable": true
+    "memoryPercent": 50
+"enable": "zram-based compressed swap"

@@ -1,10 +1,7 @@
 use firn/tags
 
-alsa-lib is a Module
 alsa-lib can opt into development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.alsa-lib.enable: enable "alsa-lib"
-  config when config.myConfig.modules.alsa-lib.enable
-    environment.systemPackages: [pkgs.alsa-lib]
+enable: "alsa-lib"
+config
+  environment.systemPackages: [pkgs.alsa-lib]

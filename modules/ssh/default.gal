@@ -1,15 +1,13 @@
 use firn/tags
 
-ssh is a Module
-ssh is tagged server
+tags: server
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.ssh.enable
-    "services"
-      "openssh"
-        "enable": true
-        "settings"
-          "KbdInteractiveAuthentication": false
-          "PasswordAuthentication": false
-  option "myConfig"."modules"."ssh"."enable": enable "SSH server"
+arguments: config, lib, ...
+config
+  "services"
+    "openssh"
+      "enable": true
+      "settings"
+        "KbdInteractiveAuthentication": false
+        "PasswordAuthentication": false
+"enable": "SSH server"

@@ -1,16 +1,13 @@
 use firn/tags
 
-clipboard-tools is a Module
-clipboard-tools is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.clipboard-tools.enable
-    # A Wayland selection dies with its source client; wl-clip-persist reowns it.
-    # No xclip/xsel: xwayland-satellite's X clipboard goes stale without a focused X window, and Claude Code tries xclip before wl-paste.
-    "environment"
-      "systemPackages": [pkgs.wl-clip-persist, pkgs.xlsclients]
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"systemd": {"user": {"services": {"wl-clip-persist": {"Install": {"WantedBy": ["niri.service"]}, "Service": {"ExecStart": ("" ++ builtins.toString(pkgs.wl-clip-persist)) ++ "/bin/wl-clip-persist --clipboard regular", "Restart": "on-failure"}, "Unit": {"After": ["graphical-session.target"], "Description": "Keep the Wayland clipboard after the source client exits", "PartOf": ["graphical-session.target"], "Requisite": ["graphical-session.target"]}}}}}}
-  option "myConfig"."modules"."clipboard-tools"."enable": enable "Clipboard persistence daemon and X selection diagnostics"
+config
+  # A Wayland selection dies with its source client; wl-clip-persist reowns it.
+  # No xclip/xsel: xwayland-satellite's X clipboard goes stale without a focused X window, and Claude Code tries xclip before wl-paste.
+  "environment"
+    "systemPackages": [pkgs.wl-clip-persist, pkgs.xlsclients]
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"systemd": {"user": {"services": {"wl-clip-persist": {"Install": {"WantedBy": ["niri.service"]}, "Service": {"ExecStart": ("" ++ builtins.toString(pkgs.wl-clip-persist)) ++ "/bin/wl-clip-persist --clipboard regular", "Restart": "on-failure"}, "Unit": {"After": ["graphical-session.target"], "Description": "Keep the Wayland clipboard after the source client exits", "PartOf": ["graphical-session.target"], "Requisite": ["graphical-session.target"]}}}}}}
+"enable": "Clipboard persistence daemon and X selection diagnostics"

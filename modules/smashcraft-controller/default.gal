@@ -1,7 +1,6 @@
 use firn/tags
 
-smashcraft-controller is a Module
-smashcraft-controller is tagged desktop
+tags: desktop
 
 # Tom's Xbox controller in Warcraft III: the always-on padbridge service
 # (github.com/tompassarelli/padbridge) with Smashcraft's map plug-in
@@ -10,10 +9,9 @@ smashcraft-controller is tagged desktop
 # service and the current plug-in, so the projects stay out of the system
 # closure; without the service the unit is skipped, and without the plug-in
 # the service plays every map with its Any map profile.
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.smashcraft-controller.enable
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"systemd": {"user": {"services": {"padbridge": {"Install": {"WantedBy": ["niri.service"]}, "Service": {"ExecStart": ((("" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/padbridge/bin/padbridge --service --plugin ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/smashcraft-build-inputs/controller/wc3-journal", "Restart": "always", "RestartSec": "5"}, "Unit": {"After": ["graphical-session.target"], "ConditionPathExists": ("" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/padbridge/bin/padbridge", "Description": "padbridge service", "PartOf": ["graphical-session.target"]}}}}}}
-  option "myConfig"."modules"."smashcraft-controller"."enable": enable "padbridge service: Tom's Xbox controller in Warcraft III, with Smashcraft's plug-in"
+arguments: config, lib, ...
+config
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"systemd": {"user": {"services": {"padbridge": {"Install": {"WantedBy": ["niri.service"]}, "Service": {"ExecStart": ((("" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/padbridge/bin/padbridge --service --plugin ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/smashcraft-build-inputs/controller/wc3-journal", "Restart": "always", "RestartSec": "5"}, "Unit": {"After": ["graphical-session.target"], "ConditionPathExists": ("" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/padbridge/bin/padbridge", "Description": "padbridge service", "PartOf": ["graphical-session.target"]}}}}}}
+"enable": "padbridge service: Tom's Xbox controller in Warcraft III, with Smashcraft's plug-in"

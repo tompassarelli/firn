@@ -1,13 +1,11 @@
 use firn/tags
 
-proton-log-watchdog is a Module
 proton-log-watchdog can opt into development
 
-nix module
-  arguments: config, lib, pkgs, jobRun, ...
-  let homeDir = config.myConfig.modules.users.homeDir
-  let username = config.myConfig.modules.users.username
-  let description = "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB"
-  option myConfig.modules.proton-log-watchdog.enable: enable description
-  config when config.myConfig.modules.proton-log-watchdog.enable
-    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.proton-log-watchdog: {Unit: {Description: description}, Service: {Type: "oneshot", Environment: ["PATH={homeDir}/.local/share/firn/bin:{homeDir}/.local/share/north/bin:{lib.makeBinPath([pkgs.bash, pkgs.coreutils, pkgs.gnugrep, pkgs.gnused, pkgs.libnotify])}"], ExecStart: jobRun("proton-log-watchdog", "{homeDir}/.local/share/firn/bin/proton-log-watchdog")}}, systemd.user.timers.proton-log-watchdog: {Unit: {Description: description}, Timer: {OnStartupSec: "1min", OnUnitActiveSec: "10min"}, Install: {WantedBy: ["timers.target"]}}}
+arguments: config, lib, pkgs, jobRun, ...
+let homeDir = config.myConfig.modules.users.homeDir
+let username = config.myConfig.modules.users.username
+let description = "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB"
+enable: description
+config
+  home-manager.users.{username}: ({config, ...}) => {systemd.user.services.proton-log-watchdog: {Unit: {Description: description}, Service: {Type: "oneshot", Environment: ["PATH={homeDir}/.local/share/firn/bin:{homeDir}/.local/share/north/bin:{lib.makeBinPath([pkgs.bash, pkgs.coreutils, pkgs.gnugrep, pkgs.gnused, pkgs.libnotify])}"], ExecStart: jobRun("proton-log-watchdog", "{homeDir}/.local/share/firn/bin/proton-log-watchdog")}}, systemd.user.timers.proton-log-watchdog: {Unit: {Description: description}, Timer: {OnStartupSec: "1min", OnUnitActiveSec: "10min"}, Install: {WantedBy: ["timers.target"]}}}

@@ -1,11 +1,8 @@
 use firn/tags
 
-hyperfine is a Module
-hyperfine is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.hyperfine.enable
-    "environment"
-      "systemPackages": [pkgs.hyperfine]
-  option "myConfig"."modules"."hyperfine"."enable": enable "hyperfine command benchmarking"
+config
+  "environment"
+    "systemPackages": [pkgs.hyperfine]
+"enable": "hyperfine command benchmarking"

@@ -1,11 +1,8 @@
 use firn/tags
 
-zoom is a Module
-zoom is tagged communication
+tags: communication
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.zoom.enable
-    "environment"
-      "systemPackages": [pkgs.zoom-us]
-  option "myConfig"."modules"."zoom"."enable": enable "Zoom video conferencing"
+config
+  "environment"
+    "systemPackages": [pkgs.zoom-us]
+"enable": "Zoom video conferencing"

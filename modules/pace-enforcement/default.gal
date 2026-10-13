@@ -1,6 +1,5 @@
 use firn/tags
 
-pace-enforcement is a Module
 
 nix file
   arguments: config, lib, pkgs, jobRun, ...

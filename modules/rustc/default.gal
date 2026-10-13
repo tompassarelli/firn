@@ -1,11 +1,8 @@
 use firn/tags
 
-rustc is a Module
-rustc is tagged rust
+tags: rust
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.rustc.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.rustc]
-  option "myConfig"."modules"."rustc"."enable": enable "Rust compiler"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.rustc]
+"enable": "Rust compiler"

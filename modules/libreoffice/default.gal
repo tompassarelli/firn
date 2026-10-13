@@ -1,11 +1,8 @@
 use firn/tags
 
-libreoffice is a Module
-libreoffice is tagged office
+tags: office
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.libreoffice.enable
-    "environment"
-      "systemPackages": [pkgs.libreoffice-fresh]
-  option "myConfig"."modules"."libreoffice"."enable": enable "Enable LibreOffice office suite"
+config
+  "environment"
+    "systemPackages": [pkgs.libreoffice-fresh]
+"enable": "Enable LibreOffice office suite"

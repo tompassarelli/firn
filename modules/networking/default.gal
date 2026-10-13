@@ -1,17 +1,14 @@
 use firn/tags
 
-networking is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.networking.enable
-    "environment"
-      "systemPackages": [pkgs.networkmanagerapplet]
-    "networking"
-      "networkmanager"
-        "enable": true
-        "logLevel": "DEBUG"
-        "unmanaged": ["interface-name:wg*"]
-        "wifi"
-          "powersave": false
-  option "myConfig"."modules"."networking"."enable": enable "network configuration"
+config
+  "environment"
+    "systemPackages": [pkgs.networkmanagerapplet]
+  "networking"
+    "networkmanager"
+      "enable": true
+      "logLevel": "DEBUG"
+      "unmanaged": ["interface-name:wg*"]
+      "wifi"
+        "powersave": false
+"enable": "network configuration"

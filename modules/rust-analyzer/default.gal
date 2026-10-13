@@ -1,11 +1,8 @@
 use firn/tags
 
-rust-analyzer is a Module
-rust-analyzer is tagged rust
+tags: rust
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.rust-analyzer.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.rust-analyzer]
-  option "myConfig"."modules"."rust-analyzer"."enable": enable "Rust language server"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.rust-analyzer]
+"enable": "Rust language server"

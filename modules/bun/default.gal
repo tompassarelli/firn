@@ -1,11 +1,8 @@
 use firn/tags
 
-bun is a Module
-bun is tagged javascript
+tags: javascript
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.bun.enable
-    "environment"
-      "systemPackages": [pkgs.bun]
-  option "myConfig"."modules"."bun"."enable": enable "Bun JavaScript runtime and package manager"
+config
+  "environment"
+    "systemPackages": [pkgs.bun]
+"enable": "Bun JavaScript runtime and package manager"

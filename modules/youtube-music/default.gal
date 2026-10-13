@@ -1,11 +1,8 @@
 use firn/tags
 
-youtube-music is a Module
-youtube-music is tagged media
+tags: media
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.youtube-music.enable
-    "environment"
-      "systemPackages": [pkgs.youtube-music]
-  option "myConfig"."modules"."youtube-music"."enable": enable "YouTube Music client"
+config
+  "environment"
+    "systemPackages": [pkgs.youtube-music]
+"enable": "YouTube Music client"

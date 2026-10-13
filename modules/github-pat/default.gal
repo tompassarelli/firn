@@ -1,6 +1,5 @@
 use firn/tags
 
-github-pat is a Module
 
 # Two fine-grained PATs: one read-only for the repositories the laptop applies,
 # one for all other work. git and gh both choose by repository.

@@ -1,11 +1,8 @@
 use firn/tags
 
-emacs is a Module
-emacs is tagged doom-emacs
+tags: doom-emacs
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.emacs.enable
-    "environment"
-      "systemPackages": [pkgs.emacs-pgtk]
-  option "myConfig"."modules"."emacs"."enable": enable "GNU Emacs editor"
+config
+  "environment"
+    "systemPackages": [pkgs.emacs-pgtk]
+"enable": "GNU Emacs editor"

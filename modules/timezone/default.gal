@@ -1,11 +1,9 @@
 use firn/tags
 
-timezone is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.timezone.enable
-    "time"
-      "timeZone": config.myConfig.modules.timezone.zone
-  imports: [{"options": {"myConfig": {"modules": {"timezone": {"zone": lib.mkOption({"default": "UTC", "description": "IANA timezone — instance overrides per-host", "type": lib.types.str})}}}}}]
-  option "myConfig"."modules"."timezone"."enable": enable "timezone configuration"
+arguments: config, lib, ...
+config
+  "time"
+    "timeZone": config.myConfig.modules.timezone.zone
+imports: [{"options": {"myConfig": {"modules": {"timezone": {"zone": lib.mkOption({"default": "UTC", "description": "IANA timezone — instance overrides per-host", "type": lib.types.str})}}}}}]
+"enable": "timezone configuration"

@@ -1,17 +1,15 @@
 use firn/tags
 
 printing is a Tag
-printing is a Module
-printing is tagged printing
+tags: printing
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.printing.enable
-    "services"
-      "avahi"
-        "enable": true
-        "nssmdns4": true
-        "openFirewall": true
-      "printing"
-        "enable": true
-  option "myConfig"."modules"."printing"."enable": enable "CUPS printing service with network discovery"
+arguments: config, lib, ...
+config
+  "services"
+    "avahi"
+      "enable": true
+      "nssmdns4": true
+      "openFirewall": true
+    "printing"
+      "enable": true
+"enable": "CUPS printing service with network discovery"

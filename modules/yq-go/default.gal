@@ -1,11 +1,8 @@
 use firn/tags
 
-yq-go is a Module
-yq-go is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.yq-go.enable
-    "environment"
-      "systemPackages": [pkgs.yq-go]
-  option "myConfig"."modules"."yq-go"."enable": enable "yq YAML/JSON/TOML processor"
+config
+  "environment"
+    "systemPackages": [pkgs.yq-go]
+"enable": "yq YAML/JSON/TOML processor"

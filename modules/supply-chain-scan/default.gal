@@ -1,15 +1,12 @@
 use firn/tags
 
-supply-chain-scan is a Module
 supply-chain-scan can opt into development
 
-nix module
-  arguments: config, lib, pkgs, ...
-  let homeDir = config.myConfig.modules.users.homeDir
-  let username = config.myConfig.modules.users.username
-  let description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories"
-  let path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:{homeDir}/.local/share/north/bin:{lib.makeBinPath([pkgs.osv-scanner, pkgs.git, pkgs.jq, pkgs.openssh, pkgs.coreutils, pkgs.gnugrep, pkgs.bash])}"
-  option myConfig.modules.supply-chain-scan.enable: enable description
-  config when config.myConfig.modules.supply-chain-scan.enable
-    environment.systemPackages: [pkgs.osv-scanner]
-    home-manager.users.{username}: ({config, ...}) => {systemd.user.services.supply-chain-scan: {Unit: {Description: description, After: ["network-online.target"], OnFailure: ["update-notify@%n.service"]}, Service: {Type: "oneshot", Nice: 10, TimeoutStartSec: "10min", Environment: [path], ExecStart: "{homeDir}/.local/share/north/bin/supply-chain-scan"}}, systemd.user.timers.supply-chain-scan: {Unit: {Description: description}, Timer: {OnCalendar: "*-*-* 07:23:00", Persistent: true}, Install: {WantedBy: ["timers.target"]}}}
+let homeDir = config.myConfig.modules.users.homeDir
+let username = config.myConfig.modules.users.username
+let description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories"
+let path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:{homeDir}/.local/share/north/bin:{lib.makeBinPath([pkgs.osv-scanner, pkgs.git, pkgs.jq, pkgs.openssh, pkgs.coreutils, pkgs.gnugrep, pkgs.bash])}"
+enable: description
+config
+  environment.systemPackages: [pkgs.osv-scanner]
+  home-manager.users.{username}: ({config, ...}) => {systemd.user.services.supply-chain-scan: {Unit: {Description: description, After: ["network-online.target"], OnFailure: ["update-notify@%n.service"]}, Service: {Type: "oneshot", Nice: 10, TimeoutStartSec: "10min", Environment: [path], ExecStart: "{homeDir}/.local/share/north/bin/supply-chain-scan"}}, systemd.user.timers.supply-chain-scan: {Unit: {Description: description}, Timer: {OnCalendar: "*-*-* 07:23:00", Persistent: true}, Install: {WantedBy: ["timers.target"]}}}

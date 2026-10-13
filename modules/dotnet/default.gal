@@ -1,13 +1,10 @@
 use firn/tags
 
-dotnet is a Module
-dotnet is tagged csharp
+tags: csharp
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.dotnet.enable
-    "environment"
-      "sessionVariables"
-        "PATH": ["$HOME/.dotnet/tools"]
-      "systemPackages": [pkgs.dotnet-sdk_8]
-  option "myConfig"."modules"."dotnet"."enable": enable ".NET SDK and CLI tools"
+config
+  "environment"
+    "sessionVariables"
+      "PATH": ["$HOME/.dotnet/tools"]
+    "systemPackages": [pkgs.dotnet-sdk_8]
+"enable": ".NET SDK and CLI tools"

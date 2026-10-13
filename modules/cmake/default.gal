@@ -1,11 +1,8 @@
 use firn/tags
 
-cmake is a Module
-cmake is tagged doom-emacs
+tags: doom-emacs
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.cmake.enable
-    "environment"
-      "systemPackages": [pkgs.cmake]
-  option "myConfig"."modules"."cmake"."enable": enable "CMake build system"
+config
+  "environment"
+    "systemPackages": [pkgs.cmake]
+"enable": "CMake build system"

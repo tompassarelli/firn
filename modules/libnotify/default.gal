@@ -1,11 +1,8 @@
 use firn/tags
 
-libnotify is a Module
-libnotify is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.libnotify.enable
-    "environment"
-      "systemPackages": [pkgs.libnotify]
-  option "myConfig"."modules"."libnotify"."enable": enable "libnotify notification client"
+config
+  "environment"
+    "systemPackages": [pkgs.libnotify]
+"enable": "libnotify notification client"

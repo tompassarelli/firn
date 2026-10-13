@@ -1,11 +1,8 @@
 use firn/tags
 
-imv is a Module
-imv is tagged media
+tags: media
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.imv.enable
-    "environment"
-      "systemPackages": [pkgs.imv]
-  option "myConfig"."modules"."imv"."enable": enable "imv image viewer"
+config
+  "environment"
+    "systemPackages": [pkgs.imv]
+"enable": "imv image viewer"

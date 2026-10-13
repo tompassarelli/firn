@@ -1,11 +1,8 @@
 use firn/tags
 
-obs-studio is a Module
-obs-studio is tagged creative
+tags: creative
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.obs-studio.enable
-    "environment"
-      "systemPackages": [pkgs.obs-studio]
-  option "myConfig"."modules"."obs-studio"."enable": enable "OBS Studio screen recording"
+config
+  "environment"
+    "systemPackages": [pkgs.obs-studio]
+"enable": "OBS Studio screen recording"

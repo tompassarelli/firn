@@ -1,10 +1,7 @@
 use firn/tags
 
-zed is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.zed.enable
-    "environment"
-      "systemPackages": [pkgs.zed-editor]
-  option "myConfig"."modules"."zed"."enable": enable "Zed editor"
+config
+  "environment"
+    "systemPackages": [pkgs.zed-editor]
+"enable": "Zed editor"

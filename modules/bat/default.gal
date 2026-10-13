@@ -1,11 +1,8 @@
 use firn/tags
 
-bat is a Module
-bat is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.bat.enable
-    "environment"
-      "systemPackages": [pkgs.bat]
-  option "myConfig"."modules"."bat"."enable": enable "bat syntax-highlighting cat"
+config
+  "environment"
+    "systemPackages": [pkgs.bat]
+"enable": "bat syntax-highlighting cat"

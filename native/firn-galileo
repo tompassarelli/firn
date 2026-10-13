@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export FIRN_MODULE_LOWERING="$here/firn-module-lowering"
+exec "$here/galileo-core" "$@"

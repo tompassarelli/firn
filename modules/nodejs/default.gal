@@ -1,11 +1,8 @@
 use firn/tags
 
-nodejs is a Module
-nodejs is tagged javascript
+tags: javascript
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.nodejs.enable
-    "environment"
-      "systemPackages": [pkgs.nodejs]
-  option "myConfig"."modules"."nodejs"."enable": enable "Node.js runtime"
+config
+  "environment"
+    "systemPackages": [pkgs.nodejs]
+"enable": "Node.js runtime"

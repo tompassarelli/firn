@@ -1,16 +1,14 @@
 use firn/tags
 
-auto-upgrade is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.auto-upgrade.enable
-    "system"
-      "autoUpgrade"
-        "allowReboot": false
-        "dates": "Sun 03:00"
-        "enable": true
-        "flags": ["--update-input", "nixpkgs", "--update-input", "nixpkgs-unstable", "--commit-lock-file"]
-        "flake": ("" ++ config.myConfig.modules.users.codeDir) ++ "/nixos-config"
-        "randomizedDelaySec": "30min"
-  option "myConfig"."modules"."auto-upgrade"."enable": enable "Automatic system updates"
+arguments: config, lib, ...
+config
+  "system"
+    "autoUpgrade"
+      "allowReboot": false
+      "dates": "Sun 03:00"
+      "enable": true
+      "flags": ["--update-input", "nixpkgs", "--update-input", "nixpkgs-unstable", "--commit-lock-file"]
+      "flake": ("" ++ config.myConfig.modules.users.codeDir) ++ "/nixos-config"
+      "randomizedDelaySec": "30min"
+"enable": "Automatic system updates"

@@ -1,6 +1,5 @@
 use firn/tags
 
-wg-nexus is a Module
 
 nix file
   arguments: config, lib, pkgs, ...

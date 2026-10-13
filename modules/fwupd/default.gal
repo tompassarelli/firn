@@ -1,10 +1,7 @@
 use firn/tags
 
-fwupd is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.fwupd.enable
-    "environment"
-      "systemPackages": [pkgs.fwupd]
-  option "myConfig"."modules"."fwupd"."enable": enable "fwupd firmware updater"
+config
+  "environment"
+    "systemPackages": [pkgs.fwupd]
+"enable": "fwupd firmware updater"

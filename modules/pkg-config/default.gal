@@ -1,11 +1,8 @@
 use firn/tags
 
-pkg-config is a Module
-pkg-config is tagged rust
+tags: rust
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.pkg-config.enable
-    "environment"
-      "systemPackages": [pkgs.pkg-config]
-  option "myConfig"."modules"."pkg-config"."enable": enable "pkg-config build tool"
+config
+  "environment"
+    "systemPackages": [pkgs.pkg-config]
+"enable": "pkg-config build tool"

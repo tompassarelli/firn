@@ -1,10 +1,7 @@
 use firn/tags
 
-parted is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.parted.enable
-    "environment"
-      "systemPackages": [pkgs.parted]
-  option "myConfig"."modules"."parted"."enable": enable "disk partitioning tool"
+config
+  "environment"
+    "systemPackages": [pkgs.parted]
+"enable": "disk partitioning tool"

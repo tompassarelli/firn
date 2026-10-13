@@ -1,6 +1,5 @@
 use firn/tags
 
-tmp-retention is a Module
 
 # The mM: age check uses mtime for files and directories; ordinary reads must
 # not refresh retention. systemd's first path rule wins in basename order:
@@ -8,10 +7,9 @@ tmp-retention is a Module
 # confirms this override. Seven days covers a lane paused over a weekend
 # while bounding scratch inode retention. /var/tmp retains its thirty-day
 # reboot-surviving contract.
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.tmp-retention.enable
-    "systemd"
-      "tmpfiles"
-        "rules": ["q /tmp 1777 root root mM:7d", "q /var/tmp 1777 root root mM:30d"]
-  option "myConfig"."modules"."tmp-retention"."enable": enable "mtime-pinned /tmp and /var/tmp retention (systemd-tmpfiles age-by override)"
+arguments: config, lib, ...
+config
+  "systemd"
+    "tmpfiles"
+      "rules": ["q /tmp 1777 root root mM:7d", "q /var/tmp 1777 root root mM:30d"]
+"enable": "mtime-pinned /tmp and /var/tmp retention (systemd-tmpfiles age-by override)"

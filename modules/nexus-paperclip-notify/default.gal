@@ -1,6 +1,5 @@
 use firn/tags
 
-nexus-paperclip-notify is a Module
 
 nix file
   arguments: config, lib, pkgs, ...

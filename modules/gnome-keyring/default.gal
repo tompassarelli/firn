@@ -1,21 +1,19 @@
 use firn/tags
 
-gnome-keyring is a Module
-gnome-keyring is tagged auth
+tags: auth
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.gnome-keyring.enable
-    "programs"
-      "seahorse"
+arguments: config, lib, ...
+config
+  "programs"
+    "seahorse"
+      "enable": true
+  "security"
+    "pam"
+      "services"
+        "login"
+          "enableGnomeKeyring": true
+  "services"
+    "gnome"
+      "gnome-keyring"
         "enable": true
-    "security"
-      "pam"
-        "services"
-          "login"
-            "enableGnomeKeyring": true
-    "services"
-      "gnome"
-        "gnome-keyring"
-          "enable": true
-  option "myConfig"."modules"."gnome-keyring"."enable": enable "GNOME Keyring (secrets storage + Seahorse GUI)"
+"enable": "GNOME Keyring (secrets storage + Seahorse GUI)"

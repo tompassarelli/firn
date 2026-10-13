@@ -1,13 +1,10 @@
 use firn/tags
 
 python is a Tag
-python is a Module
-python is tagged python
+tags: python
 
 # Keep one Python runtime so a bare interpreter cannot shadow its boto3 environment.
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.python.enable
-    "environment"
-      "systemPackages": [pkgs.python3.withPackages((pythonPackages) => [pythonPackages.boto3])]
-  option "myConfig"."modules"."python"."enable": enable "Python runtime with uv"
+config
+  "environment"
+    "systemPackages": [pkgs.python3.withPackages((pythonPackages) => [pythonPackages.boto3])]
+"enable": "Python runtime with uv"

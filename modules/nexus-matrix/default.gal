@@ -1,6 +1,5 @@
 use firn/tags
 
-nexus-matrix is a Module
 
 nix file
   arguments: config, lib, pkgs, ...

@@ -1,11 +1,8 @@
 use firn/tags
 
-ladybird is a Module
 ladybird can opt into browsers
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.ladybird.enable
-    "environment"
-      "systemPackages": [pkgs.unstable.ladybird]
-  option "myConfig"."modules"."ladybird"."enable": enable "Enable Ladybird browser (bleeding edge from git)"
+config
+  "environment"
+    "systemPackages": [pkgs.unstable.ladybird]
+"enable": "Enable Ladybird browser (bleeding edge from git)"

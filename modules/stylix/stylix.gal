@@ -1,4 +1,2 @@
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.stylix.enable
-    environment.systemPackages: with pkgs: [adwaita-icon-theme, gnome-themes-extra]
+config
+  environment.systemPackages: with pkgs: [adwaita-icon-theme, gnome-themes-extra]

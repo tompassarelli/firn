@@ -1,15 +1,12 @@
 use firn/tags
 
-delivery-liveness is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.delivery-liveness.enable
-    "environment"
-      "etc"
-        "north/delivery-liveness-required"
-          "text": "1\n"
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"home": {"sessionVariables": {"NORTH_DELIVERY_LIVENESS_REQUIRED": "1"}}, "systemd": {"user": {"paths": {"firn-delivery-liveness": {"Install": {"WantedBy": ["paths.target"]}, "Path": {"PathChanged": ("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/main/.git/logs/HEAD"}, "Unit": {"Description": "Refresh Firn delivery liveness when main advances"}}}, "services": {"firn-delivery-liveness": {"Service": {"Environment": [("NORTH_BIN=" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin/north", ((((("PATH=" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/firn/bin:") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin:") ++ lib.makeBinPath([pkgs.bash, pkgs.coreutils, pkgs.gawk, pkgs.git, pkgs.`nix`, pkgs.python3, pkgs.util-linux])) ++ ""], "ExecStart": ((((((("" ++ builtins.toString(pkgs.bash)) ++ "/bin/bash ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin/job-run --path ") ++ lib.makeBinPath([pkgs.python3, pkgs.openssh, pkgs.coreutils, pkgs.util-linux, pkgs.hostname])) ++ " firn-delivery-liveness -- ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/firn/bin/firn-liveness-floor", "TimeoutStartSec": "30m", "Type": "oneshot"}, "Unit": {"Description": "Firn delivery liveness floor (non-switching)"}}}, "timers": {"firn-delivery-liveness": {"Install": {"WantedBy": ["timers.target"]}, "Timer": {"OnCalendar": "*:0/30", "Persistent": true, "RandomizedDelaySec": "5m"}, "Unit": {"Description": "Run Firn delivery liveness floor"}}}}}}
-  option "myConfig"."modules"."delivery-liveness"."enable": enable "periodically build the committed Firn toplevel without switching"
+config
+  "environment"
+    "etc"
+      "north/delivery-liveness-required"
+        "text": "1\n"
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"home": {"sessionVariables": {"NORTH_DELIVERY_LIVENESS_REQUIRED": "1"}}, "systemd": {"user": {"paths": {"firn-delivery-liveness": {"Install": {"WantedBy": ["paths.target"]}, "Path": {"PathChanged": ("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/main/.git/logs/HEAD"}, "Unit": {"Description": "Refresh Firn delivery liveness when main advances"}}}, "services": {"firn-delivery-liveness": {"Service": {"Environment": [("NORTH_BIN=" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin/north", ((((("PATH=" ++ ((hm.config).home).homeDirectory) ++ "/.local/share/firn/bin:") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin:") ++ lib.makeBinPath([pkgs.bash, pkgs.coreutils, pkgs.gawk, pkgs.git, pkgs.`nix`, pkgs.python3, pkgs.util-linux])) ++ ""], "ExecStart": ((((((("" ++ builtins.toString(pkgs.bash)) ++ "/bin/bash ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/north/bin/job-run --path ") ++ lib.makeBinPath([pkgs.python3, pkgs.openssh, pkgs.coreutils, pkgs.util-linux, pkgs.hostname])) ++ " firn-delivery-liveness -- ") ++ ((hm.config).home).homeDirectory) ++ "/.local/share/firn/bin/firn-liveness-floor", "TimeoutStartSec": "30m", "Type": "oneshot"}, "Unit": {"Description": "Firn delivery liveness floor (non-switching)"}}}, "timers": {"firn-delivery-liveness": {"Install": {"WantedBy": ["timers.target"]}, "Timer": {"OnCalendar": "*:0/30", "Persistent": true, "RandomizedDelaySec": "5m"}, "Unit": {"Description": "Run Firn delivery liveness floor"}}}}}}
+"enable": "periodically build the committed Firn toplevel without switching"

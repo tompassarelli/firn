@@ -1,11 +1,8 @@
 use firn/tags
 
-btop is a Module
-btop is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.btop.enable
-    "environment"
-      "systemPackages": [pkgs.btop]
-  option "myConfig"."modules"."btop"."enable": enable "Enable btop system monitor"
+config
+  "environment"
+    "systemPackages": [pkgs.btop]
+"enable": "Enable btop system monitor"

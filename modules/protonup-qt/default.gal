@@ -1,10 +1,7 @@
 use firn/tags
 
-protonup-qt is a Module
-protonup-qt is tagged gaming
+tags: gaming
 
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.protonup-qt.enable: enable "ProtonUp-Qt compatibility tool manager"
-  config when config.myConfig.modules.protonup-qt.enable
-    environment.systemPackages: with pkgs: [protonup-qt]
+enable: "ProtonUp-Qt compatibility tool manager"
+config
+  environment.systemPackages: with pkgs: [protonup-qt]

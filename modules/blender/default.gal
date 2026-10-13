@@ -1,11 +1,8 @@
 use firn/tags
 
-blender is a Module
-blender is tagged creative
+tags: creative
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.blender.enable
-    "environment"
-      "systemPackages": [pkgs.blender]
-  option "myConfig"."modules"."blender"."enable": enable "Blender 3D editor"
+config
+  "environment"
+    "systemPackages": [pkgs.blender]
+"enable": "Blender 3D editor"

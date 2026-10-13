@@ -1,16 +1,14 @@
 use firn/tags
 
-go-env is a Module
-go-env is tagged development
+tags: development
 
 # Go has no config file: GOPATH must also apply to Go from a development shell
 # so the toolchain uses these paths instead of creating ~/go.
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.go-env.enable
-    "environment"
-      "sessionVariables"
-        "GOBIN": "$HOME/.local/bin"
-        "GOMODCACHE": "$HOME/.cache/go/mod"
-        "GOPATH": "$HOME/.local/share/go"
-  option "myConfig"."modules"."go-env"."enable": enable "XDG paths for the Go toolchain"
+arguments: config, lib, ...
+config
+  "environment"
+    "sessionVariables"
+      "GOBIN": "$HOME/.local/bin"
+      "GOMODCACHE": "$HOME/.cache/go/mod"
+      "GOPATH": "$HOME/.local/share/go"
+"enable": "XDG paths for the Go toolchain"

@@ -1,13 +1,10 @@
 use firn/tags
 
-piper is a Module
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.piper.enable
-    "environment"
-      "systemPackages": [pkgs.piper]
-    "services"
-      "ratbagd"
-        "enable": true
-  option "myConfig"."modules"."piper"."enable": enable "gaming mouse configuration (Piper + ratbagd)"
+config
+  "environment"
+    "systemPackages": [pkgs.piper]
+  "services"
+    "ratbagd"
+      "enable": true
+"enable": "gaming mouse configuration (Piper + ratbagd)"

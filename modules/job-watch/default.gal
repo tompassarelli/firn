@@ -1,35 +1,33 @@
 use firn/tags
 
-job-watch is a Module
-job-watch is tagged server
+tags: server
 
-nix module
-  arguments: config, lib, pkgs, jobRun, ...
-  let username = config.myConfig.modules.users.username
-  let homeDir = config.myConfig.modules.users.homeDir
-  option myConfig.modules.job-watch.enable: enable "job-watch: every 15 min, push an alert when a registry job with a deadline is overdue"
-  config when config.myConfig.modules.job-watch.enable
-    systemd.services.job-watch
-      description: "Alert once when a registered scheduled job is overdue, and when it recovers"
-      after: ["nexus-peers.service"]
-      path: [pkgs.python3, pkgs.coreutils, "/run/current-system/sw"]
-      serviceConfig
-        Type: "oneshot"
-        User: username
-        StateDirectory: "job-watch"
-        TimeoutStartSec: "5min"
-        ExecStart: jobRun("job-watch", "{homeDir}/.local/share/north/bin/job-watch run")
-    systemd.timers.job-watch
-      wantedBy: ["timers.target"]
-      timerConfig
-        OnCalendar: "*:7/15"
-        Persistent: true
-    security.polkit.extraConfig: '''
-      polkit.addRule(function(action, subject) {
-        if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '{{username}}' &&
-            action.lookup('unit') == 'job-watch.service' && action.lookup('verb') == 'start') {
-          return polkit.Result.YES;
-        }
-      });
+arguments: config, lib, pkgs, jobRun, ...
+let username = config.myConfig.modules.users.username
+let homeDir = config.myConfig.modules.users.homeDir
+enable: "job-watch: every 15 min, push an alert when a registry job with a deadline is overdue"
+config
+  systemd.services.job-watch
+    description: "Alert once when a registered scheduled job is overdue, and when it recovers"
+    after: ["nexus-peers.service"]
+    path: [pkgs.python3, pkgs.coreutils, "/run/current-system/sw"]
+    serviceConfig
+      Type: "oneshot"
+      User: username
+      StateDirectory: "job-watch"
+      TimeoutStartSec: "5min"
+      ExecStart: jobRun("job-watch", "{homeDir}/.local/share/north/bin/job-watch run")
+  systemd.timers.job-watch
+    wantedBy: ["timers.target"]
+    timerConfig
+      OnCalendar: "*:7/15"
+      Persistent: true
+  security.polkit.extraConfig: '''
+    polkit.addRule(function(action, subject) {
+      if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '{{username}}' &&
+          action.lookup('unit') == 'job-watch.service' && action.lookup('verb') == 'start') {
+        return polkit.Result.YES;
+      }
+    });
 
-      '''
+    '''

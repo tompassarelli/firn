@@ -1,11 +1,8 @@
 use firn/tags
 
-gnome-screenshot is a Module
-gnome-screenshot is tagged doom-emacs
+tags: doom-emacs
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.gnome-screenshot.enable
-    "environment"
-      "systemPackages": [pkgs.gnome-screenshot]
-  option "myConfig"."modules"."gnome-screenshot"."enable": enable "GNOME Screenshot tool"
+config
+  "environment"
+    "systemPackages": [pkgs.gnome-screenshot]
+"enable": "GNOME Screenshot tool"

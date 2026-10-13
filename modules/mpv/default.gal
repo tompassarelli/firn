@@ -1,11 +1,8 @@
 use firn/tags
 
-mpv is a Module
-mpv is tagged media
+tags: media
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.mpv.enable
-    "environment"
-      "systemPackages": [pkgs.mpv]
-  option "myConfig"."modules"."mpv"."enable": enable "mpv media player"
+config
+  "environment"
+    "systemPackages": [pkgs.mpv]
+"enable": "mpv media player"

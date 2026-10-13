@@ -1,12 +1,10 @@
 use firn/tags
 
-appimage is a Module
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.appimage.enable
-    "programs"
-      "appimage"
-        "binfmt": true
-        "enable": true
-  option "myConfig"."modules"."appimage"."enable": enable "AppImage support via appimage-run + binfmt"
+arguments: config, lib, ...
+config
+  "programs"
+    "appimage"
+      "binfmt": true
+      "enable": true
+"enable": "AppImage support via appimage-run + binfmt"

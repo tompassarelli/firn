@@ -1,11 +1,8 @@
 use firn/tags
 
-kooha is a Module
-kooha is tagged desktop
+tags: desktop
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.kooha.enable
-    "environment"
-      "systemPackages": [pkgs.kooha]
-  option "myConfig"."modules"."kooha"."enable": enable "Kooha screen recorder"
+config
+  "environment"
+    "systemPackages": [pkgs.kooha]
+"enable": "Kooha screen recorder"

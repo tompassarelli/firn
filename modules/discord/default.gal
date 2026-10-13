@@ -1,11 +1,8 @@
 use firn/tags
 
-discord is a Module
-discord is tagged communication
+tags: communication
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.discord.enable
-    "environment"
-      "systemPackages": [pkgs.discord]
-  option "myConfig"."modules"."discord"."enable": enable "Discord chat client"
+config
+  "environment"
+    "systemPackages": [pkgs.discord]
+"enable": "Discord chat client"

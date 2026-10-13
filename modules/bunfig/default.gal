@@ -1,12 +1,10 @@
 use firn/tags
 
-bunfig is a Module
-bunfig is tagged javascript
+tags: javascript
 
-nix module
-  arguments: config, lib, ...
-  config when config.myConfig.modules.bunfig.enable
-    "home-manager"
-      "users"
-        {config.myConfig.modules.users.username}: (hm) => {"home": {"file": {".bunfig.toml": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/bun/bunfig.toml")}}}}
-  option "myConfig"."modules"."bunfig"."enable": enable "Global Bun settings: 7-day release cooldown, no auto-install"
+arguments: config, lib, ...
+config
+  "home-manager"
+    "users"
+      {config.myConfig.modules.users.username}: (hm) => {"home": {"file": {".bunfig.toml": {"source": (((hm.config).lib).file).mkOutOfStoreSymlink(("" ++ ((hm.config).home).homeDirectory) ++ "/code/nixos-config/dotfiles/bun/bunfig.toml")}}}}
+"enable": "Global Bun settings: 7-day release cooldown, no auto-install"

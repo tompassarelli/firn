@@ -1,11 +1,8 @@
 use firn/tags
 
-dust is a Module
-dust is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.dust.enable
-    "environment"
-      "systemPackages": [pkgs.dust]
-  option "myConfig"."modules"."dust"."enable": enable "Enable dust disk usage analyzer"
+config
+  "environment"
+    "systemPackages": [pkgs.dust]
+"enable": "Enable dust disk usage analyzer"

@@ -1,11 +1,8 @@
 use firn/tags
 
-eza is a Module
-eza is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.eza.enable
-    "environment"
-      "systemPackages": [pkgs.eza]
-  option "myConfig"."modules"."eza"."enable": enable "Enable eza (modern ls replacement)"
+config
+  "environment"
+    "systemPackages": [pkgs.eza]
+"enable": "Enable eza (modern ls replacement)"

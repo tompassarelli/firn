@@ -21,16 +21,23 @@ Create `modules/<name>/default.gal`, following an existing simple module:
 ```text
 use firn/tags
 
-<name> is a Module
-<name> is tagged cli-tools
+tags: cli-tools
 
-nix module
-  arguments: config, lib, pkgs, ...
-  config when config.myConfig.modules.<name>.enable
-    "environment"
-      "systemPackages": [pkgs.<name>]
-  option "myConfig"."modules"."<name>"."enable": enable "..."
+config
+  "environment"
+    "systemPackages": [pkgs.<name>]
+"enable": "..."
 ```
+
+Firn lowers `modules/<name>/default.gal` to the `<name>` Module fact.
+Module sources imply `nix module` and the standard `config, lib, pkgs, ...`
+arguments. An implicit `config` block uses the module's enable guard; an
+explicit guard or differing argument list retains its declared behavior.
+`tags:` emits the same facts as `<name> is tagged <tag>`, including tags
+declared elsewhere. `enable:` keeps a custom description with unquoted option
+attributes; `"enable":` keeps quoted attributes. Without a declared enable
+option, an implicit default module receives the standard option described by
+its name. Explicit module and file declarations remain overrides.
 
 Then run:
 
