@@ -16,7 +16,7 @@ import { basename, dirname, join } from 'node:path';
 import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_TAG_MODULE
-  ?? new URL('../lib/firn-tag.js', import.meta.url).pathname;
+  ?? new URL('./firn_tag_family.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 
 const errno = (error) => Math.abs(Number(error?.errno)) || 5;

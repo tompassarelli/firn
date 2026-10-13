@@ -1,7 +1,3 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+import { runScenarios } from './flake_input_driver_test.ts';
 
-const driver = await import(
-  new URL('./firn/flake-input-driver-test.js', import.meta.url)
-);
-
-process.exitCode = driver["run-scenarios"]();
+process.exitCode = runScenarios();

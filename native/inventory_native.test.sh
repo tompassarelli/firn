@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'inventory-native: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-inventory-native.XXXXXX")"
 
 cleanup() {
@@ -36,45 +23,13 @@ die() {
   exit 1
 }
 
-[[ -x "$beagle/bin/beagle" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
 command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
   || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
 
-build_family() {
-  local output="$scratch/build"
-  mkdir -p "$output/node_modules/beagle"
-  printf 'inventory-family: building closed Beagle/JS graph\n' >&2
-  timeout --foreground 620 "$beagle/bin/beagle-build-all" "$@" \
-    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
-    || {
-      sed -n '1,240p' "$scratch/build.err" >&2
-      die "family compilation failed"
-    }
-  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-    "$output/node_modules/beagle/core.js"
-  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
-    "$output/node_modules/beagle/host.js"
-  printf '%s\n' '{"type":"module"}' \
-    >"$output/node_modules/beagle/package.json"
-  cp -- "$repo/native/inventory_family_test_host.mjs" \
-    "$output/inventory_family_test_host.mjs"
-}
 
-datum="$beagle/native-core/src/beagle/datum_reader.bjs"
-json="$beagle/native-core/src/native/json.bjs"
-tag_resolve="$repo/native/tag_resolve.bjs"
-tag_inputs="$repo/native/tag_inputs.bjs"
-tag_driver="$repo/native/tag_resolve_driver.bjs"
-tag_family="$repo/native/tag_resolve_family.bjs"
-inventory="$repo/native/inventory.bjs"
-
-build_family "$datum" "$json" "$tag_resolve" "$tag_inputs" \
-  "$tag_driver" "$tag_family" "$inventory" \
-  "$repo/native/inventory_test.bjs" "$repo/native/inventory_family.bjs"
 
 printf 'inventory-native: running pure fixtures\n' >&2
-timeout --foreground 30 bun "$scratch/build/inventory_family_test_host.mjs" \
+timeout --foreground 30 bun "$repo/native/inventory_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
   || die "pure inventory fixtures failed"
 [[ ! -s "$scratch/pure.out" ]] || die "pure fixtures wrote stdout"
@@ -170,7 +125,7 @@ run_cli() {
   timeout --foreground 30 env \
     -u FIRN_TRACE_ID -u FIRN_TRACE_PATH \
     FIRN_REPO="$fixture" FIRN_HOST=alpha-host \
-    env FIRN_INVENTORY_MODULE="$scratch/build/firn/inventory-family.js" \
+    env FIRN_INVENTORY_MODULE="$repo/native/inventory_family.ts" \
       bun "$repo/native/inventory_host.mjs" "$@" \
     >"$scratch/$name.out" 2>"$scratch/$name.err"
   local status=$?

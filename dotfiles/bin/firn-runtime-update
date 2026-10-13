@@ -84,34 +84,34 @@ dispatcher_sources=(
   "$beagle_host"
 )
 tag_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$firn_repo/native/tag_resolve.bjs"
-  "$firn_repo/native/tag_inputs.bjs"
-  "$firn_repo/native/tag_resolve_driver.bjs"
-  "$firn_repo/native/tag_resolve_family.bjs"
-  "$firn_repo/native/tag_commands.bjs"
-  "$firn_repo/native/tag_commands_driver.bjs"
-  "$firn_repo/native/tag_commands_family.bjs"
-  "$firn_repo/native/firn_tag_family.bjs"
+  "$firn_repo/native/datum_reader.ts"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/tag_resolve.ts"
+  "$firn_repo/native/tag_inputs.ts"
+  "$firn_repo/native/tag_resolve_driver.ts"
+  "$firn_repo/native/tag_resolve_family.ts"
+  "$firn_repo/native/tag_commands.ts"
+  "$firn_repo/native/tag_commands_driver.ts"
+  "$firn_repo/native/tag_commands_family.ts"
+  "$firn_repo/native/firn_tag_family.ts"
 )
 tag_bridge="$firn_repo/native/firn_tag_host.mjs"
 module_facts_bridge="$firn_repo/native/module_facts_host.mjs"
 flake_input_sources=(
-  "$firn_repo/native/flake_input.bjs"
-  "$firn_repo/native/flake_input_driver.bjs"
-  "$firn_repo/native/flake_input_family.bjs"
+  "$firn_repo/native/flake_input.ts"
+  "$firn_repo/native/flake_input_driver.ts"
+  "$firn_repo/native/flake_input_family.ts"
 )
 flake_input_bridge="$firn_repo/native/flake_input_host.mjs"
 inventory_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$firn_repo/native/tag_resolve.bjs"
-  "$firn_repo/native/tag_inputs.bjs"
-  "$firn_repo/native/tag_resolve_driver.bjs"
-  "$firn_repo/native/tag_resolve_family.bjs"
-  "$firn_repo/native/inventory.bjs"
-  "$firn_repo/native/inventory_family.bjs"
+  "$firn_repo/native/datum_reader.ts"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/tag_resolve.ts"
+  "$firn_repo/native/tag_inputs.ts"
+  "$firn_repo/native/tag_resolve_driver.ts"
+  "$firn_repo/native/tag_resolve_family.ts"
+  "$firn_repo/native/inventory.ts"
+  "$firn_repo/native/inventory_family.ts"
 )
 inventory_bridge="$firn_repo/native/inventory_host.mjs"
 authoring_sources=(
@@ -128,17 +128,17 @@ views_sources=(
 )
 views_bridge="$firn_repo/native/firn_views_host.mjs"
 repo_build_sources=(
-  "$datum_reader"
-  "$native_json"
-  "$firn_repo/native/tag_resolve.bjs"
-  "$firn_repo/native/tag_inputs.bjs"
-  "$firn_repo/native/tag_resolve_driver.bjs"
-  "$firn_repo/native/tag_resolve_family.bjs"
-  "$firn_repo/native/flake_input.bjs"
-  "$firn_repo/native/flake_input_driver.bjs"
-  "$firn_repo/native/flake_input_family.bjs"
-  "$firn_repo/native/repo_build.bjs"
-  "$firn_repo/native/repo_build_family.bjs"
+  "$firn_repo/native/datum_reader.ts"
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/tag_resolve.ts"
+  "$firn_repo/native/tag_inputs.ts"
+  "$firn_repo/native/tag_resolve_driver.ts"
+  "$firn_repo/native/tag_resolve_family.ts"
+  "$firn_repo/native/flake_input.ts"
+  "$firn_repo/native/flake_input_driver.ts"
+  "$firn_repo/native/flake_input_family.ts"
+  "$firn_repo/native/repo_build.ts"
+  "$firn_repo/native/repo_build_family.ts"
 )
 repo_build_bridge="$firn_repo/native/repo_build_host.mjs"
 repo_workflow_sources=(
@@ -348,10 +348,17 @@ materialize_js() {
   local module="$output_root/$module_relative"
   local host="$output_root/host.mjs"
   local launcher="$stage/bin/$binary"
-  local relative
+  local relative source
 
   mkdir -p "$output_root"
   case "$component" in
+    tag|inventory|repo-build|flake-input)
+      for source in "$@"; do
+        cp -- "$source" "$output_root/${source##*/}"
+        record_artifact "$component-source" \
+          "lib/$component/${source##*/}" "$source"
+      done
+      ;;
     prewarm)
       cp -- "$1" "$module"
       record_artifact "$component-source" "lib/$component/$module_relative" "$1"
@@ -413,21 +420,21 @@ materialize_galileo
 if [[ "$scope" != galileo ]]; then materialize_dispatcher; fi
 case "$scope" in
   repo)
-    materialize_js repo-build firn-repo-build firn/repo-build-family.js \
+    materialize_js repo-build firn-repo-build repo_build_family.ts \
       FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
     ;;
   full)
-    materialize_js tag firn-tag firn/tag-family.js \
+    materialize_js tag firn-tag firn_tag_family.ts \
       FIRN_TAG_MODULE "$tag_bridge" "${tag_sources[@]}"
-    materialize_js flake-input firn-flake-input firn/flake-input-family.js \
+    materialize_js flake-input firn-flake-input flake_input_family.ts \
       FIRN_FLAKE_INPUT_MODULE "$flake_input_bridge" "${flake_input_sources[@]}"
-    materialize_js inventory firn-inventory firn/inventory-family.js \
+    materialize_js inventory firn-inventory inventory_family.ts \
       FIRN_INVENTORY_MODULE "$inventory_bridge" "${inventory_sources[@]}"
     materialize_js authoring firn-authoring firn/authoring-native.js \
       FIRN_AUTHORING_MODULE "$authoring_bridge" "${authoring_sources[@]}"
     materialize_js views firn-views firn/views-native.js \
       FIRN_VIEWS_MODULE "$views_bridge" "${views_sources[@]}"
-    materialize_js repo-build firn-repo-build firn/repo-build-family.js \
+    materialize_js repo-build firn-repo-build repo_build_family.ts \
       FIRN_REPO_BUILD_MODULE "$repo_build_bridge" "${repo_build_sources[@]}"
     materialize_js repo-workflow firn-repo-workflow firn/repo-workflows-runtime.js \
       FIRN_REPO_WORKFLOW_MODULE "$repo_workflow_bridge" "${repo_workflow_sources[@]}"

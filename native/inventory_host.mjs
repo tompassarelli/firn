@@ -4,7 +4,7 @@ import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_INVENTORY_MODULE
-  ?? new URL('../lib/firn-inventory.js', import.meta.url).pathname;
+  ?? new URL('./inventory_family.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 
 function errno(error) {

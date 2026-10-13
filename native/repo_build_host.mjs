@@ -9,7 +9,7 @@ import {
 import { moduleFactsBridge } from './module_facts_host.mjs';
 
 const modulePath = process.env.FIRN_REPO_BUILD_MODULE
-  ?? new URL('../lib/firn-repo-build.js', import.meta.url).pathname;
+  ?? new URL('./repo_build_family.ts', import.meta.url).pathname;
 const { run } = await import(modulePath);
 
 function errno(error) {

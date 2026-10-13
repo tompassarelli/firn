@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'flake-input-native: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-flake-input-native.XXXXXX")"
 
 cleanup() {
@@ -36,39 +23,13 @@ die() {
   exit 1
 }
 
-[[ -x "$beagle/bin/beagle" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
 
-build_family() {
-  local output="$scratch/build"
-  mkdir -p "$output/node_modules/beagle"
-  timeout --foreground 620 "$beagle/bin/beagle-build-all" "$@" \
-    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
-    || {
-      sed -n '1,240p' "$scratch/build.err" >&2
-      die "family compilation failed"
-    }
-  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-    "$output/node_modules/beagle/core.js"
-  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
-    "$output/node_modules/beagle/host.js"
-  printf '%s\n' '{"type":"module"}' \
-    >"$output/node_modules/beagle/package.json"
-  cp -- "$repo/native/flake_input_family_test_host.mjs" \
-    "$output/flake_input_family_test_host.mjs"
-}
 
-core="$repo/native/flake_input.bjs"
-driver="$repo/native/flake_input_driver.bjs"
 
 command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
   || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
 
-build_family "$core" "$driver" \
-  "$repo/native/flake_input_driver_test.bjs" \
-  "$repo/native/flake_input_family.bjs"
-
-timeout --foreground 30 bun "$scratch/build/flake_input_family_test_host.mjs" \
+timeout --foreground 30 bun "$repo/native/flake_input_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/driver.err" \
   || die "driver test cases did not all pass"
 
@@ -96,7 +57,7 @@ make_fixture() {
   cat >"$root/flake.gal" <<'EOF'
 use firn/tags
 
-given flake input {name: Text} follows {input: Text} from {target: Text}
+given flake input ?name: Text follows ?input: Text from ?target: Text
 
 flake input "zeta" follows "nixpkgs" from "nixpkgs"
 
@@ -129,7 +90,7 @@ run_once() {
 
 emit() {
   run_once "$1" env FIRN_REPO="$2" \
-    FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+    FIRN_FLAKE_INPUT_MODULE="$repo/native/flake_input_family.ts" \
     bun "$repo/native/flake_input_host.mjs" flake-input resolve emit
 }
 
@@ -159,7 +120,7 @@ grep -q 'two values for "zeta"' "$scratch/conflict.err" \
 cmp -s "$expected" "$native_root/flake.nix" || die "conflict changed flake.nix"
 
 run_once "$scratch/invalid" env \
-  FIRN_FLAKE_INPUT_MODULE="$scratch/build/firn/flake-input-family.js" \
+  FIRN_FLAKE_INPUT_MODULE="$repo/native/flake_input_family.ts" \
   bun "$repo/native/flake_input_host.mjs" flake-input resolve show
 [[ "$(<"$scratch/invalid.status")" == "64" ]] \
   || die "invalid grammar did not return 64"

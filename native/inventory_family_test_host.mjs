@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
+import { runScenarios } from './inventory_test.ts';
 
-const inventory = await import(new URL('./firn/inventory-test.js', import.meta.url));
-process.exitCode = inventory["run-scenarios"]();
+process.exitCode = runScenarios();

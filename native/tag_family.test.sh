@@ -3,19 +3,6 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-if [[ -n "${BEAGLE_PATH:-}" ]]; then
-  beagle="$BEAGLE_PATH"
-else
-  git_common_dir="$(
-    timeout --foreground 5 git -C "$repo" rev-parse \
-      --path-format=absolute --git-common-dir
-  )" || {
-    printf 'tag-family: cannot locate the Firn Git common directory\n' >&2
-    exit 1
-  }
-  code_root="$(cd "$(dirname "$git_common_dir")/../.." && pwd)"
-  beagle="$code_root/beagle/main"
-fi
 scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-tag-family.XXXXXX")"
 
 cleanup() {
@@ -36,31 +23,11 @@ die() {
   exit 1
 }
 
-[[ -x "$beagle/bin/beagle-build-all" ]] \
-  || die "authoritative Beagle checkout is missing: $beagle"
 command -v bun >/dev/null 2>&1 || die "Bun is unavailable"
 command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
   || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
 
-build_family() {
-  local output="$scratch/build"
-  printf 'tag-family: building closed Beagle/JS graph\n' >&2
-  mkdir -p "$output/node_modules/beagle"
-  timeout --foreground 60 "$beagle/bin/beagle-build-all" "$@" \
-    --out "$output" >"$scratch/build.out" 2>"$scratch/build.err" \
-    || {
-      sed -n '1,240p' "$scratch/build.err" >&2
-      die "Beagle/JS graph compilation failed"
-    }
-  cp -- "$beagle/beagle-lib/lib/beagle/core.js" \
-    "$output/node_modules/beagle/core.js"
-  cp -- "$beagle/beagle-lib/lib/beagle/host.js" \
-    "$output/node_modules/beagle/host.js"
-  printf '%s\n' '{"type":"module"}' \
-    >"$output/node_modules/beagle/package.json"
-  [[ -f "$output/firn/tag-family.js" ]] \
-    || die "compiled family module is unavailable"
-}
+
 
 run_once() {
   local result="$1"
@@ -91,32 +58,15 @@ assert_same() {
   }
 }
 
-datum="$beagle/native-core/src/beagle/datum_reader.bjs"
-json="$beagle/native-core/src/native/json.bjs"
-resolve="$repo/native/tag_resolve.bjs"
-inputs="$repo/native/tag_inputs.bjs"
-resolve_driver="$repo/native/tag_resolve_driver.bjs"
-resolve_family="$repo/native/tag_resolve_family.bjs"
-commands="$repo/native/tag_commands.bjs"
-commands_driver="$repo/native/tag_commands_driver.bjs"
-commands_family="$repo/native/tag_commands_family.bjs"
-family="$repo/native/firn_tag_family.bjs"
-resolve_property="$repo/native/tag_resolve_property_test.bjs"
-mutation_property="$repo/native/tag_mutation_property_test.bjs"
-
-build_family \
-  "$datum" "$json" "$resolve" "$inputs" "$resolve_driver" \
-  "$resolve_family" "$commands" "$commands_driver" "$commands_family" \
-  "$family" "$resolve_property" "$mutation_property"
 printf 'tag-family: checking seeded algebra and mutation properties (seed 73421)\n' >&2
 timeout --foreground 30 bun --eval '
   const resolve = await import(process.argv[1]);
   const mutation = await import(process.argv[2]);
-  process.exitCode = resolve["run-properties"](process.env.CI ? 512 : 128) + mutation["run-properties"](process.env.CI ? 512 : 128);
-' "$scratch/build/firn/tag-resolve-property-test.js" \
-  "$scratch/build/firn/tag-mutation-property-test.js" \
+  process.exitCode = resolve["runProperties"](process.env.CI ? 512 : 128) + mutation["runProperties"](process.env.CI ? 512 : 128);
+' "$repo/native/tag_resolve_property_test.ts" \
+  "$repo/native/tag_mutation_property_test.ts" \
   || die "seeded tag properties failed"
-runtime=(env FIRN_TAG_MODULE="$scratch/build/firn/tag-family.js" \
+runtime=(env FIRN_TAG_MODULE="$repo/native/firn_tag_family.ts" \
   bun "$repo/native/firn_tag_host.mjs")
 
 make_fixture() {
