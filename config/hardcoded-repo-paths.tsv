@@ -6,7 +6,7 @@
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/theme-switcher/default.gal	1
-nixos-config/native/rebuild.bjs	1
+nixos-config/native/rebuild.ts	1
 north/bin/agents	2
 north/bin/lane-gc-classify.test.sh	17
 north/bin/north-runtime-update	2

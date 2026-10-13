@@ -1,5 +1,5 @@
 import { existsSync, appendFileSync } from 'node:fs';
-import { run } from './generated/firn/rebuild-family.js';
+import { run } from '../../native/firn_rebuild_family.ts';
 
 const decoder = new TextDecoder();
 const username = process.env.FIRN_LANDED_USER;
@@ -28,7 +28,6 @@ export function argvFor(argv) {
   return argv;
 }
 
-globalThis.firn_host_get = (value, index) => value?.[index];
 globalThis.firn_host_env = name => process.env[name] ?? null;
 globalThis.firn_host_pid = () => process.pid;
 globalThis.firn_host_out = text => process.stdout.write(text);

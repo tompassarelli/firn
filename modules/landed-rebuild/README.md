@@ -10,10 +10,9 @@ host adapter or the imported rebuild sources change. Root execution uses
 system/store programs. Validation and the existing user environment helper run
 as the configured user with `no_new_privs` and a fixed environment.
 
-The Beagle collection runtime bundled into `runtime.mjs` comes from
-`https://github.com/tompassarelli/beagle`, revision
-`bfe06d21f4bdb82f7017770fd73863f63e3feeef`. Its license is MIT OR Apache-2.0;
-this bundle uses MIT with the notice preserved in `LICENSE-BEAGLE`.
+The bundle is built from the TypeScript rebuild family in `native/` with Bun.
+The ported native JSON codec retains its original MIT OR Apache-2.0 license;
+the MIT notice is preserved in `LICENSE-BEAGLE`.
 
 The service stays running during configuration switches so it can deliver the
 request result. Changes to its installed service/runtime take effect after a

@@ -6,7 +6,6 @@ import { join } from 'node:path';
 
 const decoder = new TextDecoder();
 
-globalThis.firn_host_get = (value, index) => value?.[index];
 globalThis.firn_host_env = name => process.env[name] ?? null;
 globalThis.firn_host_pid = () => process.pid;
 globalThis.firn_host_out = text => process.stdout.write(text);
@@ -57,7 +56,7 @@ globalThis.firn_host_append = (path, text) => {
 };
 
 const modulePath = process.env.FIRN_REBUILD_MODULE
-  ?? new URL('../lib/firn-rebuild/firn/rebuild-family.js', import.meta.url).pathname;
+  ?? new URL('./firn_rebuild_family.ts', import.meta.url).pathname;
 const args = Bun.argv.slice(2);
 const coreTools = ['agents', 'threads', 'safe-push', 'worker-sweep', 'capacity-watchdog', 'codex-lead'];
 
