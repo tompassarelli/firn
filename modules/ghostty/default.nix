@@ -13,6 +13,7 @@
                 "app-notifications" = "no-clipboard-copy";
                 "async-backend" = "epoll";
                 "command" = "/run/current-system/sw/bin/bash";
+                "keybind" = [ "ctrl+z=text:\\x1f" ];
                 "window-padding-x" = 6;
                 "window-padding-y" = 4;
                 "working-directory" = "home";
