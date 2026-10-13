@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -7,17 +7,21 @@ const root = mkdtempSync(join(tmpdir(), 'firn-landed-effects-'));
 try {
   const firn = join(root, 'firn');
   const system = join(root, 'system');
+  const home = join(root, 'home');
+  mkdirSync(`${home}/.local/bin`, { recursive: true });
+  writeFileSync(`${home}/.local/bin/firn-schema`, '#!/bin/sh\nprintf schema-found\n', { mode: 0o755 });
   mkdirSync(`${firn}/.git`, { recursive: true });
   mkdirSync(`${system}/.git`, { recursive: true });
   Object.assign(process.env, {
     FIRN_REPO: firn, FIRN_SYSTEM_FLAKE: system, FIRN_SNAPSHOT_DIR: `${root}/validation`,
-    FIRN_LANDED_USER: 'tom', FIRN_LANDED_HOME: '/home/tom', FIRN_LANDED_UID: '1000',
+    FIRN_LANDED_USER: 'tom', FIRN_LANDED_HOME: home, FIRN_LANDED_UID: '1000',
     FIRN_LANDED_ENVIRONMENT_SWITCH: '/nix/store/fixture-environment-switch',
   });
   const commands = [];
   const revision = 'a'.repeat(40);
   const closure = `/nix/store/${'b'.repeat(32)}-system`;
   const encoder = new TextEncoder();
+  const nativeSpawnSync = Bun.spawnSync;
   Bun.spawnSync = options => {
     const argv = options.cmd;
     commands.push(argv);
@@ -40,10 +44,15 @@ try {
   assert(commands[build].includes(`git+file://${firn}?rev=${revision}`));
   const user = commands[environment];
   assert.deepEqual(user.slice(0, 6), ['setpriv', '--no-new-privs', 'runuser', '-u', 'tom', '--']);
-  assert(user.includes('HOME=/home/tom') && user.includes('XDG_RUNTIME_DIR=/run/user/1000'));
+  assert(user.includes(`HOME=${home}`) && user.includes('XDG_RUNTIME_DIR=/run/user/1000'));
   assert(!commands.some(argv => argv[0] === 'sudo'));
   const validation = commands.find(argv => argv.includes('validate'));
   assert.deepEqual(validation.slice(0, 6), user.slice(0, 6));
+  const lookup = nativeSpawnSync({ cmd: ['bash', '-c', 'firn-schema'],
+    env: { PATH: validation.find(word => word.startsWith('PATH=')).slice(5) },
+    stdout: 'pipe', stderr: 'pipe' });
+  assert.equal(lookup.exitCode, 0);
+  assert.equal(new TextDecoder().decode(lookup.stdout), 'schema-found');
   console.log('ok: existing bundled core builds fixed snapshots, selects system profile, switches exact closure, then unprivileged fixed user helper');
 } finally {
   rmSync(root, { recursive: true });

@@ -6,7 +6,7 @@ const username = process.env.FIRN_LANDED_USER;
 const home = process.env.FIRN_LANDED_HOME;
 const userEnv = ['env', '-i', `HOME=${home}`, `USER=${username}`, `LOGNAME=${username}`,
   `XDG_RUNTIME_DIR=/run/user/${process.env.FIRN_LANDED_UID}`,
-  'PATH=/run/wrappers/bin:/run/current-system/sw/bin', 'GIT_CONFIG_COUNT=1',
+  `PATH=/run/wrappers/bin:/run/current-system/sw/bin:${home}/.local/bin:${home}/.nix-profile/bin:${home}/.local/lib/firn/cli/current/bin`, 'GIT_CONFIG_COUNT=1',
   'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=*', `FIRN_REPO=${process.env.FIRN_REPO}`];
 
 export function argvFor(argv) {
