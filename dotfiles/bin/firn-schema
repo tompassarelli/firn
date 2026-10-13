@@ -25,7 +25,7 @@ validate() {
   printf 'firn repo validate: [2/3] galileo build --check --layout idiomatic...\n' >&2
   "$galileo" build --check --layout idiomatic "${paths[@]}"
   printf 'firn repo validate: [3/3] evaluating every nixosConfigurations toplevel...\n' >&2
-  nix eval --raw "$root#nixosConfigurations" --apply "$toplevels"
+  nix eval --raw "${FIRN_VALIDATE_FLAKE:-$root}#nixosConfigurations" --apply "$toplevels"
 }
 
 case "${1:-} ${2:-}" in

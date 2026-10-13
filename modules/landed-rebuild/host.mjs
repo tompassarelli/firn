@@ -9,15 +9,18 @@ const userEnv = ['env', '-i', `HOME=${home}`, `USER=${username}`, `LOGNAME=${use
   `PATH=/run/wrappers/bin:/run/current-system/sw/bin:${home}/.local/bin:${home}/.nix-profile/bin:${home}/.local/lib/firn/cli/current/bin`, 'GIT_CONFIG_COUNT=1',
   'GIT_CONFIG_KEY_0=safe.directory', 'GIT_CONFIG_VALUE_0=*', `FIRN_REPO=${process.env.FIRN_REPO}`];
 
+const pathFlake = reference => `path:${reference.replace(/^git\+file:\/\//, '').split('?')[0]}`;
+
 export function argvFor(argv) {
   if (argv[0] === 'sudo') return argv.slice(1).length === 1 && argv[1] === '-v' ? ['true'] : argv.slice(1);
   if (argv[0] === 'env' && argv[2] === 'firn' && argv[3] === 'repo' && argv[4] === 'validate') {
     return ['setpriv', '--no-new-privs', 'runuser', '-u', username, '--', ...userEnv,
-      argv[1], 'bash', `${home}/.local/share/firn/bin/firn`, 'repo', 'validate'];
+      argv[1], `FIRN_VALIDATE_FLAKE=${pathFlake(argv[1].slice('FIRN_REPO='.length))}`,
+      'bash', `${home}/.local/share/firn/bin/firn`, 'repo', 'validate'];
   }
   if (argv[0] === 'firn-environment-switch') {
     return ['setpriv', '--no-new-privs', 'runuser', '-u', username, '--', ...userEnv,
-      'bash', process.env.FIRN_LANDED_ENVIRONMENT_SWITCH, ...argv.slice(1)];
+      'bash', process.env.FIRN_LANDED_ENVIRONMENT_SWITCH, argv[1], pathFlake(argv[2]), ...argv.slice(3)];
   }
   if (argv[0] === 'systemd-run') {
     return ['setpriv', '--no-new-privs', 'runuser', '-u', username, '--', ...userEnv, ...argv];

@@ -45,9 +45,12 @@ try {
   const user = commands[environment];
   assert.deepEqual(user.slice(0, 6), ['setpriv', '--no-new-privs', 'runuser', '-u', 'tom', '--']);
   assert(user.includes(`HOME=${home}`) && user.includes('XDG_RUNTIME_DIR=/run/user/1000'));
+  assert.equal(user.at(-1), `path:${firn}`);
   assert(!commands.some(argv => argv[0] === 'sudo'));
   const validation = commands.find(argv => argv.includes('validate'));
   assert.deepEqual(validation.slice(0, 6), user.slice(0, 6));
+  const validationRoot = validation.findLast(word => word.startsWith('FIRN_REPO=')).slice('FIRN_REPO='.length);
+  assert(validation.includes(`FIRN_VALIDATE_FLAKE=path:${validationRoot}`));
   const lookup = nativeSpawnSync({ cmd: ['bash', '-c', 'firn-schema'],
     env: { PATH: validation.find(word => word.startsWith('PATH=')).slice(5) },
     stdout: 'pipe', stderr: 'pipe' });
