@@ -40,5 +40,7 @@ nix module
             proxy_read_timeout 1h;
             proxy_buffering off;
             client_max_body_size 50M;
+            sub_filter '<head>' '<head><script>if(window.crypto&&!crypto.randomUUID){crypto.randomUUID=function(){var b=crypto.getRandomValues(new Uint8Array(16)),h=[];b[6]=b[6]&15|64;b[8]=b[8]&63|128;for(var i=0;i<16;i++){h.push((b[i]+256).toString(16).slice(1));if(i==3||i==5||i==7||i==9)h.push("-")}return h.join("")}}</script>';
+            sub_filter_once on;
             '''
     networking.firewall.interfaces.wg-nexus.allowedTCPPorts: [port]
