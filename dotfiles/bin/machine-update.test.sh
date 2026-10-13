@@ -28,7 +28,7 @@ SH
 cat > "$work/bin/git" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$#" == 4 && "$1" == -C && "$3" == rev-parse && "$4" == --show-toplevel ]]
+[[ "$#" == 4 && "$1" == -C && "$2" == "$CAPACITY_SOURCE_DIR" && "$3" == rev-parse && "$4" == --show-toplevel ]]
 printf 'recorded repository probe failure\n' >&2
 exit 73
 SH
@@ -40,16 +40,25 @@ const classIndex = args.indexOf('--class');
 const kind = classIndex < 0 ? 'moderate' : args[classIndex + 1];
 const fixture = Bun.spawnSync(['bun', process.env.CAPACITY_CANONICAL, 'fixture',
   '--profile', 'unattended', '--class', kind, '--cores', '3',
-  '--memory-total-mib', '7943', '--memory-available-mib', '5898',
+  '--memory-total-mib', process.env.CAPACITY_EXECUTE_CHILD ? '16384' : '7943',
+  '--memory-available-mib', process.env.CAPACITY_EXECUTE_CHILD ? '16384' : '5898',
   '--protected-cpu-some-avg10-basis-points', '0', '--memory-full-avg10-basis-points', '0',
   '--leased-cpus', '0', '--leased-memory-mib', '0']);
 process.stderr.write(fixture.stdout);
 if (fixture.exitCode !== 0) process.exit(fixture.exitCode);
+if (process.env.CAPACITY_EXECUTE_CHILD) {
+  const receipts = process.env.CAPACITY_RECEIPTS;
+  const previous = await Bun.file(receipts).exists();
+  await Bun.write(receipts, (previous ? await Bun.file(receipts).text() : '') + fixture.stdout.toString());
+  if (previous) process.exit(77);
+  const child = Bun.spawnSync(args.slice(boundary + 1), { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
+  process.exit(child.exitCode);
+}
 process.stderr.write('external admission receipt; child stopped before execution\n');
 process.exit(76);
 JS
 chmod +x "$work/bin/agents" "$work/bin/git"
-export CAPACITY_CANONICAL="$capacity" CAPACITY_JOURNEY="$work"
+export CAPACITY_CANONICAL="$capacity" CAPACITY_JOURNEY="$work" CAPACITY_SOURCE_DIR="$here"
 journey_path="$work/bin:$PATH"
 status=0
 PATH="$journey_path" "$here/machine-update" --write >"$work/write.log" 2>&1 || status=$?
@@ -72,3 +81,10 @@ while IFS= read -r check; do
 done < <(git config --file "$here/../../.safe-push" --get-all land.check)
 [[ "$admitted" == 1 ]]
 printf 'ok: public writer reaches repository probe without outer lease; apply rejects 3CPU/5957MiB even with old escape; Firn land admits 2CPU/2048MiB on 5898MiB available\n'
+
+status=0
+PATH="$journey_path" CAPACITY_EXECUTE_CHILD=1 CAPACITY_RECEIPTS="$work/receipts.jsonl" "$here/machine-update" --apply >"$work/eligible-apply.log" 2>&1 || status=$?
+[[ "$status" == 73 ]] || { cat "$work/eligible-apply.log"; printf "eligible apply exited %s; expected repository failure 73\n" "$status"; exit 1; }
+jq -se 'length == 1 and .[0].decision == "RUN" and .[0].cpus == 3' "$work/receipts.jsonl" >/dev/null
+[[ "$(tail -n 1 "$work/eligible-apply.log")" == 'recorded repository probe failure' ]]
+printf 'ok: public eligible apply admits and executes once, reaches repository probe in actual script directory\n'

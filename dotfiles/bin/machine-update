@@ -40,7 +40,7 @@ select_lock() {
 main() {
   local mode=${1:---write} source_dir repo state candidates work south container lane branch south_branch south_lane
   case "$mode" in --write|--apply|--plan) ;; *) echo 'usage: machine-update [--write|--apply|--plan]' >&2; return 2 ;; esac
-  source_dir="$(dirname "$(readlink -f "$0")")"
+  source_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
   repo="$(git -C "$source_dir" rev-parse --show-toplevel)"
   state="${XDG_STATE_HOME:-$HOME/.local/state}/machine-updates"
   mkdir -p "$state"
@@ -130,7 +130,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
   if [[ "${1:---write}" == --apply ]]; then
     exec bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
       --class heavy --owner automatic-machine-update --timeout-seconds 3600 -- \
-      bash -c 'source "$0"; main "$@"' "$0" "$@"
+      bash -c 'source "$1"; shift; main "$@"' machine-update-bootstrap "$0" "$@"
   fi
   main "$@"
 fi
