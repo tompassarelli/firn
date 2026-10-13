@@ -25,9 +25,8 @@ sources=(
   "$firn_repo/native/activity_core.bjs"
   "$firn_repo/native/activity_driver.bjs"
   "$firn_repo/native/activity_native.bjs"
-  "$firn_repo/native/activity_menu.bjs"
+  "$firn_repo/native/activity_menu.ts"
   "$firn_repo/native/activity_host.mjs"
-  "$firn_repo/native/activity_menu_host.mjs"
   "$beagle_path/beagle-lib/lib/beagle/core.js"
 )
 for source in "${sources[@]}"; do
@@ -57,14 +56,12 @@ if ! "$beagle_build" \
   "$firn_repo/native/activity_core.bjs" \
   "$firn_repo/native/activity_driver.bjs" \
   "$firn_repo/native/activity_native.bjs" \
-  "$firn_repo/native/activity_menu.bjs" \
   --out "$stage/lib"; then
   printf 'activity-runtime-update: Beagle/JS compilation failed\n' >&2
   exit 1
 fi
 
-if [[ ! -f "$stage/lib/activity/native.js" \
-      || ! -f "$stage/lib/activity/menu.js" ]]; then
+if [[ ! -f "$stage/lib/activity/native.js" ]]; then
   printf 'activity-runtime-update: compiler produced incomplete activity modules\n' >&2
   exit 1
 fi
@@ -73,7 +70,7 @@ cp -- "$beagle_path/beagle-lib/lib/beagle/core.js" \
 printf '%s\n' '{"type":"module"}' \
   >"$stage/lib/node_modules/beagle/package.json"
 cp -- "$firn_repo/native/activity_host.mjs" "$stage/bin/activity.mjs"
-cp -- "$firn_repo/native/activity_menu_host.mjs" "$stage/bin/activity-menu.mjs"
+cp -- "$firn_repo/native/activity_menu.ts" "$stage/bin/activity-menu.ts"
 cat >"$stage/bin/activity" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -92,14 +89,13 @@ cat >"$stage/bin/activity-menu" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-export FIRN_ACTIVITY_MENU_MODULE="$root/lib/activity/menu.js"
 firn_runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 bun="${FIRN_BUN:-$firn_runtime_root/current/bin/bun}"
 if [[ ! -x "$bun" ]]; then
   printf 'activity-menu: Firn Bun runtime is unavailable: %s\n' "$bun" >&2
   exit 127
 fi
-exec "$bun" "$root/bin/activity-menu.mjs" "$@"
+exec "$bun" "$root/bin/activity-menu.ts" "$@"
 EOF
 chmod +x "$stage/bin/activity-menu"
 
@@ -110,7 +106,7 @@ destination="$versions/$artifact_id"
 cat >"$stage/provenance" <<EOF
 format=firn-activity-runtime/v3
 entry=activity.native/run
-entry=activity.menu/run
+entry=activity_menu.ts/run
 source_sha256=$source_id
 artifact_sha256=$artifact_id
 firn_revision=$(git -C "$firn_repo" rev-parse HEAD)
