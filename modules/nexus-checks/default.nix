@@ -14,6 +14,7 @@ let
       pkgs.systemd
       pkgs.openssh
       pkgs.lynis
+      pkgs.jq
       "/run/current-system/sw"
     ];
     runtimeEnv = {
@@ -21,6 +22,7 @@ let
       AUTHORIZED_KEYS = authorizedKeys;
       USER_NAME = username;
       BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";
+      SECURITY_LOCK = "${config.myConfig.modules.users.homeDir}/code/nixos-config/main/flake.lock";
     };
     text = builtins.readFile ./nexus-checks.sh;
   };
@@ -48,6 +50,7 @@ in {
     systemd.services = {
       "nexus-checks" = {
         description = "Run the nexus standing checks and push alerts on change";
+        unitConfig.OnFailure = "";
         serviceConfig = {
           Type = "oneshot";
           StateDirectory = "nexus-checks";

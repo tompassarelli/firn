@@ -1,4 +1,4 @@
-CHECKS="logins units updates disk backup"
+CHECKS="logins units updates lock release disk backup"
 
 urgency_of() {
   case "$1" in logins*|lynis) echo urgent ;; *) echo normal ;; esac
@@ -66,6 +66,29 @@ check_updates() {
   else
     echo "ok"
   fi
+}
+
+check_lock() {
+  local file=$1 now=$2 modified
+  modified=$(jq -er '. as $l | $l.nodes[$l.nodes[$l.root].inputs.nixpkgs].locked.lastModified | select(type == "number")' "$file" 2>/dev/null) || {
+    echo 'fail: cannot read the selected nixpkgs lock'; return;
+  }
+  if [ $((now - modified)) -gt 259200 ]; then
+    echo "fail: selected nixpkgs lock is $(((now - modified) / 86400)) days old (limit 3); nightly security inputs are not landing"
+  else echo ok; fi
+}
+
+check_release() {
+  local version=$1 now=$2 until days
+  case "$version" in
+    26.05.*) until=2026-12-31 ;;
+    25.11.*) until=2026-06-30 ;;
+    *) echo "fail: security support deadline is unknown for $version"; return ;;
+  esac
+  days=$(( ($(date -u -d "$until" +%s) - now) / 86400 ))
+  if [ "$days" -lt 30 ]; then
+    echo "fail: $version security support ends $until ($days days remaining); plan the release upgrade"
+  else echo ok; fi
 }
 
 check_disk() {
@@ -140,9 +163,13 @@ gather() {
       check_logins "$accepted" "$sessions" "$WG_PEERS" "$(ssh-keygen -lf "$AUTHORIZED_KEYS" | awk '{print $2}' | paste -sd ' ' -)" "$seen"
       console_sessions "$sessions" >"$state/console.seen" ;;
     units)
-      check_units "$(systemctl --failed --plain --no-legend)" "$(systemctl --user -M "$USER_NAME@" --failed --plain --no-legend 2>/dev/null || true)" ;;
+      check_units "$(systemctl --failed --plain --no-legend | awk '$1 != "nexus-checks.service" && $1 != "nexus-vulnix.service"')" "$(systemctl --user -M "$USER_NAME@" --failed --plain --no-legend 2>/dev/null || true)" ;;
     updates)
       check_updates "$(cat /run/booted-system/nixos-version)" "$(readlink /run/booted-system)" "$(readlink /run/current-system)" "$(stat -c %Y /nix/var/nix/profiles/system)" "$now" ;;
+    lock)
+      check_lock "$SECURITY_LOCK" "$now" ;;
+    release)
+      check_release "$(cat /run/booted-system/nixos-version)" "$now" ;;
     disk)
       check_disk "$(df --output=pcent / | tail -n 1)" ;;
     backup)
@@ -160,6 +187,7 @@ run_checks() {
     [ "$result" = ok ] || failing="${failing:+$failing,}$check"
   done
   if [ -n "$failing" ]; then echo "fail:$failing"; else echo "ok"; fi >"$state/status"
+  [ -z "$failing" ]
 }
 
 run_lynis() {
