@@ -23,7 +23,7 @@ and `git add`-ing both files. No flake edits.
 ├── flake.gal          source-of-truth flake (Galileo)
 ├── flake.nix          generated
 ├── modules/  hosts/   .gal source (+ generated .nix siblings)
-├── native/            Firn CLI commands, policies and workflow controllers (Beagle/JS `.bjs`)
+├── native/            Firn CLI commands, policies and workflow controllers (TypeScript on Bun `.ts`)
 ├── template/          starting point for `nix flake init -t`
 ├── dotfiles/  secrets/  assets/
 └── docs/              TAGS.md — composition model
