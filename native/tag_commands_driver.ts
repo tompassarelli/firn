@@ -373,7 +373,7 @@ export function runIndex(modules: r.ModuleTags[], stdout: boolean): TagCommandOu
       if (stdout) {
         return stdoutOutcome(text);
       }
-      return makeTagCommandOutcome(0, [{ _tag: "CommandWrite" as const, path: ".beagle-cache/tags.jsonl", text: text, makeParents: true, label: "firn tag index" }, { _tag: "CommandStdout" as const, text: ("" + "firn tag index: wrote " + modules.length + " entries \u2192 .beagle-cache/tags.jsonl\n") }]);
+      return makeTagCommandOutcome(0, [{ _tag: "CommandWrite" as const, path: ".firn-cache/tags.jsonl", text: text, makeParents: true, label: "firn tag index" }, { _tag: "CommandStdout" as const, text: ("" + "firn tag index: wrote " + modules.length + " entries \u2192 .firn-cache/tags.jsonl\n") }]);
     }
   }
 }

@@ -55,9 +55,9 @@ timeout --foreground 30 "$scratch/authoring-test" \
 
 fixture="$scratch/repo"
 fakebin="$scratch/fake-bin"
-mkdir -p "$fixture/.beagle-cache" "$fixture/secrets" "$fakebin"
+mkdir -p "$fixture/.firn-cache" "$fixture/secrets" "$fakebin"
 
-cp "$here"/fixtures/beagle-*-openssh-schema.json "$fixture/.beagle-cache/schema.json"
+cp "$here"/fixtures/beagle-*-openssh-schema.json "$fixture/.firn-cache/schema.json"
 git init -q -b main "$fixture"
 git -C "$fixture" config user.name authoring-test
 git -C "$fixture" config user.email authoring-test@example.invalid
@@ -79,7 +79,7 @@ exit "${FIRN_FAKE_SOPS_STATUS:-0}"
 EOF
 chmod +x "$fakebin/sops"
 
-FIRN_AUTHORING_CORE="$core" FIRN_SCHEMA_CAPTURE="$fixture/.beagle-cache/schema.json" bun - <<'JS'
+FIRN_AUTHORING_CORE="$core" FIRN_SCHEMA_CAPTURE="$fixture/.firn-cache/schema.json" bun - <<'JS'
 import assert from 'node:assert/strict';
 const core = await import(process.env.FIRN_AUTHORING_CORE);
 const text = await Bun.file(process.env.FIRN_SCHEMA_CAPTURE).text();

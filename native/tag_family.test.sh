@@ -153,7 +153,7 @@ run_native "$scratch/index-repo" "$inventory_root" fixture tag index
 assert_status "$scratch/index-repo" 0 "tag index repo"
 assert_empty "$scratch/index-repo.err" "tag index repo stderr"
 assert_same "$scratch/index-stdout.out" \
-  "$inventory_root/.beagle-cache/tags.jsonl" "tag index persisted output"
+  "$inventory_root/.firn-cache/tags.jsonl" "tag index persisted output"
 
 printf 'tag-family: checking fact mutations, idempotence, and re-resolution\n' >&2
 resolved() {

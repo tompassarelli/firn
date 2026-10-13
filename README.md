@@ -76,7 +76,6 @@ enabled without an overlay value fails evaluation. See [docs/secrets.md](docs/se
 ```bash
 nix flake init -t github:tompassarelli/firn     # drops template/ in cwd
 git clone https://github.com/tompassarelli/galileo ../galileo  # firn's compiler and checker
-git clone https://github.com/tompassarelli/beagle ../beagle    # compiles the CLI's native/*.bjs
 firn-runtime-update                              # builds galileo at config/galileo-revision
 # rename the template's placeholder host to <host>: its directory under hosts/
 # and its nixosConfigurations entry in flake.nix
@@ -85,9 +84,8 @@ cp /etc/nixos/hardware-configuration.nix hosts/<host>/hardware-configuration.nix
 firn repo build && nixos-rebuild switch --flake .#<host>
 ```
 
-`FIRN_GALILEO_REPO` and `BEAGLE_PATH` override the sibling-clone locations
-(defaults `~/code/galileo/main` and `~/code/beagle/main`). Beagle compiles only
-the CLI's `native/*.bjs` until that code is ported to TypeScript.
+`FIRN_GALILEO_REPO` overrides the Galileo checkout location
+(default `~/code/galileo/main`). The CLI runs TypeScript with Bun.
 On macOS, `lib.mkDarwinSystem` builds a `darwinConfigurations` entry instead.
 
 ## Agent tooling
@@ -142,7 +140,7 @@ and [docs/TAGS.md](docs/TAGS.md) for tag composition.
 
 ## Tradeoffs
 
-- Two sibling-repo dependencies (`../galileo` for configuration, `../beagle` for the CLI until its port).
+- A sibling Galileo checkout for configuration compilation.
 - Two languages: Galileo sources and the Nix module concepts they compile to.
 - Two artifacts per file (`.gal` and `.nix`, both committed).
 

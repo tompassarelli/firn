@@ -20,7 +20,7 @@ function childStatus(bridge: AuthoringBridge, tool: string, status: number): num
   return status < 0 ? emitError(bridge, `firn authoring: cannot run ${tool}: errno ${-status}\n`) : status;
 }
 function loadSchema(bridge: AuthoringBridge, root: string): SchemaEntry[] | string {
-  const relative = '.beagle-cache/schema.json', absolute = path(root, relative);
+  const relative = '.firn-cache/schema.json', absolute = path(root, relative);
   const kind = bridge.pathKind(absolute);
   if (kind.tag === 'error') return kind.errno === 2 ? [] : errnoMessage('cannot inspect schema', relative, kind.errno);
   if (kind.kind !== 1 && kind.kind !== 3) return `firn authoring: schema is not a file '${relative}'\n`;

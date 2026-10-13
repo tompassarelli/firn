@@ -208,4 +208,4 @@ Enabled in zeta-host:
 EOF
 assert_output host-status "$scratch/host-status.expected"
 
-printf 'ok: Beagle/JS Firn inventory matches the canonical controlled fixture\n'
+printf 'ok: TypeScript/Bun Firn inventory matches the canonical controlled fixture\n'

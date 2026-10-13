@@ -209,9 +209,9 @@ function nixTarget(path: string): boolean {
   const segments = quality.pathSegments(path);
   const basename = quality.pathBasename(segments);
   return path.endsWith('.nix') && basename !== 'hardware-configuration.nix'
-    && !quality.stringMember(['.git', '.direnv', '.beagle-cache', 'result'], basename)
+    && !quality.stringMember(['.git', '.direnv', '.firn-cache', 'result'], basename)
     && !segments.some((segment, index) =>
-      ['.git', '.direnv', '.beagle-cache', '.firn-build'].includes(segment)
+      ['.git', '.direnv', '.firn-cache', '.firn-build'].includes(segment)
       || segment.startsWith('result')
       || (['docs', 'tests'].includes(segment) && segments[index + 1] === 'fixtures'));
 }
@@ -427,10 +427,10 @@ function upgradeProcesses(root: string, dryRun: boolean): ProcessBoundary[] {
   if (dryRun) return [];
   return [
     { kind: 'InheritProcess', phase: 'current Galileo schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
-    { kind: 'CaptureToFileProcess', phase: 'schema snapshot', argv: ['cat', rootPath(root, '.beagle-cache/schema.json')], stdin: '', maxOutput: 67108864, outputPath: rootPath(root, '.beagle-cache/schema.before.json') },
+    { kind: 'CaptureToFileProcess', phase: 'schema snapshot', argv: ['cat', rootPath(root, '.firn-cache/schema.json')], stdin: '', maxOutput: 67108864, outputPath: rootPath(root, '.firn-cache/schema.before.json') },
     { kind: 'InheritProcess', phase: 'nix flake update', argv: ['nix', 'flake', 'update', '--flake', root] },
     { kind: 'InheritProcess', phase: 'Galileo schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
-    { kind: 'CompareProcess', phase: 'schema comparison', argv: ['diff', '--unified', rootPath(root, '.beagle-cache/schema.before.json'), rootPath(root, '.beagle-cache/schema.json')] },
+    { kind: 'CompareProcess', phase: 'schema comparison', argv: ['diff', '--unified', rootPath(root, '.firn-cache/schema.before.json'), rootPath(root, '.firn-cache/schema.json')] },
     { kind: 'InheritProcess', phase: 'repository validation', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'repo', 'validate'] },
   ];
 }

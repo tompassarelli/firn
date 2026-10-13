@@ -32,9 +32,9 @@ case "${1:-} ${2:-}" in
   "schema extract")
     shift 2
     [[ "$#" -le 1 && "${1:-}" != -* ]] || usage
-    mkdir -p "$root/.beagle-cache"
+    mkdir -p "$root/.firn-cache"
     exec "$galileo" schema extract --host "${1:-whiterabbit}" --flake "$root" \
-      --out "$root/.beagle-cache/schema.json"
+      --out "$root/.firn-cache/schema.json"
     ;;
   "repo validate")
     shift 2

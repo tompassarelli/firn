@@ -3,7 +3,7 @@
 # firn's own install glue for North (hook registration, projector, liveness marker) is allowed by name.
 set -euo pipefail
 target="${1:-/run/current-system}"
-hits=$(nix-store -qR "$target" | grep -Ei -- '(north|south|beagle)' \
+hits=$(nix-store -qR "$target" | grep -Ei -- '(north|south)' \
   | grep -Eiv 'codex' \
   | grep -Ev -- '-(north-claude-hooks\.json|north-claude-hook-projector|etc-north-delivery-liveness-required)$' || true)
 if [ -n "$hits" ]; then

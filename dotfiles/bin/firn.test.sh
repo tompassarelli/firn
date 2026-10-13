@@ -7,17 +7,16 @@ scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-family-runtime-test.XXXXXX")"
 cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 
-candidate_beagle="${BEAGLE_PATH:?set BEAGLE_PATH to the exact Beagle candidate}"
 producer_bun="${FIRN_BUN:-$HOME/.local/lib/firn/cli/current/bin/bun}"
-galileo_repo="" # hardcoded-repo-path:allow
+galileo_repo="${FIRN_GALILEO_REPO:-$HOME/code/galileo/main}" # hardcoded-repo-path:allow
 [[ -x "$producer_bun" ]]
 real_runtime="$scratch/real-runtime"
 PATH="$(dirname "$producer_bun"):$PATH" \
-  FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
-  FIRN_GALILEO_REPO="" \
+  FIRN_REPO="$source_repo" \
+  FIRN_GALILEO_REPO="$galileo_repo" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
   "$here/firn-runtime-update" repo >"$scratch/real-update.out"
-FIRN_REPO="$source_repo" BEAGLE_PATH="$candidate_beagle" \
+FIRN_REPO="$source_repo" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
   "$here/firn" host list all >"$scratch/real-hosts.out"
 grep -Fxq '  whiterabbit' "$scratch/real-hosts.out"

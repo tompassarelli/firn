@@ -7,7 +7,6 @@ if [ "$mode" = drift ]; then
       git ls-tree -r "$1" | awk -F '\t' '$2 ~ /\.(bnix|nix)$/ || $2 ~ /^native\// ||
         $2 == "dotfiles/bin/firn" || $2 == "config/galileo-revision"'
       readlink -f "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current"
-      git -C "${BEAGLE_PATH:-$HOME/code/beagle/main}" rev-parse HEAD
     } | sha256sum | cut -d' ' -f1
   }
   drift_cache=${XDG_CACHE_HOME:-$HOME/.cache}/firn/compiler-drift
@@ -59,6 +58,6 @@ while IFS= read -r -d '' path; do
     [ -z "${seen[$test]:-}" ] || continue
     seen[$test]=1
     printf 'land check: %s\n' "$test"
-    BEAGLE_PATH="${BEAGLE_PATH:-$HOME/code/beagle/main}" bash "$test"
+    bash "$test"
   done
 done < <(git diff --name-only --no-renames -z "$base" "$head")

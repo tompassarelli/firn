@@ -132,7 +132,7 @@ export function run(argv: string[], host: ViewsHost): number {
     case 'SchemaExplain': {
       const option = views.extractOptionPath(action.input);
       if (option === null) return emitError(`firn schema explain: couldn't extract an option path from: ${action.input}\n`);
-      return emitResult(childResult(['env', '-C', root, galileoBinary(), 'schema', 'explain', option], ''));
+      return emitResult(childResult(['env', '-C', root, galileoBinary(), 'schema', 'explain', option, '--schema', root + '/.firn-cache/schema.json'], ''));
     }
     case 'HostGeneration': return emitResult(views.renderHostGeneration(childResult(['nixos-rebuild', 'list-generations'], '')));
   }

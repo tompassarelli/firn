@@ -132,9 +132,9 @@ timeout --foreground 30 env PATH="$fakebin:$PATH" FIRN_REPO="$fixture" FIRN_HOST
 status=$?
 set -e
 [[ "$status" == 9 ]] || die "child failure returned $status"
-mkdir -p "$fixture/.beagle-cache"
+mkdir -p "$fixture/.firn-cache"
 cp -- "$here/fixtures/beagle-bfe06d21f4bd-2026-10-11-openssh-schema.json" \
-  "$fixture/.beagle-cache/schema.json"
+  "$fixture/.firn-cache/schema.json"
 set +e
 timeout --foreground 60 env FIRN_REPO="$fixture" \
   "$scratch/firn-views-native" schema explain services.openssh.enable \

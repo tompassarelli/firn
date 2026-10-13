@@ -2,8 +2,6 @@
 set -euo pipefail
 
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
-beagle_path="${BEAGLE_PATH:-$HOME/code/beagle/main}" # hardcoded-repo-path:allow
-beagle="$beagle_path/bin/beagle"
 galileo_path="${FIRN_GALILEO_REPO:-$HOME/code/galileo/main}" # hardcoded-repo-path:allow
 runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 versions="$runtime_root/versions"
@@ -22,11 +20,6 @@ case "$scope" in
     ;;
 esac
 
-if [[ "$scope" != galileo && ! -x "$beagle" ]]; then
-  printf 'firn-runtime-update: BEAGLE_PATH has no executable bin/beagle: %s\n' \
-    "$beagle_path" >&2
-  exit 1
-fi
 for prerequisite in cmp find git ldd nix nix-store readlink sha256sum tar; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
@@ -66,22 +59,16 @@ case "$bun_source" in
     ;;
 esac
 
-datum_reader="$beagle_path/native-core/src/beagle/datum_reader.bjs"
-native_json="$beagle_path/native-core/src/native/json.bjs"
 dispatcher_bridge="$firn_repo/native/firn_host.mjs"
 dispatcher_io="$firn_repo/native/firn_io.mjs"
 host_list_source="$firn_repo/native/firn-host-list.ts"
 host_list_os="$firn_repo/native/firn-host-list-os.mjs"
-beagle_core="$beagle_path/beagle-lib/lib/beagle/core.js"
-beagle_host="$beagle_path/beagle-lib/lib/beagle/host.js"
 
 dispatcher_sources=(
   "$dispatcher_bridge"
   "$dispatcher_io"
   "$host_list_source"
   "$host_list_os"
-  "$beagle_core"
-  "$beagle_host"
 )
 tag_sources=(
   "$firn_repo/native/datum_reader.ts"
@@ -212,14 +199,6 @@ firn_revision="$(git -C "$firn_repo" rev-parse HEAD)" || {
     "$firn_repo" >&2
   exit 1
 }
-beagle_revision=""
-if [[ "$scope" != galileo ]]; then
-  beagle_revision="$(git -C "$beagle_path" rev-parse HEAD)" || {
-    printf 'firn-runtime-update: BEAGLE_PATH has no readable Git identity: %s\n' \
-      "$beagle_path" >&2
-    exit 1
-  }
-fi
 
 mkdir -p "$versions"
 stage="$(mktemp -d "$runtime_root/.stage.XXXXXX")"
@@ -232,15 +211,13 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM HUP
-mkdir -p "$stage/bin" "$stage/lib" "$stage/artifacts" \
-  "$stage/node_modules/beagle"
+mkdir -p "$stage/bin" "$stage/lib" "$stage/artifacts"
 
 manifest="$stage/manifest"
 {
   printf 'format=firn-cli-runtime/v5\n'
   printf 'scope=%s\n' "$scope"
   printf 'firn_revision=%s\n' "$firn_revision"
-  printf 'beagle_revision=%s\n' "$beagle_revision"
   printf 'galileo_revision=%s\n' "$galileo_revision"
   printf 'bun_store_path=%s\n' "${bun_store_path:-copied}"
 } >"$manifest"
@@ -322,18 +299,10 @@ materialize_dispatcher() {
   cp -- "$dispatcher_io" "$stage/bin/firn-io.mjs"
   cp -- "$host_list_source" "$stage/bin/firn-host-list.ts"
   cp -- "$host_list_os" "$stage/bin/firn-host-list-os.mjs"
-  cp -- "$beagle_core" "$stage/node_modules/beagle/core.js"
-  cp -- "$beagle_host" "$stage/node_modules/beagle/host.js"
-  printf '%s\n' '{"type":"module"}' \
-    >"$stage/node_modules/beagle/package.json"
-
   record_artifact bridge bin/firn-host.mjs "$dispatcher_bridge"
   record_artifact dispatcher-io bin/firn-io.mjs "$dispatcher_io"
   record_artifact host-list-source bin/firn-host-list.ts "$host_list_source"
   record_artifact host-list-os bin/firn-host-list-os.mjs "$host_list_os"
-  record_artifact beagle-core node_modules/beagle/core.js "$beagle_core"
-  record_artifact beagle-host node_modules/beagle/host.js "$beagle_host"
-  record_generated_artifact beagle-package node_modules/beagle/package.json
 }
 
 materialize_js() {
@@ -364,13 +333,6 @@ materialize_js() {
       mkdir -p "$stage/lib/firn"
       cp -- "$2" "$stage/lib/firn/prewarm.gal"
       record_artifact "$component-policy" lib/firn/prewarm.gal "$2"
-      ;;
-    *)
-      if ! "$beagle_path/bin/beagle-build-all" "$@" --out "$output_root"; then
-        printf 'firn-runtime-update: Beagle/JS materialization failed: %s\n' \
-          "$component" >&2
-        exit 1
-      fi
       ;;
   esac
   if [[ ! -f "$module" ]]; then

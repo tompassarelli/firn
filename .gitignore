@@ -8,7 +8,7 @@ result-*
 **/compiled/
 __pycache__/
 .firn-build/
-.beagle-cache/
+.firn-cache/
 
 # sops age private keys — NEVER commit these
 *.age.key

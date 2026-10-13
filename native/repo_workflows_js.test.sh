@@ -36,30 +36,30 @@ set -e
 
 fixture_repo="$scratch/input-skew-repo"
 fixture_home="$scratch/input-skew-home"
-fixture_beagle="$fixture_home/code/beagle/main"
+fixture_tool="$fixture_home/code/fixture-tool/main"
 fixture_bin="$scratch/input-skew-bin"
-mkdir -p "$fixture_repo" "$fixture_beagle" "$fixture_bin"
+mkdir -p "$fixture_repo" "$fixture_tool" "$fixture_bin"
 
-git init --quiet --initial-branch=main "$fixture_beagle"
-git -C "$fixture_beagle" config user.name "Firn native test"
-git -C "$fixture_beagle" config user.email "firn-native-test@example.invalid"
-printf 'base\n' >"$fixture_beagle/README"
-git -C "$fixture_beagle" add README
-git -C "$fixture_beagle" commit --quiet -m 'base'
-pinned_rev="$(git -C "$fixture_beagle" rev-parse HEAD)"
-printf 'advance\n' >>"$fixture_beagle/README"
-git -C "$fixture_beagle" commit --quiet -am 'advance'
-git -C "$fixture_beagle" remote add origin \
-  https://github.com/tompassarelli/beagle.git
+git init --quiet --initial-branch=main "$fixture_tool"
+git -C "$fixture_tool" config user.name "Firn native test"
+git -C "$fixture_tool" config user.email "firn-native-test@example.invalid"
+printf 'base\n' >"$fixture_tool/README"
+git -C "$fixture_tool" add README
+git -C "$fixture_tool" commit --quiet -m 'base'
+pinned_rev="$(git -C "$fixture_tool" rev-parse HEAD)"
+printf 'advance\n' >>"$fixture_tool/README"
+git -C "$fixture_tool" commit --quiet -am 'advance'
+git -C "$fixture_tool" remote add origin \
+  https://github.com/tompassarelli/fixture-tool.git
 independent_rev="$(
-  printf 'independent\n' | git -C "$fixture_beagle" commit-tree \
-    "$(git -C "$fixture_beagle" write-tree)"
+  printf 'independent\n' | git -C "$fixture_tool" commit-tree \
+    "$(git -C "$fixture_tool" write-tree)"
 )"
 
 write_lock() {
   local revision="$1"
   printf '%s\n' \
-    "{\"nodes\":{\"root\":{\"inputs\":{\"beagle\":\"beagle\",\"glide\":\"glide\"}},\"beagle\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"beagle\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}},\"glide\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"glide\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}}}}" \
+    "{\"nodes\":{\"root\":{\"inputs\":{\"fixture-tool\":\"fixture-tool\",\"glide\":\"glide\"}},\"fixture-tool\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"fixture-tool\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}},\"glide\":{\"locked\":{\"type\":\"github\",\"owner\":\"tompassarelli\",\"repo\":\"glide\",\"rev\":\"$revision\",\"narHash\":\"sha256-YWJjZA==\"}}}}" \
     >"$fixture_repo/flake.lock"
 }
 
