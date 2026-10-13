@@ -11,7 +11,7 @@ nix module
   let upstream = "http://{upstreamHost}"
   let ph = config.sops.placeholder
   let htpasswd = builtins.getAttr("paperclip-web.htpasswd", config.sops.templates)
-  option myConfig.modules.nexus-paperclip-web.enable: enable "Paperclip web UI on wg-nexus behind nginx basic auth, proxied to the loopback Paperclip server"
+  option myConfig.modules.nexus-paperclip-web.enable: enable "Paperclip web UI on wg-nexus (WireGuard keys are the login), proxied to the loopback Paperclip server"
   option myConfig.modules.nexus-paperclip-web.sopsFile: Path
     description: "sops file holding paperclip-web-password and paperclip-web-password-hash, the crypt hash for basic auth user tom"
   config when cfg.enable
@@ -27,7 +27,6 @@ nix module
       enable: true
       virtualHosts."paperclip-wg"
         listen: [{addr: address, port: port}]
-        basicAuthFile: htpasswd.path
         locations."/"
           proxyPass: upstream
           proxyWebsockets: true

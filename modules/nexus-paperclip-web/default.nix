@@ -9,7 +9,7 @@ let
   ph = config.sops.placeholder;
   htpasswd = builtins.getAttr "paperclip-web.htpasswd" config.sops.templates;
 in {
-  options.myConfig.modules.nexus-paperclip-web.enable = lib.mkEnableOption "Paperclip web UI on wg-nexus behind nginx basic auth, proxied to the loopback Paperclip server";
+  options.myConfig.modules.nexus-paperclip-web.enable = lib.mkEnableOption "Paperclip web UI on wg-nexus (WireGuard keys are the login), proxied to the loopback Paperclip server";
   options.myConfig.modules.nexus-paperclip-web.sopsFile = lib.mkOption {
     type = lib.types.path;
     description = "sops file holding paperclip-web-password and paperclip-web-password-hash, the crypt hash for basic auth user tom";
@@ -33,7 +33,6 @@ in {
             port = port;
           }
         ];
-        basicAuthFile = htpasswd.path;
         locations."/" = {
           proxyPass = upstream;
           proxyWebsockets = true;
