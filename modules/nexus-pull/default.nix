@@ -39,7 +39,7 @@ in {
       systemd.user.services.nexus-pull = {
         Unit = {
           Description = "Pull nexus's encrypted backups";
-          OnFailure = [ "update-notify@%n.service" ];
+          OnFailure = [ "update-notify@%N.service" ];
         };
         Service = {
           Type = "oneshot";
@@ -63,7 +63,7 @@ in {
       systemd.user.services.nexus-restore-test = {
         Unit = {
           Description = "Decrypt the newest nexus backups in tmpfs and check their integrity";
-          OnFailure = [ "update-notify@%n.service" ];
+          OnFailure = [ "update-notify@%N.service" ];
         };
         Service = {
           Type = "oneshot";

@@ -10,7 +10,7 @@ in {
       systemd.user.services.agent-runtime-update = {
         Unit = {
           Description = "Twice-daily agent runtime updates";
-          OnFailure = [ "update-notify@%n.service" ];
+          OnFailure = [ "update-notify@%N.service" ];
         };
         Service = {
           Type = "oneshot";
