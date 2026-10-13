@@ -8,7 +8,7 @@ nix module
   let username = config.myConfig.modules.users.username
   let stateDir = "/var/lib/nexus-checks"
   let authorizedKeys = pkgs.writeText("nexus-authorized-keys", lib.concatStringsSep("\n", config.myConfig.modules.users.authorizedKeys))
-  let checks = pkgs.writeShellApplication({name: "nexus-checks", runtimeInputs: [pkgs.coreutils, pkgs.gnugrep, pkgs.gnused, pkgs.gawk, pkgs.systemd, pkgs.openssh, pkgs.lynis, "/run/current-system/sw"], runtimeEnv: {WG_PEERS: "10.77.0.2=laptop 10.77.0.3=phone", AUTHORIZED_KEYS: authorizedKeys, USER_NAME: username, BACKUP_MARKER: "/var/lib/nexus-backup/last-ok"}, text: builtins.readFile(./nexus-checks.sh)})
+  let checks = pkgs.writeShellApplication({name: "nexus-checks", runtimeInputs: [pkgs.coreutils, pkgs.gnugrep, pkgs.gnused, pkgs.gawk, pkgs.systemd, pkgs.openssh, pkgs.lynis, "/run/current-system/sw"], runtimeEnv: {WG_PEERS: "10.77.0.2=laptop 10.77.0.3=phone 10.77.0.4=gex45", AUTHORIZED_KEYS: authorizedKeys, USER_NAME: username, BACKUP_MARKER: "/var/lib/nexus-backup/last-ok"}, text: builtins.readFile(./nexus-checks.sh)})
   let heartbeat = pkgs.writeShellApplication({name: "nexus-heartbeat", runtimeInputs: [pkgs.coreutils, pkgs.gnugrep, "/run/current-system/sw"], runtimeEnv: {CHECKS_STATE: stateDir, HEARTBEAT_REPO: "tompassarelli/firn"}, text: builtins.readFile(./nexus-heartbeat.sh)})
   let timer = (calendar) => {wantedBy: ["timers.target"], timerConfig: {OnCalendar: calendar, Persistent: true, RandomizedDelaySec: "2m"}}
   option myConfig.modules.nexus-checks.enable: enable "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat"

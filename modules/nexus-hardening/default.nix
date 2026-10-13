@@ -3,7 +3,8 @@
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
-  wgAddress = "10.77.0.1";
+  cfg = config.myConfig.modules.nexus-hardening;
+  wgAddress = cfg.wgAddress;
   wgInterface = "wg-nexus";
   creds = " -p wa -k nexus-creds";
   upgradeFlake = config.myConfig.modules.nexus-hardening.upgradeFlake;
@@ -13,13 +14,23 @@ in {
     type = lib.types.str;
     description = "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus";
   };
+  options.myConfig.modules.nexus-hardening.wgAddress = lib.mkOption {
+    type = lib.types.str;
+    default = "10.77.0.1";
+    description = "wg-nexus address sshd listens on";
+  };
+  options.myConfig.modules.nexus-hardening.publicSsh = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
+  };
   config = lib.mkIf config.myConfig.modules.nexus-hardening.enable {
     myConfig.modules.ssh.enable = true;
     myConfig.modules.polkit.enable = true;
     myConfig.modules.auto-upgrade.enable = true;
     services.openssh = {
       openFirewall = false;
-      listenAddresses = [
+      listenAddresses = if cfg.publicSsh then [ ] else [
         {
           addr = wgAddress;
           port = 22;
@@ -38,7 +49,7 @@ in {
     networking.firewall = {
       enable = true;
       allowPing = true;
-      allowedTCPPorts = lib.mkForce [ ];
+      allowedTCPPorts = lib.mkForce (lib.optional cfg.publicSsh 22);
       allowedTCPPortRanges = lib.mkForce [ ];
       allowedUDPPorts = [ 51820 ];
       interfaces = {

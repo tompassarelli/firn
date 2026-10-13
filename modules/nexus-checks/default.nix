@@ -17,7 +17,7 @@ let
       "/run/current-system/sw"
     ];
     runtimeEnv = {
-      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone";
+      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone 10.77.0.4=gex45";
       AUTHORIZED_KEYS = authorizedKeys;
       USER_NAME = username;
       BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";

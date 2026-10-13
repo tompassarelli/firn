@@ -7,20 +7,27 @@ nix module
   arguments: config, lib, pkgs, ...
   let username = config.myConfig.modules.users.username
   let homeDir = config.myConfig.modules.users.homeDir
-  let wgAddress = "10.77.0.1"
+  let cfg = config.myConfig.modules.nexus-hardening
+  let wgAddress = cfg.wgAddress
   let wgInterface = "wg-nexus"
   let creds = " -p wa -k nexus-creds"
   let upgradeFlake = config.myConfig.modules.nexus-hardening.upgradeFlake
   option myConfig.modules.nexus-hardening.enable: enable "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection"
   option myConfig.modules.nexus-hardening.upgradeFlake: Text
     description: "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus"
+  option myConfig.modules.nexus-hardening.wgAddress: Text
+    default: "10.77.0.1"
+    description: "wg-nexus address sshd listens on"
+  option myConfig.modules.nexus-hardening.publicSsh: Bool
+    default: false
+    description: "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified"
   config when config.myConfig.modules.nexus-hardening.enable
     myConfig.modules.ssh.enable: true
     myConfig.modules.polkit.enable: true
     myConfig.modules.auto-upgrade.enable: true
     services.openssh
       openFirewall: false
-      listenAddresses: [{addr: wgAddress, port: 22}]
+      listenAddresses: if cfg.publicSsh then [] else [{addr: wgAddress, port: 22}]
       settings
         PermitRootLogin: "no"
         AllowUsers: [username]
@@ -31,7 +38,7 @@ nix module
     networking.firewall
       enable: true
       allowPing: true
-      allowedTCPPorts: lib.mkForce([])
+      allowedTCPPorts: lib.mkForce(lib.optional(cfg.publicSsh, 22))
       allowedTCPPortRanges: lib.mkForce([])
       allowedUDPPorts: [51820]
       interfaces

@@ -8,6 +8,7 @@ let
   peerNames = lib.concatStringsSep " " (lib.concatLists [
     [ "laptop:${laptopPublicKey}" ]
     (lib.optional (cfg.phonePublicKey != null) "phone:${cfg.phonePublicKey}")
+    (lib.optional (cfg.gex45PublicKey != null) "gex45:${cfg.gex45PublicKey}")
   ]);
   peersHelper = pkgs.writeShellApplication {
     name = "nexus-peers";
@@ -28,7 +29,7 @@ let
     '';
   };
 in {
-  options.myConfig.modules.wg-nexus.enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3";
+  options.myConfig.modules.wg-nexus.enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3, gex45 .4";
   options.myConfig.modules.wg-nexus.role = lib.mkOption {
     type = lib.types.enum [ "hub" "client" ];
     description = "hub listens on UDP 51820 with the laptop and phone as peers; client is the laptop dialing the hub";
@@ -45,6 +46,26 @@ in {
     type = lib.types.nullOr lib.types.str;
     default = null;
     description = "Public key of the phone peer (10.77.0.3); the hub omits the peer while null";
+  };
+  options.myConfig.modules.wg-nexus.gex45PublicKey = lib.mkOption {
+    type = lib.types.nullOr lib.types.str;
+    default = null;
+    description = "Public key of the gex45 peer (10.77.0.4); the hub omits the peer while null";
+  };
+  options.myConfig.modules.wg-nexus.address = lib.mkOption {
+    type = lib.types.str;
+    default = "10.77.0.2";
+    description = "client: this host's wg-nexus address";
+  };
+  options.myConfig.modules.wg-nexus.keySecret = lib.mkOption {
+    type = lib.types.str;
+    default = "wireguard-nexus-laptop";
+    description = "client: sops secret name holding this host's wg-nexus private key";
+  };
+  options.myConfig.modules.wg-nexus.acceptInbound = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = "client: accept new inbound connections on wg-nexus (subject to the host firewall) instead of dropping them";
   };
   config = lib.mkIf cfg.enable (lib.mkMerge [
     {
@@ -86,18 +107,22 @@ in {
             publicKey = cfg.phonePublicKey;
             allowedIPs = [ "10.77.0.3/32" ];
           })
+          (lib.optional (cfg.gex45PublicKey != null) {
+            publicKey = cfg.gex45PublicKey;
+            allowedIPs = [ "10.77.0.4/32" ];
+          })
         ];
       };
     })
     (lib.mkIf (cfg.role == "client") {
-      sops.secrets.wireguard-nexus-laptop = { };
+      sops.secrets.${cfg.keySecret} = { };
       sops.secrets.nexus-endpoint = { };
       sops.templates."wg-nexus.conf" = {
         restartUnits = [ "wg-quick-wg-nexus.service" ];
         content = ''
           [Interface]
-          PrivateKey = ${config.sops.placeholder.wireguard-nexus-laptop}
-          Address = 10.77.0.2/24
+          PrivateKey = ${builtins.getAttr cfg.keySecret config.sops.placeholder}
+          Address = ${cfg.address}/24
 
           [Peer]
           PublicKey = ${hubPublicKey}
@@ -120,7 +145,7 @@ in {
         hostNames = [ "nexus" "10.77.0.1" ];
         publicKeyFile = cfg.hostPublicKeyFile;
       };
-      networking.firewall.extraCommands = "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP";
+      networking.firewall.extraCommands = lib.mkIf (!cfg.acceptInbound) "ip46tables -I nixos-fw 1 -i wg-nexus -m conntrack ! --ctstate ESTABLISHED,RELATED -j DROP";
     })
   ]);
 }
