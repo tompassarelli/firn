@@ -123,10 +123,12 @@ in {
       "net.core.bpf_jit_harden" = 2;
       "fs.protected_hardlinks" = 1;
       "fs.protected_symlinks" = 1;
+      "vm.swappiness" = 180;
+      "vm.page-cluster" = 0;
     };
     zramSwap = {
       enable = true;
-      memoryPercent = 50;
+      memoryPercent = 100;
     };
     swapDevices = [
       {
