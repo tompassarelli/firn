@@ -253,6 +253,7 @@ layout {
 
 // ironbar now managed by systemd user service
 spawn-at-startup "gnome-keyring-daemon --start --components=secrets"
+spawn-at-startup "external-subpixel"
 
 // ironbar overview script now managed by systemd user service
 
