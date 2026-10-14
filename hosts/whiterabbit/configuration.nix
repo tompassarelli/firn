@@ -80,6 +80,7 @@
           "cross-project-scan.timer"
           "proton-log-watchdog.timer"
           "proton-spam-autopurge.timer"
+          "proton-github-bot.timer"
           "systemd-tmpfiles-clean.timer"
         ];
         sockets = [
