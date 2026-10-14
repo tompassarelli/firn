@@ -44,11 +44,14 @@ in {
         User = username;
         Restart = "always";
         RestartSec = 5;
+        TimeoutStartSec = "15min";
+        ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${base} ]; do sleep 5; done'";
         ExecStart = "${base} serve";
       };
     };
     systemd.services.nexus-laptop-ntfy-notify = {
       description = "Publish the laptop state to ntfy when it changed";
+      unitConfig.ConditionPathIsExecutable = base;
       path = toolPath;
       environment = env;
       serviceConfig = {

@@ -29,6 +29,7 @@ in {
     };
     systemd.services.laptop-window = {
       description = "laptop tick: apply the laptop availability window and settle a finished drain";
+      unitConfig.ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/laptop";
       path = [
         pkgs.python3
         pkgs.coreutils

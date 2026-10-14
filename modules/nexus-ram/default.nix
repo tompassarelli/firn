@@ -8,6 +8,7 @@ in {
   config = lib.mkIf config.myConfig.modules.nexus-ram.enable {
     systemd.services.nexus-ram = {
       description = "Append one nexus-ram row: MemAvailable, swap, zram, memory PSI and resident agent CLI PSS";
+      unitConfig.ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/nexus-ram";
       path = [ pkgs.python3 pkgs.coreutils ];
       serviceConfig = {
         Type = "oneshot";
