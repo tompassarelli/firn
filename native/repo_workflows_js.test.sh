@@ -88,27 +88,27 @@ pin_skewed="$scratch/pin-skewed"
 run_pin_ancestry "$pin_skewed"
 [[ "$(<"$pin_skewed.status")" == 1 ]] \
   || die "non-ancestor pin was accepted"
-galileo_dir="${FIRN_RUNTIME_BIN:-}"
-if [[ ! -x "$galileo_dir/galileo" ]]; then
-  galileo_dir="$(dirname "$(command -v galileo)")" \
-    || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
-fi
 inotify_bin="$(dirname "$(command -v inotifywait 2>/dev/null || true)")"
 if [[ "$inotify_bin" == "." ]]; then
   inotify_bin="$(nix build --no-link --print-out-paths nixpkgs#inotify-tools)/bin" \
     || die "cannot provide inotifywait"
 fi
-
-gal_repo="$scratch/gal-repo"
-mkdir -p "$gal_repo/modules/demo"
-git init --quiet --initial-branch=main "$gal_repo"
-printf '%s\n' '{"nodes":{"root":{"inputs":{}}}}' >"$gal_repo/flake.lock"
-printf '%s\n' 'nix module' '  arguments: config, lib, ...' \
-  '  option "myConfig"."modules"."demo"."enable": enable "demo"' \
-  >"$gal_repo/modules/demo/default.gal"
-(cd "$gal_repo" && "$galileo_dir/galileo" build --layout idiomatic) >/dev/null \
-  || die "fixture galileo build failed"
-printf '# stale\n' >>"$gal_repo/modules/demo/default.nix"
+fixture_nix="$scratch/nix-repo"
+mkdir -p "$fixture_nix/modules/demo" "$fixture_nix/dotfiles/bin"
+git init --quiet --initial-branch=main "$fixture_nix"
+printf '%s\n' '{"version":7,"root":"root","nodes":{"root":{"inputs":{}}}}' >"$fixture_nix/flake.lock"
+printf '{ enabled = false; }\n' >"$fixture_nix/modules/demo/default.nix"
+cat >"$fixture_nix/flake.nix" <<'NIX'
+{
+  outputs = _: {
+    nixosConfigurations.fixture.config.system.build.toplevel =
+      assert (import ./modules/demo/default.nix).enabled;
+      builtins.derivation { name = "fixture"; system = "x86_64-linux"; builder = "/bin/sh"; };
+  };
+}
+NIX
+cp "$repo/dotfiles/bin/firn-check" "$fixture_nix/dotfiles/bin/firn-check"
+git -C "$fixture_nix" add flake.nix modules/demo/default.nix dotfiles/bin/firn-check
 
 run_repo() {
   local result="$1"
@@ -116,8 +116,7 @@ run_repo() {
   set +e
   timeout --foreground 60 env \
     PATH="$repo/dotfiles/bin:$inotify_bin:$PATH" \
-    FIRN_RUNTIME_BIN="$galileo_dir" \
-    FIRN_REPO="$gal_repo" \
+    FIRN_REPO="$fixture_nix" \
     FIRN_REPO_WORKFLOW_MODULE="$runtime" \
     bun "$repo/native/repo_workflows_host.mjs" repo "$@" \
     >"$result.out" 2>"$result.err"
@@ -125,30 +124,30 @@ run_repo() {
   set -e
 }
 
-doctor="$scratch/doctor-stale"
+doctor="$scratch/doctor-assertion"
 run_repo "$doctor" doctor
-[[ "$(<"$doctor.status")" != 0 ]] || die "doctor passed a stale generated output"
-grep -q 'modules/demo/default.nix (committed)' "$doctor.out" "$doctor.err" \
-  || die "doctor did not name the stale generated output"
+[[ "$(<"$doctor.status")" != 0 ]] || die "doctor passed an invalid Nix assertion"
+grep -q 'assertion' "$doctor.out" "$doctor.err" \
+  || die "doctor did not report the invalid assertion"
 
-watch="$scratch/watch-gal"
+watch="$scratch/watch-nix"
 run_repo "$watch" watch &
 watch_pid=$!
 for _ in $(seq 100); do
-  pgrep -f "inotifywait.*$gal_repo" >/dev/null && break
+  pgrep -f "inotifywait.*$fixture_nix" >/dev/null && break
   sleep 0.1
 done
-printf '\n' >>"$gal_repo/modules/demo/default.gal"
+printf '\n' >>"$fixture_nix/modules/demo/default.nix"
 wait "$watch_pid"
-grep -q 'galileo check' "$watch.err" \
-  || die "watch did not validate after a .gal change"
+grep -q 'firn check' "$watch.out" "$watch.err" \
+  || die "watch did not validate after a .nix change"
 
 upgrade="$scratch/upgrade-dry-run"
 run_repo "$upgrade" upgrade dry-run
 [[ "$(<"$upgrade.status")" == 0 ]] || die "upgrade dry run failed"
 printf '%s\n' \
   '>> [dry-run] would run: nix flake update --flake <repo>' \
-  '>> [dry-run] would run: galileo schema extract for NixOS' \
+  '>> [dry-run] would run: firn schema extract for NixOS' \
   'firn upgrade: dry run complete; no files were changed.' \
   | cmp -s - "$upgrade.out" || die "upgrade dry run changed its phase order"
 printf 'PASS repo-workflows-js\n'

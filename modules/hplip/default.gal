@@ -1,9 +1,0 @@
-use firn/tags
-
-tags: printing
-
-config
-  "services"
-    "printing"
-      "drivers": [pkgs.hplip]
-"enable": "HP printer drivers"

@@ -1,7 +1,0 @@
-use firn/tags
-
-tags: gaming
-
-enable: "ProtonUp-Qt compatibility tool manager"
-config
-  environment.systemPackages: with pkgs: [protonup-qt]

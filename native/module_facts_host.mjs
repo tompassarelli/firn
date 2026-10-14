@@ -1,36 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { closeSync, existsSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
-const questions = {
-  tags: 'all ?m, ?t where ?m is tagged ?t',
-  optIn: 'all ?m, ?t where ?m can opt into ?t',
-  overrides: 'all ?m, ?t, ?p, ?v where ?t sets ?p to ?v for ?m',
-  hosts: 'all ?h where ?h is a Host',
-  platform: 'all ?h, ?p where ?h runs ?p',
-  enables: 'all ?h, ?t where ?h enables ?t',
-  adds: 'all ?h, ?m, ?t where ?h adds ?m to ?t',
-  drops: 'all ?h, ?m, ?t where ?h drops ?m from ?t',
-  disables: 'all ?h, ?m where ?h disables ?m',
-  active: 'all ?h, ?m where ?m is tag-enabled on ?h',
-  turnsOn: 'all ?h, ?m where ?h turns on ?m',
-  turnsOff: 'all ?h, ?m where ?h turns off ?m',
-};
-
-function galileo() {
-  const runtime = process.env.FIRN_RUNTIME_BIN;
-  return runtime && existsSync(join(runtime, 'galileo')) ? join(runtime, 'galileo') : 'galileo';
-}
-
-function query(root, question, paths = []) {
-  const run = Bun.spawnSync([galileo(), 'query', ...paths, question, '--json'], {
-    cwd: root, stdout: 'pipe', stderr: 'pipe', timeout: 120000,
-  });
-  if (run.exitCode !== 0) {
-    throw new Error(run.stderr.toString().trim() || `galileo query exited ${run.exitCode}`);
-  }
-  return JSON.parse(run.stdout.toString());
+const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
+function names(root, directory) {
+  const path = join(root, directory);
+  return existsSync(path) ? readdirSync(path, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name).sort() : [];
 }
 
 function entry(modules, name) {
@@ -41,12 +17,13 @@ function entry(modules, name) {
 export function readModuleFacts(root) {
   try {
     const modules = new Map();
-    for (const row of query(root, questions.tags)) entry(modules, row.m).tags.push(row.t);
-    for (const row of query(root, questions.optIn)) entry(modules, row.m).optIn.push(row.t);
-    for (const row of query(root, questions.overrides)) {
-      const overrides = entry(modules, row.m).overrides;
-      if (!overrides.has(row.t)) overrides.set(row.t, new Map());
-      overrides.get(row.t).set(row.p, row.v);
+    for (const name of names(root, 'modules')) {
+      const path = join(root, 'modules', name, 'metadata.json');
+      const data = existsSync(path) ? readJson(path) : {};
+      const item = entry(modules, name);
+      item.tags = data.tags ?? [];
+      item.optIn = data.optIn ?? [];
+      item.overrides = new Map(Object.entries(data.overrides ?? {}).map(([tag, values]) => [tag, new Map(Object.entries(values).map(([path, value]) => [path, JSON.stringify(value)]))]));
     }
     return Object.freeze({ status: 0, value: modules, message: '' });
   } catch (error) {
@@ -70,15 +47,22 @@ function push(map, key, value) {
 export function readHostFacts(root) {
   try {
     const hosts = new Map();
-    for (const name of query(root, questions.hosts)) hostEntry(hosts, name);
-    for (const row of query(root, questions.platform)) hostEntry(hosts, row.h).platform = row.p;
-    for (const row of query(root, questions.enables)) hostEntry(hosts, row.h).enables.push(row.t);
-    for (const row of query(root, questions.adds)) push(hostEntry(hosts, row.h).adds, row.t, row.m);
-    for (const row of query(root, questions.drops)) push(hostEntry(hosts, row.h).drops, row.t, row.m);
-    for (const row of query(root, questions.disables)) hostEntry(hosts, row.h).disables.push(row.m);
-    for (const row of query(root, questions.active)) hostEntry(hosts, row.h).active.push(row.m);
-    for (const row of query(root, questions.turnsOn)) hostEntry(hosts, row.h).turnsOn.push(row.m);
-    for (const row of query(root, questions.turnsOff)) hostEntry(hosts, row.h).turnsOff.push(row.m);
+    const modules = readModuleFacts(root);
+    if (modules.status !== 0) throw new Error(modules.message);
+    for (const name of names(root, 'hosts')) {
+      const path = join(root, 'hosts', name, 'tags.json');
+      if (!existsSync(path)) continue;
+      const data = readJson(path), item = hostEntry(hosts, name);
+      Object.assign(item, data);
+      item.adds = new Map(Object.entries(data.adds ?? {}));
+      item.drops = new Map(Object.entries(data.drops ?? {}));
+      const allowed = item.platform === 'darwin' ? readJson(join(root, 'config/darwin-modules.json')) : null;
+      item.active = [...modules.value].filter(([module, facts]) => !item.disables.includes(module) && !item.turnsOff.includes(module)
+        && (!allowed || allowed.includes(module))
+        && item.enables.some(tag => !item.drops.get(tag)?.includes(module)
+          && (facts.tags.includes(tag) || item.adds.get(tag)?.includes(module))))
+        .map(([module]) => module).sort();
+    }
     return Object.freeze({ status: 0, value: hosts, message: '' });
   } catch (error) {
     return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
@@ -86,8 +70,8 @@ export function readHostFacts(root) {
 }
 
 export function buildGenerated(root) {
-  const run = Bun.spawnSync([galileo(), 'build', '--layout', 'idiomatic'], {
-    cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 120000,
+  const run = Bun.spawnSync(['nix', 'eval', '--raw', `path:${root}#nixosConfigurations`, '--apply', 'hosts: builtins.concatStringsSep "\\n" (map (name: hosts.${name}.config.system.build.toplevel.drvPath) (builtins.attrNames hosts))'], {
+    cwd: root, stdout: 'ignore', stderr: 'inherit', timeout: 120000,
   });
   return run.exitCode ?? 1;
 }
@@ -96,52 +80,66 @@ const noHost = Object.freeze({ platform: 'linux', enables: [], adds: new Map(),
   drops: new Map(), disables: [], active: [], turnsOn: [], turnsOff: [] });
 const hostFacts = (hosts, name) => hosts.get(name) ?? noHost;
 
-const flakeProgram = ['flake.gal', 'modules', 'config'];
-
 export function readFlakeInputs(root) {
   try {
-    const rows = query(root, 'all ?m, ?n, ?u where ?m needs flake input ?n from ?u', flakeProgram);
-    return Object.freeze({ status: 0, value: rows.map((row) => [row.m, row.n, row.u]), message: '' });
+    const rows = names(root, 'modules').flatMap(module => {
+      const path = join(root, 'modules', module, 'metadata.json');
+      return existsSync(path) ? Object.entries(readJson(path).flakeInputs ?? {}).map(([name, url]) => [module, name, url]) : [];
+    });
+    return Object.freeze({ status: 0, value: rows, message: '' });
   } catch (error) {
     return Object.freeze({ status: 1, value: null, message: String(error?.message ?? error) });
   }
 }
 
 export function runFlakeBuild(root) {
-  const run = Bun.spawnSync([galileo(), 'build', '--layout', 'idiomatic', ...flakeProgram], {
-    cwd: root, stdout: 'inherit', stderr: 'inherit', timeout: 300000,
-  });
-  return run.exitCode ?? 1;
-}
-
-function factAnchor(lines, fact) {
-  const [host, verb, ...rest] = fact.split(' ');
-  const last = (test) => lines.findLastIndex((line) => test(line.trim().split(/\s+/)));
-  const ofHost = (words) => words[0] === host;
-  const tagLine = (words) => ofHost(words) && ['enables', 'adds', 'drops'].includes(words[1]);
-  let index = -1;
-  if (verb === 'adds' || verb === 'drops') {
-    const tag = rest.at(-1);
-    index = last((w) => ofHost(w) && ((w[1] === 'enables' && w[2] === tag)
-      || ((w[1] === 'adds' || w[1] === 'drops') && w.at(-1) === tag)));
-  } else if (verb === 'disables') {
-    index = last((w) => ofHost(w) && w[1] === 'disables');
+  const facts = readFlakeInputs(root);
+  if (facts.status !== 0) { process.stderr.write(facts.message + '\n'); return 1; }
+  const declared = new Map();
+  for (const [module, name, url] of facts.value) {
+    if (declared.has(name) && declared.get(name) !== url) {
+      process.stderr.write(`firn flake-input resolve: conflicting URLs for '${name}' from ${module}\n`);
+      return 1;
+    }
+    declared.set(name, url);
   }
-  if (index < 0 && verb !== 'disables') index = last(tagLine);
-  if (index < 0) index = last(ofHost);
-  return index < 0 ? lines.length : index + 1;
+  const path = join(root, 'flake.nix');
+  let source = readFileSync(path, 'utf8');
+  for (const [name, url] of declared) {
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(name)) throw new Error(`invalid flake input name '${name}'`);
+    const existing = new RegExp(`(\\b${name}\\s*=\\s*\\{[^{}]*?\\burl\\s*=\\s*)"[^"\\n]*"`);
+    const dotted = new RegExp(`(\\b${name}\\.url\\s*=\\s*)"[^"\\n]*"`);
+    if (existing.test(source)) source = source.replace(existing, (_, prefix) => prefix + JSON.stringify(url));
+    else if (dotted.test(source)) source = source.replace(dotted, (_, prefix) => prefix + JSON.stringify(url));
+    else {
+      if (!/\binputs\s*=\s*\{/.test(source)) throw new Error('flake.nix needs a literal inputs attrset');
+      source = source.replace(/(\binputs\s*=\s*\{)/, `$1\n    ${name}.url = ${JSON.stringify(url)};`);
+    }
+  }
+  const previous = readFileSync(path, 'utf8');
+  if (source !== previous) writeFileSync(path, source);
+  return 0;
 }
 
 export function editFactLines(source, remove, add) {
-  const trailing = source.endsWith('\n');
-  const lines = source.length === 0 ? [] : (trailing ? source.slice(0, -1) : source).split('\n');
-  for (const fact of remove) {
-    const index = lines.findIndex((line) => line.trim() === fact);
-    if (index < 0) return { status: 1, value: null, message: `fact '${fact}' is not stated in this file` };
-    lines.splice(index, 1);
+  const data = JSON.parse(source);
+  function change(fact, adding) {
+    const [host, verb, module, , tag] = fact.split(' ');
+    const field = { enables: 'enables', disables: 'disables', adds: 'adds', drops: 'drops' }[verb];
+    if (!field) throw new Error(`unsupported host fact '${fact}'`);
+    const values = verb === 'adds' || verb === 'drops'
+      ? (data[field] ??= {})[tag] ??= [] : data[field] ??= [];
+    const index = values.indexOf(module);
+    if (!adding && index < 0) throw new Error(`fact '${fact}' is not stated in this file`);
+    if (adding && index < 0) values.push(module);
+    if (!adding) values.splice(index, 1);
+    if ((verb === 'adds' || verb === 'drops') && values.length === 0) delete data[field][tag];
   }
-  for (const fact of add) lines.splice(factAnchor(lines, fact), 0, fact);
-  return { status: 0, value: lines.length === 0 ? '' : `${lines.join('\n')}\n`, message: '' };
+  try {
+    for (const fact of remove) change(fact, false);
+    for (const fact of add) change(fact, true);
+    return { status: 0, value: JSON.stringify(data, null, 2) + '\n', message: '' };
+  } catch (error) { return { status: 1, value: null, message: String(error?.message ?? error) }; }
 }
 
 let temporaryId = 0;

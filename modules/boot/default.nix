@@ -1,32 +1,28 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.boot;
+in
 {
-  config = lib.mkIf config.myConfig.modules.boot.enable {
-    "boot" = {
-      "kernel" = {
-        "sysctl" = {
-          "kernel.hardlockup_panic" = 1;
-          "kernel.panic" = 20;
-          "kernel.panic_on_oops" = 1;
-          "kernel.softlockup_panic" = 1;
-        };
+  config = lib.mkIf cfg.enable {
+    boot = {
+      kernel.sysctl = {
+        "kernel.hardlockup_panic" = 1;
+        "kernel.panic" = 20;
+        "kernel.panic_on_oops" = 1;
+        "kernel.softlockup_panic" = 1;
       };
-      "kernelModules" = [ "uinput" ];
-      "kernelParams" = [
+      kernelModules = [ "uinput" ];
+      kernelParams = [
         "amdgpu.gpu_recovery=1"
         "nmi_watchdog=panic"
         "amdgpu.cwsr_enable=0"
         "amdgpu.dcdebugmask=0x10"
       ];
-      "loader" = {
-        "efi" = {
-          "canTouchEfiVariables" = true;
-        };
-        "systemd-boot" = {
-          "enable" = true;
-        };
+      loader = {
+        efi.canTouchEfiVariables = true;
+        systemd-boot.enable = true;
       };
     };
   };
-  options."myConfig"."modules"."boot"."enable" = lib.mkEnableOption "boot configuration";
+  options.myConfig.modules.boot.enable = lib.mkEnableOption "boot configuration";
 }

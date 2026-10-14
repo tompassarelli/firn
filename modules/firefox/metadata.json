@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "browsers"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {
+    "nur": "github:nix-community/NUR"
+  }
+}

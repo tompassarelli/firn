@@ -22,7 +22,7 @@ function rootResultPath(relative: string): boolean {
 }
 
 export function traversalExcluded(relative: string): boolean {
-  return ((relative === ".direnv") || startsWith(relative, ".direnv/") || (relative === ".firn-build") || startsWith(relative, ".firn-build/") || rootResultPath(relative));
+  return ((relative === ".git") || startsWith(relative, ".git/") || (relative === ".direnv") || startsWith(relative, ".direnv/") || (relative === ".firn-build") || startsWith(relative, ".firn-build/") || rootResultPath(relative));
 }
 
 function sourceExcluded(relative: string): boolean {
@@ -30,7 +30,7 @@ function sourceExcluded(relative: string): boolean {
 }
 
 export function sourcePath(relative: string): boolean {
-  return (endsWith(relative, ".gal") && (!sourceExcluded(relative)));
+  return (endsWith(relative, ".nix") && (!sourceExcluded(relative)));
 }
 
 export function obsoleteOutputPath(relative: string): boolean {
@@ -38,7 +38,7 @@ export function obsoleteOutputPath(relative: string): boolean {
 }
 
 export function outputRelative(sourceRelative: string): string {
-  return ("" + sourceRelative.slice(0, (sourceRelative.length - 4)) + ".nix");
+  return sourceRelative;
 }
 
 export function buildPlan(inventory: SourceInventory): RepoBuildPlan {

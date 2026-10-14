@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: cli-tools
-
-config
-  "environment"
-    "systemPackages": [pkgs.gitleaks]
-"enable": "Enable gitleaks secret scanner (safe-push depends on it being on PATH)"

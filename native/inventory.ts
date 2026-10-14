@@ -275,7 +275,7 @@ export function renderHostSection(hosts: string[]): string {
 }
 
 export function renderModuleRefs(repository: InventoryRepository, module: string): string {
-  return ("" + "Hosts (direct, from configuration.gal):\n" + renderHostSection(directHosts(repository, module)) + "\nHosts (via tag resolution):\n" + renderHostSection(tagHosts(repository, module)));
+  return ("" + "Hosts (direct, from configuration.nix):\n" + renderHostSection(directHosts(repository, module)) + "\nHosts (via tag resolution):\n" + renderHostSection(tagHosts(repository, module)));
 }
 
 export function statePaths(config: HostConfig, enabled: boolean): string[] {

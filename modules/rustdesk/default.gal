@@ -1,7 +1,0 @@
-use firn/tags
-
-
-config
-  "environment"
-    "systemPackages": [pkgs.rustdesk-flutter]
-"enable": "RustDesk remote desktop"

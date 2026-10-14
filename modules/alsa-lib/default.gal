@@ -1,7 +1,0 @@
-use firn/tags
-
-alsa-lib can opt into development
-
-enable: "alsa-lib"
-config
-  environment.systemPackages: [pkgs.alsa-lib]

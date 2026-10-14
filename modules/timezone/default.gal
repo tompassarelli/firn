@@ -1,9 +1,0 @@
-use firn/tags
-
-
-arguments: config, lib, ...
-config
-  "time"
-    "timeZone": config.myConfig.modules.timezone.zone
-imports: [{"options": {"myConfig": {"modules": {"timezone": {"zone": lib.mkOption({"default": "UTC", "description": "IANA timezone — instance overrides per-host", "type": lib.types.str})}}}}}]
-"enable": "timezone configuration"

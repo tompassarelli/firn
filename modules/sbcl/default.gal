@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: doom-emacs, lisp
-
-config
-  "environment"
-    "systemPackages": [pkgs.sbcl]
-"enable": "Steel Bank Common Lisp compiler"

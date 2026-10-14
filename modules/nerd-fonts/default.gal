@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: doom-emacs, theming
-
-config
-  "fonts"
-    "packages": [pkgs.nerd-fonts.symbols-only]
-"enable": "Nerd Fonts symbols"

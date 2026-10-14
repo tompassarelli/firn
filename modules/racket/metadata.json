@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "racket"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

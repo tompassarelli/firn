@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: database
-
-config
-  "environment"
-    "systemPackages": [pkgs.dbeaver-bin]
-"enable": "DBeaver database GUI"

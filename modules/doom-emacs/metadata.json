@@ -1,0 +1,10 @@
+{
+  "tags": [
+    "doom-emacs",
+    "lisp"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

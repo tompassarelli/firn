@@ -23,11 +23,6 @@ die() {
   exit 1
 }
 
-command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
-  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
-
-
-
 printf 'inventory-native: running pure fixtures\n' >&2
 timeout --foreground 30 bun "$repo/native/inventory_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/pure.err" \
@@ -45,78 +40,13 @@ mkdir -p \
   "$fixture/hosts/zeta-host"
 git init -q -b main "$fixture"
 
-cat >"$fixture/modules/alpha/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...] {:config {}})
-EOF
-cat >"$fixture/modules/beta/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...] {:config {}})
-EOF
-cat >"$fixture/modules/gamma/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...] {:config {}})
-EOF
-cat >"$fixture/modules/orphan/default.bnix" <<'EOF'
-#lang beagle/nix
-(ns default)
-(nix/module [config lib pkgs ...] {:config {}})
-EOF
-
-mkdir -p "$fixture/config"
-cat >"$fixture/config/tags.gal" <<'EOF'
-use firn/tags
-
-desktop is a Tag
-terminal is a Tag
-alpha is a Module
-beta is a Module
-gamma is a Module
-orphan is a Module
-beta is tagged terminal
-gamma is tagged desktop
-linux is a Platform
-linux allows every module
-alpha-host is a Host
-alpha-host runs linux
-alpha-host enables terminal
-zeta-host is a Host
-zeta-host runs linux
-zeta-host enables desktop
-EOF
-
-cat >"$fixture/hosts/alpha-host/configuration.gal" <<'EOF'
-use firn/tags
-
-alpha-host turns on alpha
-alpha-host turns off beta
-
-nix file
-  arguments: config, lib, pkgs, ...
-  value
-    for ?m where alpha-host turns on ?m
-      myConfig.modules.{?m}.enable: true
-    for ?m where alpha-host turns off ?m
-      myConfig.modules.{?m}.enable: false
-    myConfig.modules.beta.port: 44
-    myConfig.modules.gamma.someOption: "configured"
-    imports: [./_generated-enables.nix]
-EOF
-cat >"$fixture/hosts/zeta-host/configuration.gal" <<'EOF'
-use firn/tags
-
-zeta-host turns on beta
-
-nix file
-  arguments: config, lib, pkgs, ...
-  value
-    for ?m where zeta-host turns on ?m
-      myConfig.modules.{?m}.enable: true
-    imports: [./_generated-enables.nix]
-EOF
+for module in alpha beta gamma orphan; do
+  printf '{ ... }: {}\n' >"$fixture/modules/$module/default.nix"
+done
+printf '%s\n' '{"tags":["terminal"]}' >"$fixture/modules/beta/metadata.json"
+printf '%s\n' '{"tags":["desktop"]}' >"$fixture/modules/gamma/metadata.json"
+printf '%s\n' '{"platform":"linux","enables":["terminal"],"turnsOn":["alpha"],"turnsOff":["beta"]}' >"$fixture/hosts/alpha-host/tags.json"
+printf '%s\n' '{"platform":"linux","enables":["desktop"],"turnsOn":["beta"]}' >"$fixture/hosts/zeta-host/tags.json"
 
 run_cli() {
   local name="$1"
@@ -174,7 +104,7 @@ assert_output module-unused "$scratch/module-unused.expected"
 
 run_cli module-refs module refs beta
 cat >"$scratch/module-refs.expected" <<'EOF'
-Hosts (direct, from configuration.gal):
+Hosts (direct, from configuration.nix):
   alpha-host
   zeta-host
 

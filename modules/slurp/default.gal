@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: desktop
-
-config
-  "environment"
-    "systemPackages": [pkgs.slurp]
-"enable": "Wayland region selector"

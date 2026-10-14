@@ -1,7 +1,0 @@
-use firn/tags
-
-
-config
-  "environment"
-    "systemPackages": [pkgs.fuse]
-"enable": "FUSE filesystem support"

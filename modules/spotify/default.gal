@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: media
-
-config
-  "environment"
-    "systemPackages": [pkgs.spotify]
-"enable": "Spotify TUI player"

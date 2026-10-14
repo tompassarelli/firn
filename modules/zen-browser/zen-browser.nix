@@ -1,9 +1,17 @@
-{ config, lib, pkgs, inputs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.zen-browser.enable {
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.zen-browser;
+in
+{
+  config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      (inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}").default
+      inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}".default
     ];
     xdg.mime.defaultApplications = lib.mkIf config.myConfig.modules.zen-browser.default {
       "text/html" = "zen.desktop";

@@ -1,10 +1,13 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.bat.enable {
-    "environment" = {
-      "systemPackages" = [ pkgs.bat ];
-    };
-  };
-  options."myConfig"."modules"."bat"."enable" = lib.mkEnableOption "bat syntax-highlighting cat";
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.bat;
+in
+{
+  config = lib.mkIf cfg.enable { environment.systemPackages = [ pkgs.bat ]; };
+  options.myConfig.modules.bat.enable = lib.mkEnableOption "bat syntax-highlighting cat";
 }

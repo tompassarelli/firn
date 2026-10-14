@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.myConfig.modules.github-pat;
@@ -7,7 +12,12 @@ let
   workPath = config.sops.secrets.nexus-work.path;
   selector = pkgs.writeShellApplication {
     name = "github-pat";
-    runtimeInputs = [ pkgs.coreutils pkgs.git pkgs.gnugrep pkgs.gnused ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.git
+      pkgs.gnugrep
+      pkgs.gnused
+    ];
     text = ''
       usage() { echo 'usage: github-pat key|token OWNER/REPO | credential get | repo [ARGS...]' >&2; exit 2; }
       key_for() {
@@ -70,53 +80,65 @@ let
       exec ${pkgs.gh}/bin/gh "$@"
     '';
   };
-in {
-  options.myConfig.modules.github-pat.enable = lib.mkEnableOption "per-repository GitHub PATs from sops for git and gh";
-  options.myConfig.modules.github-pat.sopsFile = lib.mkOption {
-    type = lib.types.path;
-    description = "sops file holding the nexus-apply and nexus-work tokens";
-  };
-  options.myConfig.modules.github-pat.applyRepos = lib.mkOption {
-    type = lib.types.listOf lib.types.str;
-    default = [ "tompassarelli/firn" "tompassarelli/north" "tompassarelli/south" ];
-    description = "lower-case OWNER/REPO names that use the read-only nexus-apply token";
-  };
-  options.myConfig.modules.github-pat.gh = lib.mkOption {
-    type = lib.types.package;
-    readOnly = true;
-    default = ghWrapper;
-    description = "gh that injects the per-repository PAT";
-  };
-  options.myConfig.modules.github-pat.nixAccessToken = lib.mkEnableOption "the read-only nexus-apply token as nix's github.com access token, so root nix can fetch private flakes";
-  config = lib.mkIf cfg.enable {
-    sops.secrets.nexus-apply = {
-      sopsFile = cfg.sopsFile;
-      owner = username;
-      mode = "0400";
+in
+{
+  options.myConfig.modules.github-pat = {
+    enable = lib.mkEnableOption "per-repository GitHub PATs from sops for git and gh";
+    sopsFile = lib.mkOption {
+      type = lib.types.path;
+      description = "sops file holding the nexus-apply and nexus-work tokens";
     };
-    sops.templates.nix-access-tokens = lib.mkIf cfg.nixAccessToken {
-      content = ''
-        access-tokens = github.com=${config.sops.placeholder.nexus-apply}
-      '';
-      owner = "root";
-      mode = "0400";
+    applyRepos = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "tompassarelli/firn"
+        "tompassarelli/north"
+        "tompassarelli/south"
+      ];
+      description = "lower-case OWNER/REPO names that use the read-only nexus-apply token";
+    };
+    gh = lib.mkOption {
+      type = lib.types.package;
+      readOnly = true;
+      default = ghWrapper;
+      description = "gh that injects the per-repository PAT";
+    };
+    nixAccessToken = lib.mkEnableOption "the read-only nexus-apply token as nix's github.com access token, so root nix can fetch private flakes";
+  };
+  config = lib.mkIf cfg.enable {
+    sops = {
+      secrets = {
+        nexus-apply = {
+          inherit (cfg) sopsFile;
+          owner = username;
+          mode = "0400";
+        };
+        nexus-work = {
+          inherit (cfg) sopsFile;
+          owner = username;
+          mode = "0400";
+        };
+      };
+      templates.nix-access-tokens = lib.mkIf cfg.nixAccessToken {
+        content = ''
+          access-tokens = github.com=${config.sops.placeholder.nexus-apply}
+        '';
+        owner = "root";
+        mode = "0400";
+      };
     };
     nix.extraOptions = lib.mkIf cfg.nixAccessToken ''
       !include ${config.sops.templates.nix-access-tokens.path}
     '';
-    sops.secrets.nexus-work = {
-      sopsFile = cfg.sopsFile;
-      owner = username;
-      mode = "0400";
-    };
-    environment.systemPackages = [ selector ghWrapper ];
-    home-manager.users.${username} = ({ config, ... }: {
-      programs.git.settings.credential = {
-        "https://github.com" = {
-          helper = "!${selector}/bin/github-pat credential";
-          useHttpPath = true;
-        };
+    environment.systemPackages = [
+      selector
+      ghWrapper
+    ];
+    home-manager.users.${username} = _: {
+      programs.git.settings.credential."https://github.com" = {
+        helper = "!${selector}/bin/github-pat credential";
+        useHttpPath = true;
       };
-    });
+    };
   };
 }

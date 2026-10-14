@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "desktop"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {
+    "quickshell": "git+https://git.outfoxxed.me/outfoxxed/quickshell"
+  }
+}

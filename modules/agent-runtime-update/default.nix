@@ -1,53 +1,65 @@
-{ config, lib, pkgs, jobRun, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  jobRun,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.agent-runtime-update;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-in {
-  options.myConfig.modules.agent-runtime-update.enable = lib.mkEnableOption "Twice-daily agent runtime updates";
-  config = lib.mkIf config.myConfig.modules.agent-runtime-update.enable {
-    home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.agent-runtime-update = {
-        Unit = {
-          Description = "Twice-daily agent runtime updates";
-          OnFailure = [ "update-notify@%N.service" ];
+in
+{
+  options.myConfig.modules.agent-runtime-update.enable =
+    lib.mkEnableOption "Twice-daily agent runtime updates";
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${username} = _: {
+      systemd.user = {
+        services.agent-runtime-update = {
+          Unit = {
+            Description = "Twice-daily agent runtime updates";
+            OnFailure = [ "update-notify@%N.service" ];
+          };
+          Service = {
+            Type = "oneshot";
+            TimeoutStartSec = "4h";
+            Environment = [
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                lib.makeBinPath [
+                  pkgs.bash
+                  pkgs.bun
+                  pkgs.coreutils
+                  pkgs.curl
+                  pkgs.git
+                  pkgs.gh
+                  pkgs.nix
+                  pkgs.python3
+                  pkgs.zstd
+                  pkgs.gnutar
+                  pkgs.gzip
+                  pkgs.util-linux
+                  pkgs.libnotify
+                  pkgs.systemd
+                ]
+              }"
+            ];
+            ExecStart = jobRun "agent-runtime-update" "${homeDir}/.local/share/north/bin/agent-runtime-update";
+          };
         };
-        Service = {
-          Type = "oneshot";
-          TimeoutStartSec = "4h";
-          Environment = [
-            "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
-              pkgs.bash
-              pkgs.bun
-              pkgs.coreutils
-              pkgs.curl
-              pkgs.git
-              pkgs.gh
-              pkgs.nix
-              pkgs.python3
-              pkgs.zstd
-              pkgs.gnutar
-              pkgs.gzip
-              pkgs.util-linux
-              pkgs.libnotify
-              pkgs.systemd
-            ]}"
-          ];
-          ExecStart = jobRun "agent-runtime-update" "${homeDir}/.local/share/north/bin/agent-runtime-update";
+        timers.agent-runtime-update = {
+          Unit.Description = "Twice-daily agent runtime updates";
+          Timer = {
+            OnCalendar = [
+              "02:00"
+              "13:00"
+            ];
+            Persistent = true;
+          };
+          Install.WantedBy = [ "timers.target" ];
         };
       };
-      systemd.user.timers.agent-runtime-update = {
-        Unit = {
-          Description = "Twice-daily agent runtime updates";
-        };
-        Timer = {
-          OnCalendar = [ "02:00" "13:00" ];
-          Persistent = true;
-        };
-        Install = {
-          WantedBy = [ "timers.target" ];
-        };
-      };
-    });
+    };
   };
 }

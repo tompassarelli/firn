@@ -31,15 +31,4 @@ timeout --foreground 60 bun \
     die "repo-build policy scenarios failed"
   }
 
-galileo="galileo"
-[[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] && galileo="$FIRN_RUNTIME_BIN/galileo"
-command -v "$galileo" >/dev/null \
-  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
-(cd "$repo" && timeout --foreground 120 "$galileo" check) \
-  >"$scratch/budget.out" 2>"$scratch/budget.err" \
-  || {
-    sed -n '1,240p' "$scratch/budget.out" "$scratch/budget.err" >&2
-    die "galileo check boot-coupling budget failed"
-  }
-
-printf 'ok: real repository boot-coupling budget and policy checks pass\n'
+printf 'ok: repository source and command policy scenarios pass\n'

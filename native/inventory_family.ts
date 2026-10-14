@@ -10,7 +10,7 @@ function readHostFacts(bridge: any, root: string): HostFactsResult {
   if ((bridge.status(result) === 0)) {
     return { _tag: "HostFactsRead" as const, facts: bridge.value(result) };
   }
-  return { _tag: "HostFactsFailed" as const, message: ("" + "firn inventory: cannot load host facts through galileo query: " + bridge.moduleFactsMessage(result) + "\n") };
+  return { _tag: "HostFactsFailed" as const, message: ("" + "firn inventory: cannot load host facts from metadata: " + bridge.moduleFactsMessage(result) + "\n") };
 }
 
 function hostConfig(bridge: any, facts: any, host: string): inventory.HostConfig {

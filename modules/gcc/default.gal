@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: doom-emacs, rust
-
-config
-  "environment"
-    "systemPackages": [pkgs.gcc]
-"enable": "GNU C compiler"

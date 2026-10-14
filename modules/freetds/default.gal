@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: database
-
-config
-  "environment"
-    "systemPackages": [pkgs.freetds]
-"enable": "FreeTDS (TDS protocol library for MSSQL)"

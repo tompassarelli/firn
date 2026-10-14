@@ -1,6 +1,12 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.nexus-alerts;
   username = config.myConfig.modules.users.username;
   port = 2586;
   listen = "10.77.0.1:${builtins.toString port}";
@@ -10,7 +16,11 @@ let
   envTemplate = builtins.getAttr "ntfy-auth.env" config.sops.templates;
   nexusAlert = pkgs.writeShellApplication {
     name = "nexus-alert";
-    runtimeInputs = [ pkgs.curl pkgs.coreutils pkgs.jq ];
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.coreutils
+      pkgs.jq
+    ];
     text = ''
       usage() { echo 'usage: nexus-alert urgent|normal|socrates-test TEXT [TITLE] [CLICK]' >&2; exit 2; }
       [ $# -ge 2 ] && [ $# -le 4 ] || usage
@@ -90,29 +100,36 @@ let
     OnFailure=
 
   '';
-in {
-  options.myConfig.modules.nexus-alerts.enable = lib.mkEnableOption "nexus push alerts: Matrix with ntfy fallback, nexus-alert CLI, OnFailure notify for every service";
-  options.myConfig.modules.nexus-alerts.sopsFile = lib.mkOption {
-    type = lib.types.path;
-    description = "sops file holding the ntfy publisher and phone tokens and hashes";
-  };
-  config = lib.mkIf config.myConfig.modules.nexus-alerts.enable {
-    sops.secrets.ntfy-publisher-token = {
-      sopsFile = sopsFile;
-      owner = username;
-      mode = "0400";
+in
+{
+  options.myConfig.modules.nexus-alerts = {
+    enable = lib.mkEnableOption "nexus push alerts: Matrix with ntfy fallback, nexus-alert CLI, OnFailure notify for every service";
+    sopsFile = lib.mkOption {
+      type = lib.types.path;
+      description = "sops file holding the ntfy publisher and phone tokens and hashes";
     };
-    sops.secrets.ntfy-phone-hash.sopsFile = sopsFile;
-    sops.secrets.ntfy-phone-token.sopsFile = sopsFile;
-    sops.secrets.ntfy-publisher-hash.sopsFile = sopsFile;
-    sops.templates."ntfy-auth.env" = {
-      restartUnits = [ "ntfy-sh.service" ];
-      content = ''
-        NTFY_AUTH_USERS='phone:${ph.ntfy-phone-hash}:user,nexus:${ph.ntfy-publisher-hash}:user'
-        NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw,phone:socrates-laptop:ro,nexus:socrates-laptop:wo'
-        NTFY_AUTH_TOKENS='phone:${ph.ntfy-phone-token}:phone,nexus:${ph.ntfy-publisher-token}:publisher'
+  };
+  config = lib.mkIf cfg.enable {
+    sops = {
+      secrets = {
+        ntfy-publisher-token = {
+          inherit sopsFile;
+          owner = username;
+          mode = "0400";
+        };
+        ntfy-phone-hash.sopsFile = sopsFile;
+        ntfy-phone-token.sopsFile = sopsFile;
+        ntfy-publisher-hash.sopsFile = sopsFile;
+      };
+      templates."ntfy-auth.env" = {
+        restartUnits = [ "ntfy-sh.service" ];
+        content = ''
+          NTFY_AUTH_USERS='phone:${ph.ntfy-phone-hash}:user,nexus:${ph.ntfy-publisher-hash}:user'
+          NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw,phone:socrates-laptop:ro,nexus:socrates-laptop:wo'
+          NTFY_AUTH_TOKENS='phone:${ph.ntfy-phone-token}:phone,nexus:${ph.ntfy-publisher-token}:publisher'
 
-      '';
+        '';
+      };
     };
     services.ntfy-sh = {
       enable = true;
@@ -127,46 +144,55 @@ in {
     };
     networking.firewall.interfaces.wg-nexus.allowedTCPPorts = [ port ];
     environment.systemPackages = [ nexusAlert ];
-    systemd.packages = [ onFailureDropin notifyResetDropin ];
-    systemd.services = {
-      "ntfy-sh" = {
-        after = [ "wireguard-wg-nexus.service" ];
-      };
-      "nexus-notify@" = {
-        description = "Push an urgent nexus alert for failed unit %i";
-        path = [ pkgs.systemd pkgs.coreutils nexusAlert ];
-        scriptArgs = "%i";
-        script = ''
-          unit=$1
-          scope=
-          ${notifyBody}
-        '';
-        serviceConfig = {
-          Type = "oneshot";
+    systemd = {
+      packages = [
+        onFailureDropin
+        notifyResetDropin
+      ];
+      services = {
+        ntfy-sh.after = [ "wireguard-wg-nexus.service" ];
+        "nexus-notify@" = {
+          description = "Push an urgent nexus alert for failed unit %i";
+          path = [
+            pkgs.systemd
+            pkgs.coreutils
+            nexusAlert
+          ];
+          scriptArgs = "%i";
+          script = ''
+            unit=$1
+            scope=
+            ${notifyBody}
+          '';
+          serviceConfig.Type = "oneshot";
         };
-      };
-      "nexus-selftest-fail" = {
-        description = "Deliberately failing unit for the nexus alert self-test";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${pkgs.coreutils}/bin/false";
+        nexus-selftest-fail = {
+          description = "Deliberately failing unit for the nexus alert self-test";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.coreutils}/bin/false";
+          };
         };
       };
     };
-    home-manager.users.${username} = ({ ... }: {
+    home-manager.users.${username} = _: {
       systemd.user.services."nexus-notify@" = {
-        Unit = {
-          Description = "Push an urgent nexus alert for failed user unit %i";
-        };
+        Unit.Description = "Push an urgent nexus alert for failed user unit %i";
         Service = {
           Type = "oneshot";
           Environment = [
-            "PATH=${lib.makeBinPath [ pkgs.systemd pkgs.coreutils nexusAlert ]}"
+            "PATH=${
+              lib.makeBinPath [
+                pkgs.systemd
+                pkgs.coreutils
+                nexusAlert
+              ]
+            }"
           ];
           ExecStart = "${userNotify} %i";
         };
       };
-    });
+    };
     security.polkit.extraConfig = ''
       polkit.addRule(function(action, subject) {
         if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&

@@ -1,9 +1,0 @@
-use firn/tags
-
-tags: theming
-theming sets myConfig.modules.stylix.chosenTheme to "tokyo-night-dark" for stylix
-
-enable: "Stylix base16 theming"
-option myConfig.modules.stylix.chosenTheme: Text
-  description: "The base16 theme to use for styling (e.g., 'tokyo-night-dark', 'everforest-dark-hard')"
-imports: [./fonts.nix, ./xdg-portal.nix, ./stylix.nix]

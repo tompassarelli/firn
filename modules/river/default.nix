@@ -1,6 +1,12 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.river;
   zig = pkgs.zig_0_16;
   rillDeps = pkgs.linkFarm "rill-zig-deps" [
     {
@@ -28,14 +34,21 @@ let
       hash = "sha256-32DtBy/zgic2iKGrs8WRr7bzv640ACsI8KmzENtcLtA=";
     };
     strictDeps = true;
-    nativeBuildInputs = [ pkgs.pkg-config pkgs.wayland-scanner zig ];
+    nativeBuildInputs = [
+      pkgs.pkg-config
+      pkgs.wayland-scanner
+      zig
+    ];
     buildInputs = [
       pkgs.wayland
       pkgs.wayland-protocols
       pkgs.wayland-scanner
       pkgs.libxkbcommon
     ];
-    zigBuildFlags = [ "--system" "${rillDeps}" ];
+    zigBuildFlags = [
+      "--system"
+      "${rillDeps}"
+    ];
     meta = {
       description = "Minimalist scrolling window manager for river (river-window-management-v1)";
       homepage = "https://codeberg.org/lzj15/rill";
@@ -44,13 +57,17 @@ let
       platforms = lib.platforms.linux;
     };
   };
-in {
-  options.myConfig.modules.river.enable = lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)";
-  config = lib.mkIf config.myConfig.modules.river.enable {
-    programs.river-classic.enable = true;
-    programs.river-classic.package = pkgs.unstable.river;
-    programs.river-classic.extraPackages = [ rill ];
-    programs.river-classic.xwayland.enable = true;
+in
+{
+  options.myConfig.modules.river.enable =
+    lib.mkEnableOption "Enable river 0.4 Wayland compositor (pluggable-WM lane; opt-in)";
+  config = lib.mkIf cfg.enable {
+    programs.river-classic = {
+      enable = true;
+      package = pkgs.unstable.river;
+      extraPackages = [ rill ];
+      xwayland.enable = true;
+    };
     environment.sessionVariables.NIXOS_OZONE_WL = "1";
   };
 }

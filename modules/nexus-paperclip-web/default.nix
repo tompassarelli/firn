@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ... }:
+{ config, lib, ... }:
 
 let
   cfg = config.myConfig.modules.nexus-paperclip-web;
@@ -7,30 +7,34 @@ let
   upstreamHost = "127.0.0.1:${builtins.toString port}";
   upstream = "http://${upstreamHost}";
   ph = config.sops.placeholder;
-  htpasswd = builtins.getAttr "paperclip-web.htpasswd" config.sops.templates;
-in {
-  options.myConfig.modules.nexus-paperclip-web.enable = lib.mkEnableOption "Paperclip web UI on wg-nexus (WireGuard keys are the login), proxied to the loopback Paperclip server";
-  options.myConfig.modules.nexus-paperclip-web.sopsFile = lib.mkOption {
-    type = lib.types.path;
-    description = "sops file holding paperclip-web-password and paperclip-web-password-hash, the crypt hash for basic auth user tom";
+in
+{
+  options.myConfig.modules.nexus-paperclip-web = {
+    enable = lib.mkEnableOption "Paperclip web UI on wg-nexus (WireGuard keys are the login), proxied to the loopback Paperclip server";
+    sopsFile = lib.mkOption {
+      type = lib.types.path;
+      description = "sops file holding paperclip-web-password and paperclip-web-password-hash, the crypt hash for basic auth user tom";
+    };
   };
   config = lib.mkIf cfg.enable {
-    sops.secrets.paperclip-web-password-hash.sopsFile = cfg.sopsFile;
-    sops.templates."paperclip-web.htpasswd" = {
-      owner = config.services.nginx.user;
-      mode = "0400";
-      reloadUnits = [ "nginx.service" ];
-      content = ''
-        tom:${ph.paperclip-web-password-hash}
-      '';
+    sops = {
+      secrets.paperclip-web-password-hash.sopsFile = cfg.sopsFile;
+      templates."paperclip-web.htpasswd" = {
+        owner = config.services.nginx.user;
+        mode = "0400";
+        reloadUnits = [ "nginx.service" ];
+        content = ''
+          tom:${ph.paperclip-web-password-hash}
+        '';
+      };
     };
     services.nginx = {
       enable = true;
-      virtualHosts."paperclip-wg" = {
+      virtualHosts.paperclip-wg = {
         listen = [
           {
             addr = address;
-            port = port;
+            inherit port;
           }
         ];
         locations."/" = {

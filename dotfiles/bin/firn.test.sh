@@ -8,12 +8,10 @@ cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 
 producer_bun="${FIRN_BUN:-$HOME/.local/lib/firn/cli/current/bin/bun}"
-galileo_repo="${FIRN_GALILEO_REPO:-$HOME/code/galileo/main}" # hardcoded-repo-path:allow
 [[ -x "$producer_bun" ]]
 real_runtime="$scratch/real-runtime"
 PATH="$(dirname "$producer_bun"):$PATH" \
   FIRN_REPO="$source_repo" \
-  FIRN_GALILEO_REPO="$galileo_repo" \
   FIRN_RUNTIME_ROOT="$real_runtime" \
   "$here/firn-runtime-update" repo >"$scratch/real-update.out"
 FIRN_REPO="$source_repo" \

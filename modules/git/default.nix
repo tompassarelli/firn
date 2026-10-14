@@ -1,51 +1,39 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.git;
+in
 {
-  config = lib.mkIf config.myConfig.modules.git.enable {
-    "home-manager" = {
-      "users" = {
-        ${config.myConfig.modules.users.username} = hm: {
-          "programs" = {
-            "delta" = {
-              "enable" = true;
-              "enableGitIntegration" = true;
-              "options" = {
-                "navigate" = true;
-              };
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${config.myConfig.modules.users.username} = _hm: {
+      programs = {
+        delta = {
+          enable = true;
+          enableGitIntegration = true;
+          options.navigate = true;
+        };
+        git = {
+          enable = true;
+          settings = {
+            core.editor = "nvim";
+            diff.colorMoved = "default";
+            gc = {
+              auto = 0;
+              autoDetach = false;
             };
-            "git" = {
-              "enable" = true;
-              "settings" = {
-                "core" = {
-                  "editor" = "nvim";
-                };
-                "diff" = {
-                  "colorMoved" = "default";
-                };
-                "gc" = {
-                  "auto" = 0;
-                  "autoDetach" = false;
-                };
-                "init" = {
-                  "defaultBranch" = "main";
-                };
-                "maintenance" = {
-                  "auto" = false;
-                  "autoDetach" = false;
-                };
-                "merge" = {
-                  "conflictstyle" = "diff3";
-                };
-                "user" = {
-                  "email" = config.myConfig.modules.users.email;
-                  "name" = config.myConfig.modules.users.fullName;
-                };
-              };
+            init.defaultBranch = "main";
+            maintenance = {
+              auto = false;
+              autoDetach = false;
+            };
+            merge.conflictstyle = "diff3";
+            user = {
+              email = config.myConfig.modules.users.email;
+              name = config.myConfig.modules.users.fullName;
             };
           };
         };
       };
     };
   };
-  options."myConfig"."modules"."git"."enable" = lib.mkEnableOption "Git configuration";
+  options.myConfig.modules.git.enable = lib.mkEnableOption "Git configuration";
 }

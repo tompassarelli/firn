@@ -1,0 +1,8 @@
+{
+  "linux": {
+    "all": true
+  },
+  "darwin": {
+    "all": false
+  }
+}

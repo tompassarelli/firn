@@ -15,18 +15,18 @@ installation; do not audit unrelated configuration.
 ## Configuration changes
 
 1. Read `nixos-config:AGENTS.md` and edit an owned worktree.
-2. Query uncertain package, schema, or compiler facts with the runtime's
-   `galileo help`, `galileo refs` and `galileo schema explain`. Edit
-   authoritative Galileo `.gal`, never generated `.nix`.
-3. After `.gal` changes, run `firn repo build` then `firn repo validate`.
-   Stage exact source/target pairs, including new files, and commit.
+2. Edit authoritative `.nix` modules. Check uncertain options with
+   `firn schema explain` and the selected host's NixOS options.
+3. After composition metadata edits, run `firn repo build`. Run `firn check`
+   before building; it evaluates options/assertions and runs Nix linters.
+   Stage exact changed source paths, including new files, and commit.
 4. When switching is requested, run `firn rebuild` from the committed lane, outside the command sandbox (it strips sudo's setuid bit; sudo needs no password).
    It builds exact `HEAD`; unrelated uncommitted work is not included.
    Confirm the printed snapshot and requested installed result.
 
 Use one package/service per module; dynamic imports discover it. Enable through
 declared options/tags. Never use raw `nixos-rebuild` or `nh`; verify only
-`whiterabbit`. Advance inputs with `firn repo upgrade now` only when updating
+`whiterabbit` and `nexus`. Advance inputs with `firn repo upgrade now` only when updating
 inputs is in scope. Use `firn repo doctor` only for a named suspicion.
 
 ## Closure boundary

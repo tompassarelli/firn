@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
+script="$(readlink -f "${BASH_SOURCE[0]}")"
+cd "$root"
+
+if ! command -v statix >/dev/null || ! command -v deadnix >/dev/null || ! command -v nixfmt >/dev/null; then
+  exec nix shell --inputs-from "path:$root" nixpkgs#statix nixpkgs#deadnix nixpkgs#nixfmt \
+    --command env FIRN_REPO="$root" bash "$script"
+fi
+
+printf 'firn check: flake evaluation and assertions\n'
+nix flake check --no-build "path:$root"
+printf 'firn check: every NixOS host derivation\n'
+nix eval --json "path:$root#nixosConfigurations" \
+  --apply 'hosts: builtins.mapAttrs (_: host: host.config.system.build.toplevel.drvPath) hosts'
+printf '\nfirn check: statix\n'
+statix check .
+printf 'firn check: deadnix\n'
+deadnix --fail .
+printf 'firn check: nixfmt\n'
+mapfile -d '' -t sources < <(rg --files --null -g '*.nix')
+nixfmt --check "${sources[@]}"
+printf 'firn check: passed\n'

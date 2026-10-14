@@ -1,10 +1,13 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.vscode.enable {
-    "environment" = {
-      "systemPackages" = [ pkgs.unstable.vscode ];
-    };
-  };
-  options."myConfig"."modules"."vscode"."enable" = lib.mkEnableOption "Visual Studio Code (Microsoft build)";
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.vscode;
+in
+{
+  config = lib.mkIf cfg.enable { environment.systemPackages = [ pkgs.unstable.vscode ]; };
+  options.myConfig.modules.vscode.enable = lib.mkEnableOption "Visual Studio Code (Microsoft build)";
 }

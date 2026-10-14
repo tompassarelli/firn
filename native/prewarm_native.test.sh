@@ -4,7 +4,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
 bun="${FIRN_BUN:-${BUN:-$(command -v bun || true)}}"
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-prewarm-galileo.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/firn-prewarm-native.XXXXXX")"
 
 cleanup() {
   local status=$?
@@ -12,18 +12,13 @@ cleanup() {
   if ((status == 0)); then
     rm -rf "${scratch:?}"
   else
-    printf 'prewarm-galileo: retained failure artifacts at %s\n' "$scratch" >&2
+    printf 'prewarm-native: retained failure artifacts at %s\n' "$scratch" >&2
   fi
   exit "$status"
 }
 trap cleanup EXIT
 
-[[ -x "$bun" ]] || { printf 'prewarm-galileo: missing Bun; set FIRN_BUN\n' >&2; exit 1; }
-runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current"
-export FIRN_GALILEO="${FIRN_GALILEO:-$runtime_root/bin/galileo}"
-export FIRN_GALILEO_PREWARM="${FIRN_GALILEO_PREWARM:-$runtime_root/lib/firn/prewarm.gal}"
-[[ -x "$FIRN_GALILEO" ]] || { printf 'prewarm-galileo: missing galileo; run firn-runtime-update or set FIRN_GALILEO\n' >&2; exit 1; }
-
+[[ -x "$bun" ]] || { printf 'prewarm-native: missing Bun; set FIRN_BUN\n' >&2; exit 1; }
 source <(sed -n \
   -e '/^record_artifact() {/,/^}/p' \
   -e '/^record_generated_artifact() {/,/^}/p' \
@@ -36,29 +31,14 @@ binaries=()
 mkdir -p "$stage/bin" "$stage/lib"
 ln -s "$bun" "$stage/bin/bun"
 materialize_js prewarm firn-prewarm prewarm.ts FIRN_PREWARM_MODULE \
-  "$here/prewarm_host.mjs" "$here/prewarm.ts" "$FIRN_GALILEO_PREWARM"
+  "$here/prewarm_host.mjs" "$here/prewarm.ts"
 rg -q '^component=prewarm module=lib/prewarm/prewarm.ts executable=bin/firn-prewarm runtime=bun$' "$manifest"
 rg -q '^artifact=prewarm-source path=lib/prewarm/prewarm.ts ' "$manifest"
-
-cmp "$FIRN_GALILEO_PREWARM" "$stage/lib/firn/prewarm.gal"
-rg -q '^artifact=prewarm-policy path=lib/firn/prewarm.gal ' "$manifest"
-
-export FIRN_GALILEO_REAL="$FIRN_GALILEO" FIRN_GALILEO_COUNT="$scratch/query.count"
-cat >"$scratch/galileo-spy" <<'SH'
-#!/usr/bin/env bash
-set -euo pipefail
-printf 'query\n' >>"$FIRN_GALILEO_COUNT"
-exec "$FIRN_GALILEO_REAL" "$@"
-SH
-chmod +x "$scratch/galileo-spy"
-export FIRN_GALILEO="$scratch/galileo-spy"
-: >"$FIRN_GALILEO_COUNT"
 
 POLICY="$stage/lib/prewarm/prewarm.ts" "$bun" - <<'JS'
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const p = await import(process.env.POLICY);
-assert.equal(readFileSync(process.env.FIRN_GALILEO_COUNT, 'utf8'), '');
 const same = p['container-main-candidates']('/srv/firn/worktrees/prewarm', '/srv/firn/main/.git');
 assert.deepEqual(same, ['/srv/firn/main', '/srv/firn/worktrees/prewarm']);
 assert.deepEqual(p['container-main-candidates']('/srv/firn/pins/rev', '/different/.git'),
@@ -123,9 +103,7 @@ for (const argv of [['firn','rebuild'],['/bin/bash','/bin/firn','host','rebuild'
 for (const argv of [[],['firn','host'],['not-firn','rebuild'],['firn','repo','build']]) {
   assert.equal(p['rebuild-argv'](argv),false);
 }
-assert.equal(readFileSync(process.env.FIRN_GALILEO_COUNT, 'utf8'), 'query\n');
-console.log('ok: checked Galileo prewarm policy, typed plans, parsing and identity guards');
-console.log('ok: module import spawns 0 queries; cached policy scenarios spawn 1');
+console.log('ok: checked native prewarm policy, typed plans, parsing and identity guards');
 JS
 
 container="$scratch/container"
@@ -134,11 +112,10 @@ lane="$container/worktrees/slug"
 runtime="$scratch/runtime"
 host="$(hostname)"
 mkdir -p "$main/config" "$main/hosts/$host" "$container/worktrees" "$runtime"
-printf 'fixture\n' >"$main/config/galileo-revision"
-printf 'module flake\n' >"$main/flake.gal"
+printf 'module flake\n' >"$main/flake.nix"
 printf 'fixture\n' >"$main/hosts/$host/marker"
 git init -q -b main "$main"
-git -C "$main" add -- config/galileo-revision flake.gal "hosts/$host/marker"
+git -C "$main" add -- flake.nix "hosts/$host/marker"
 git -C "$main" -c user.name=prewarm-test \
   -c user.email=prewarm-test@example.invalid commit -qm base
 git -C "$main" worktree add -q -b slug "$lane"
@@ -150,19 +127,15 @@ case "$(uname -s)" in
 esac
 expected_key="git+file://$main?rev=$head_sha&ref=main#$attr"
 export FIRN_REPO="$lane" XDG_RUNTIME_DIR="$runtime"
-: >"$FIRN_GALILEO_COUNT"
 actual_key="$(timeout --foreground 30 "$stage/bin/firn-prewarm" --print-warm-key)"
 [[ "$actual_key" == "$expected_key" ]]
-[[ "$(wc -l <"$FIRN_GALILEO_COUNT")" -eq 1 ]]
-printf 'ok: --print-warm-key spawns 1 query\n'
 
 unmigrated="$scratch/unmigrated"
 mkdir -p "$unmigrated/config" "$unmigrated/hosts/$host"
-cp "$main/config/galileo-revision" "$unmigrated/config/galileo-revision"
 cp "$main/hosts/$host/marker" "$unmigrated/hosts/$host/marker"
 printf '#lang beagle/nix\n(ns flake)\n' >"$unmigrated/flake.bnix"
 git init -q -b main "$unmigrated"
-git -C "$unmigrated" add -- config/galileo-revision flake.bnix "hosts/$host/marker"
+git -C "$unmigrated" add -- flake.bnix "hosts/$host/marker"
 git -C "$unmigrated" -c user.name=prewarm-test \
   -c user.email=prewarm-test@example.invalid commit -qm base
 set +e
@@ -171,7 +144,7 @@ FIRN_REPO="$unmigrated" timeout --foreground 30 "$stage/bin/firn-prewarm" \
 status=$?
 set -e
 [[ "$status" -eq 1 && ! -s "$scratch/unmigrated.out" ]]
-printf 'ok: a checkout missing flake.gal is rejected\n'
+printf 'ok: a checkout missing flake.nix is rejected\n'
 
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-detached "$stage/bin/firn-prewarm" >"$scratch/detached.plan"
@@ -179,13 +152,10 @@ printf '%s\n' setsid -f nice -n 19 ionice -c 3 \
   "$stage/bin/firn-prewarm" --worker "$stage/bin/firn-prewarm" \
   "$main" "$expected_key" >"$scratch/detached.expected"
 cmp "$scratch/detached.expected" "$scratch/detached.plan"
-: >"$FIRN_GALILEO_COUNT"
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-reference-transaction "$stage/bin/firn-prewarm" committed \
   'abc def refs/heads/main' >"$scratch/hook.plan"
 cmp "$scratch/detached.expected" "$scratch/hook.plan"
-[[ "$(wc -l <"$FIRN_GALILEO_COUNT")" -eq 1 ]]
-printf 'ok: --plan-reference-transaction spawns 1 query\n'
 timeout --foreground 30 "$stage/bin/firn-prewarm" \
   --plan-reference-transaction "$stage/bin/firn-prewarm" prepared \
   'abc def refs/heads/main' >"$scratch/ignored.plan"
@@ -201,4 +171,4 @@ rg -q '^usage: firn --print-warm-key$' "$scratch/unknown.err"
 [[ ! -e "$runtime/firn-prewarm.owner" ]]
 [[ ! -e "$runtime/firn-prewarm.warm" ]]
 
-printf 'ok: Galileo/TypeScript Firn prewarm producer and Bun plan adapter pass\n'
+printf 'ok: TypeScript Firn prewarm producer and Bun plan adapter pass\n'

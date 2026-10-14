@@ -1,7 +1,0 @@
-use firn/tags
-
-tags: office
-
-config
-  "environment"
-    "systemPackages": [pkgs.libreoffice-fresh]

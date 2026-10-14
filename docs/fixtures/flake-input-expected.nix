@@ -11,14 +11,20 @@
       url = "github:zeta/project";
     };
   };
-  outputs = ({ self, nixpkgs, alpha, zeta, ... }: {
-    lib.mkSystem = nixpkgs.lib.nixosSystem {
-      specialArgs = {
-        inputs = {
-          alpha = alpha;
-          zeta = zeta;
+  outputs =
+    {
+      nixpkgs,
+      alpha,
+      zeta,
+      ...
+    }:
+    {
+      lib.mkSystem = nixpkgs.lib.nixosSystem {
+        specialArgs = {
+          inputs = {
+            inherit alpha zeta;
+          };
         };
       };
     };
-  });
 }

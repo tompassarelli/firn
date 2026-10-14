@@ -1,0 +1,32 @@
+{
+  "hosts": {
+    "whiterabbit": ["creative-workstation"]
+  },
+  "responsibilities": {
+    "creative-workstation": {
+      "dependsOn": ["three-d-authoring-workflow", "knowledge-authoring-workflow"]
+    },
+    "three-d-authoring-workflow": {
+      "requiresCapabilities": ["three-d-authoring"],
+      "requiresSoftware": ["blender"],
+      "domain": "environment",
+      "criticality": "interactive"
+    },
+    "knowledge-authoring-workflow": {
+      "requiresCapabilities": ["knowledge-authoring"],
+      "requiresSoftware": ["obsidian"],
+      "domain": "environment",
+      "criticality": "interactive"
+    }
+  },
+  "software": {
+    "blender": {
+      "module": "blender",
+      "capabilities": ["three-d-authoring"]
+    },
+    "obsidian": {
+      "module": "obsidian",
+      "capabilities": ["knowledge-authoring"]
+    }
+  }
+}

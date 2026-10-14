@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "development"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [
+    "darwin"
+  ],
+  "flakeInputs": {}
+}

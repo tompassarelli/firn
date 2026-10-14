@@ -1,10 +1,18 @@
-{ config, lib, pkgs, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.walker;
   username = config.myConfig.modules.users.username;
-in {
+in
+{
   options.myConfig.modules.walker.enable = lib.mkEnableOption "Walker modern wayland app launcher";
-  config = lib.mkIf config.myConfig.modules.walker.enable {
+  config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       (pkgs.writeShellScriptBin "walker-rename-workspace" ''
         name=$(echo "" | walker --dmenu)
@@ -12,7 +20,7 @@ in {
 
       '')
     ];
-    home-manager.users.${username} = ({ config, ... }: {
+    home-manager.users.${username} = _: {
       imports = [ inputs.walker.homeManagerModules.default ];
       home.file.".config/elephant/desktopapplications.toml".text = ''
         # Force proper Wayland env vars when launching apps (fixes Steam on niri)
@@ -25,7 +33,11 @@ in {
         config = {
           hide_quick_activation = true;
           providers = {
-            default = [ "desktopapplications" "calc" "windows" ];
+            default = [
+              "desktopapplications"
+              "calc"
+              "windows"
+            ];
             empty = [ "desktopapplications" ];
           };
           keybinds = {
@@ -39,32 +51,38 @@ in {
               "alt l"
               "alt semicolon"
             ];
-            next = [ "Down" "ctrl j" ];
-            previous = [ "Up" "ctrl k" ];
+            next = [
+              "Down"
+              "ctrl j"
+            ];
+            previous = [
+              "Up"
+              "ctrl k"
+            ];
           };
-          builtins.applications.actions.start = {
-            activation_mode = {
+          builtins = {
+            applications.actions.start.activation_mode = {
               type = "key";
               key = "Return";
             };
-          };
-          builtins.windows.actions = [
-            {
-              action = "focus";
-              bind = "Return";
-              default = true;
-            }
-          ];
-          builtins.dmenu = {
-            hidden = false;
-            weight = 5;
-            name = "dmenu";
-            placeholder = "Rename Workspace";
-            switcher_only = false;
-            show_icon_when_single = true;
+            windows.actions = [
+              {
+                action = "focus";
+                bind = "Return";
+                default = true;
+              }
+            ];
+            dmenu = {
+              hidden = false;
+              weight = 5;
+              name = "dmenu";
+              placeholder = "Rename Workspace";
+              switcher_only = false;
+              show_icon_when_single = true;
+            };
           };
         };
       };
-    });
+    };
   };
 }

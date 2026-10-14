@@ -1,29 +1,66 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.neovim;
+in
 {
-  config = lib.mkIf config.myConfig.modules.neovim.enable {
-    "home-manager" = {
-      "users" = {
-        ${config.myConfig.modules.users.username} = hm: {
-          "xdg" = {
-            "configFile" = {
-              "nvim/init.lua" = {
-                "source" = (((hm.config).lib).file).mkOutOfStoreSymlink (("" + ((hm.config).home).homeDirectory) + "/code/nixos-config/dotfiles/neovim/init.lua");
-              };
-              "nvim/lua/stylix-colors.lua" = {
-                "text" = (((((((((((((((((((((((((((((((("local M = {}\n\n-- Base16 color palette\nM.palette = {\n  base00 = \"#" + ((((hm.config).lib).stylix).colors).base00) + "\",\n  base01 = \"#") + ((((hm.config).lib).stylix).colors).base01) + "\",\n  base02 = \"#") + ((((hm.config).lib).stylix).colors).base02) + "\",\n  base03 = \"#") + ((((hm.config).lib).stylix).colors).base03) + "\",\n  base04 = \"#") + ((((hm.config).lib).stylix).colors).base04) + "\",\n  base05 = \"#") + ((((hm.config).lib).stylix).colors).base05) + "\",\n  base06 = \"#") + ((((hm.config).lib).stylix).colors).base06) + "\",\n  base07 = \"#") + ((((hm.config).lib).stylix).colors).base07) + "\",\n  base08 = \"#") + ((((hm.config).lib).stylix).colors).base08) + "\",\n  base09 = \"#") + ((((hm.config).lib).stylix).colors).base09) + "\",\n  base0A = \"#") + ((((hm.config).lib).stylix).colors).base0A) + "\",\n  base0B = \"#") + ((((hm.config).lib).stylix).colors).base0B) + "\",\n  base0C = \"#") + ((((hm.config).lib).stylix).colors).base0C) + "\",\n  base0D = \"#") + ((((hm.config).lib).stylix).colors).base0D) + "\",\n  base0E = \"#") + ((((hm.config).lib).stylix).colors).base0E) + "\",\n  base0F = \"#") + ((((hm.config).lib).stylix).colors).base0F) + "\"\n}\n\n-- Stylix colorscheme setup function (adapted from stylix neovim.nix)\nM.setup = function()\n  -- Try to use mini.base16 if available, fallback to manual highlights\n  local ok, mini_base16 = pcall(require, 'mini.base16')\n  if ok then\n    mini_base16.setup({ palette = M.palette })\n  else\n    -- Manual highlight setup as fallback\n    vim.cmd.highlight({ \"Normal\", \"guifg=\" .. M.palette.base05, \"guibg=\" .. M.palette.base00 })\n    vim.cmd.highlight({ \"Comment\", \"guifg=\" .. M.palette.base03 })\n    vim.cmd.highlight({ \"String\", \"guifg=\" .. M.palette.base0B })\n    vim.cmd.highlight({ \"Keyword\", \"guifg=\" .. M.palette.base0E })\n    vim.cmd.highlight({ \"Function\", \"guifg=\" .. M.palette.base0D })\n    vim.cmd.highlight({ \"Type\", \"guifg=\" .. M.palette.base0A })\n    vim.cmd.highlight({ \"Constant\", \"guifg=\" .. M.palette.base09 })\n    vim.cmd.highlight({ \"Error\", \"guifg=\" .. M.palette.base08 })\n    -- Add transparency if desired\n    -- vim.cmd.highlight({ \"Normal\", \"guibg=NONE\", \"ctermbg=NONE\" })\n  end\nend\n\nreturn M\n\n");
-              };
-            };
-          };
-        };
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${config.myConfig.modules.users.username} = hm: {
+      xdg.configFile = {
+        "nvim/init.lua".source =
+          hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/dotfiles/neovim/init.lua";
+        "nvim/lua/stylix-colors.lua".text = ''
+          local M = {}
+
+          -- Base16 color palette
+          M.palette = {
+            base00 = "#${hm.config.lib.stylix.colors.base00}",
+            base01 = "#${hm.config.lib.stylix.colors.base01}",
+            base02 = "#${hm.config.lib.stylix.colors.base02}",
+            base03 = "#${hm.config.lib.stylix.colors.base03}",
+            base04 = "#${hm.config.lib.stylix.colors.base04}",
+            base05 = "#${hm.config.lib.stylix.colors.base05}",
+            base06 = "#${hm.config.lib.stylix.colors.base06}",
+            base07 = "#${hm.config.lib.stylix.colors.base07}",
+            base08 = "#${hm.config.lib.stylix.colors.base08}",
+            base09 = "#${hm.config.lib.stylix.colors.base09}",
+            base0A = "#${hm.config.lib.stylix.colors.base0A}",
+            base0B = "#${hm.config.lib.stylix.colors.base0B}",
+            base0C = "#${hm.config.lib.stylix.colors.base0C}",
+            base0D = "#${hm.config.lib.stylix.colors.base0D}",
+            base0E = "#${hm.config.lib.stylix.colors.base0E}",
+            base0F = "#${hm.config.lib.stylix.colors.base0F}"
+          }
+
+          -- Stylix colorscheme setup function (adapted from stylix neovim.nix)
+          M.setup = function()
+            -- Try to use mini.base16 if available, fallback to manual highlights
+            local ok, mini_base16 = pcall(require, 'mini.base16')
+            if ok then
+              mini_base16.setup({ palette = M.palette })
+            else
+              -- Manual highlight setup as fallback
+              vim.cmd.highlight({ "Normal", "guifg=" .. M.palette.base05, "guibg=" .. M.palette.base00 })
+              vim.cmd.highlight({ "Comment", "guifg=" .. M.palette.base03 })
+              vim.cmd.highlight({ "String", "guifg=" .. M.palette.base0B })
+              vim.cmd.highlight({ "Keyword", "guifg=" .. M.palette.base0E })
+              vim.cmd.highlight({ "Function", "guifg=" .. M.palette.base0D })
+              vim.cmd.highlight({ "Type", "guifg=" .. M.palette.base0A })
+              vim.cmd.highlight({ "Constant", "guifg=" .. M.palette.base09 })
+              vim.cmd.highlight({ "Error", "guifg=" .. M.palette.base08 })
+              -- Add transparency if desired
+              -- vim.cmd.highlight({ "Normal", "guibg=NONE", "ctermbg=NONE" })
+            end
+          end
+
+          return M
+
+        '';
       };
     };
-    "programs" = {
-      "neovim" = {
-        "defaultEditor" = true;
-        "enable" = true;
-      };
+    programs.neovim = {
+      defaultEditor = true;
+      enable = true;
     };
   };
-  options."myConfig"."modules"."neovim"."enable" = lib.mkEnableOption "Neovim text editor";
+  options.myConfig.modules.neovim.enable = lib.mkEnableOption "Neovim text editor";
 }

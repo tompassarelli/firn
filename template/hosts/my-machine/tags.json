@@ -1,0 +1,21 @@
+{
+  "platform": "linux",
+  "enables": [],
+  "disables": [],
+  "turnsOn": [
+    "users",
+    "nix-settings",
+    "boot",
+    "networking",
+    "timezone",
+    "ssh",
+    "pipewire",
+    "bluetooth",
+    "input",
+    "kanata",
+    "neovim"
+  ],
+  "turnsOff": [],
+  "adds": {},
+  "drops": {}
+}

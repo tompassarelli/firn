@@ -1,9 +1,0 @@
-use firn/tags
-
-tags: browsers
-firefox needs flake input "nur" from "github:nix-community/NUR"
-
-option myConfig.modules.firefox.default: Bool
-  default: false
-  description: "Set Firefox as the default browser via MIME types"
-imports: [./firefox.nix]

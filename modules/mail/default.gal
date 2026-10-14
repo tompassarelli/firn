@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: communication
-
-config
-  "environment"
-    "systemPackages": [pkgs.unstable.protonmail-desktop]
-"enable": "email applications"

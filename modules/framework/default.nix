@@ -1,13 +1,21 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.framework;
   username = config.myConfig.modules.users.username;
   lidDrain = pkgs.writeShellApplication {
     name = "lid-drain-hook";
-    runtimeInputs = [ pkgs.coreutils pkgs.util-linux pkgs.openssh ];
-    runtimeEnv = {
-      DRAIN_USER = username;
-    };
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.util-linux
+      pkgs.openssh
+    ];
+    runtimeEnv.DRAIN_USER = username;
     text = ''
       phase=''${1:-}
       action=''${2:-}
@@ -39,37 +47,20 @@ let
       exit 0
     '';
   };
-in {
-  config = lib.mkIf config.myConfig.modules.framework.enable {
-    "boot" = {
-      "extraModprobeConfig" = "options mt7925_common disable_clc=1\noptions mt7925e disable_aspm=1\n\n";
-    };
-    "environment" = {
-      "etc" = {
-        "systemd/system-sleep/lid-drain" = {
-          "source" = "${lidDrain}/bin/lid-drain-hook";
-        };
-      };
-    };
-    "systemd" = {
-      "sleep" = {
-        "settings" = {
-          "Sleep" = {
-            "HibernateDelaySec" = "30min";
-          };
-        };
-      };
-    };
-    "services" = {
-      "logind" = {
-        "settings" = {
-          "Login" = {
-            "HandleLidSwitch" = "suspend-then-hibernate";
-            "HandleLidSwitchExternalPower" = "ignore";
-          };
-        };
-      };
+in
+{
+  config = lib.mkIf cfg.enable {
+    boot.extraModprobeConfig = ''
+      options mt7925_common disable_clc=1
+      options mt7925e disable_aspm=1
+
+    '';
+    environment.etc."systemd/system-sleep/lid-drain".source = "${lidDrain}/bin/lid-drain-hook";
+    systemd.sleep.settings.Sleep.HibernateDelaySec = "30min";
+    services.logind.settings.Login = {
+      HandleLidSwitch = "suspend-then-hibernate";
+      HandleLidSwitchExternalPower = "ignore";
     };
   };
-  options."myConfig"."modules"."framework"."enable" = lib.mkEnableOption "Framework Computer specific tools";
+  options.myConfig.modules.framework.enable = lib.mkEnableOption "Framework Computer specific tools";
 }

@@ -19,10 +19,9 @@ export type LockInput = { name: string; revision: string; modified: number | nul
 export type ChecksumAssertion = { path: string; expected: string; actual: string };
 export type LicenseEvidence = { checksums: ChecksumAssertion[]; readmeLicense: string | null };
 
-export const firnDigest = 'You are editing the Firn system configuration. Edit .gal sources, never '
-  + '.nix; run firn repo build and firn repo validate after .gal changes. '
-  + 'Check uncertain Galileo syntax and schema facts with the runtime\'s '
-  + 'galileo help, galileo refs and galileo schema explain. '
+export const firnDigest = 'You are editing the Firn NixOS configuration. Edit idiomatic Nix modules '
+  + 'and source-owned JSON tag metadata; run firn check after changes. '
+  + 'Inspect option schemas with firn schema explain. '
   + 'Keep Tom-maintained and high-churn project source and build outputs out '
   + 'of the boot/system closure. A derivation, package, worktree, or filesystem '
   + 'pin does not grant closure admission; use a dev shell, user runtime, or '

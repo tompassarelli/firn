@@ -1,7 +1,0 @@
-use firn/tags
-
-
-config
-  "environment"
-    "systemPackages": [pkgs.azure-cli]
-"enable": "Azure CLI (az) for Entra / Microsoft Graph admin"

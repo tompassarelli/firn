@@ -1,16 +1,16 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.ssh;
+in
 {
-  config = lib.mkIf config.myConfig.modules.ssh.enable {
-    "services" = {
-      "openssh" = {
-        "enable" = true;
-        "settings" = {
-          "KbdInteractiveAuthentication" = false;
-          "PasswordAuthentication" = false;
-        };
+  config = lib.mkIf cfg.enable {
+    services.openssh = {
+      enable = true;
+      settings = {
+        KbdInteractiveAuthentication = false;
+        PasswordAuthentication = false;
       };
     };
   };
-  options."myConfig"."modules"."ssh"."enable" = lib.mkEnableOption "SSH server";
+  options.myConfig.modules.ssh.enable = lib.mkEnableOption "SSH server";
 }

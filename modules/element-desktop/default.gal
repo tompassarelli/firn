@@ -1,9 +1,0 @@
-use firn/tags
-
-tags: communication
-
-# Electron cannot detect gnome-keyring under niri; without this flag Element stops at "System unsupported".
-config
-  "environment"
-    "systemPackages": [pkgs.element-desktop.override({"commandLineArgs": "--password-store=gnome-libsecret"})]
-"enable": "Element Matrix desktop client"

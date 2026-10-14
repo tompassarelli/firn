@@ -1,0 +1,10 @@
+{
+  "tags": [],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {
+    "elephant": "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73",
+    "walker": "github:abenz1267/walker"
+  }
+}

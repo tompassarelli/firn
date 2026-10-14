@@ -1,17 +1,18 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.printing;
+in
 {
-  config = lib.mkIf config.myConfig.modules.printing.enable {
-    "services" = {
-      "avahi" = {
-        "enable" = true;
-        "nssmdns4" = true;
-        "openFirewall" = true;
+  config = lib.mkIf cfg.enable {
+    services = {
+      avahi = {
+        enable = true;
+        nssmdns4 = true;
+        openFirewall = true;
       };
-      "printing" = {
-        "enable" = true;
-      };
+      printing.enable = true;
     };
   };
-  options."myConfig"."modules"."printing"."enable" = lib.mkEnableOption "CUPS printing service with network discovery";
+  options.myConfig.modules.printing.enable =
+    lib.mkEnableOption "CUPS printing service with network discovery";
 }

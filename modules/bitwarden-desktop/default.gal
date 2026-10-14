@@ -1,7 +1,0 @@
-use firn/tags
-
-
-config
-  "environment"
-    "systemPackages": [pkgs.bitwarden-desktop]
-"enable": "Bitwarden desktop app"

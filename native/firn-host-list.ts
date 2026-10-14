@@ -1,26 +1,12 @@
-import { dirname } from 'node:path';
 import { listDirectory, pathKind } from './firn-host-list-os.mjs';
 
-type Policy = { length: number; leaf: string };
 type CommandResult = { output: string; error: string; status: number };
 const maxEntries = 16384;
 const missingPath = 2;
 const directoryKind = 2;
-let policies: Policy[] | undefined;
-function policy(): Policy[] {
-  if (policies) return policies;
-  const bin = process.env.FIRN_RUNTIME_BIN ?? '';
-  const galileo = process.env.FIRN_GALILEO ?? `${bin}/galileo`;
-  const source = process.env.FIRN_GALILEO_HOST_LIST ?? `${bin}/../lib/firn/host-list.gal`;
-  const child = Bun.spawnSync({ cwd: dirname(dirname(dirname(source))), cmd: [galileo, 'query', source,
-    'all ?length, ?leaf where ?policy accepts length ?length leaf ?leaf', '--json'], stdout: 'pipe', stderr: 'pipe' });
-  if (child.exitCode !== 0) throw new Error(`firn: galileo host-list query failed\n${new TextDecoder().decode(child.stderr)}`);
-  policies = JSON.parse(new TextDecoder().decode(child.stdout));
-  return policies!;
-}
 export function handles(args: string[]): boolean {
   return args[0] === 'host' && args[1] === 'list'
-    && policy().some(row => row.length === args.length && row.leaf === (args[2] ?? ''));
+    && (args.length === 2 || args.length === 3 && args[2] === 'all');
 }
 export function hostList(root: string): CommandResult {
   const failure = (operation: string, path: string, status: number): CommandResult => ({output: '', error: `firn host list: ${operation} '${path}': errno ${status}\n`, status: 1});

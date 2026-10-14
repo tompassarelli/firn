@@ -15,7 +15,7 @@ function caseEventDecodingAndRefusal(seed: number): boolean {
 }
 function caseEditIntroductionAndExits(seed: number): boolean {
   const event: policy.RawHookEvent = { toolName: 'Edit', command: null,
-    filePath: `/code/nixos-config/file${seed === 0 ? '' : seed}.gal`,
+    filePath: `/code/nixos-config/file${seed === 0 ? '' : seed}.nix`,
     sessionId: `session${seed === 0 ? '' : seed}`, payloadOversized: false,
     guardsOff: false, introUnseen: true };
   const decision = policy.decideHook(event);
@@ -36,7 +36,7 @@ function casePinArgumentsAndAssertions(seed: number): boolean {
 function casePinExitDecision(seed: number): boolean {
   const arguments_ = policy.parsePinArguments([]);
   const evidence: policy.PinEvidence[] = [{ kind: `fixed-output${seed === 0 ? '' : seed}`,
-    location: 'module.gal:4', value: 'https://example.test/source',
+    location: 'module.nix:4', value: 'https://example.test/source',
     verificationUrl: 'https://example.test/source', reachable: true, checksum: 'sha256-invalid' }];
   const inputs: policy.LockInput[] = [{ name: 'nixpkgs', revision: `abcdef${seed === 0 ? '' : seed}`, modified: 0 }];
   const report = policy.pinPolicy(arguments_, 2678400, evidence, inputs);

@@ -24,101 +24,81 @@ export function selectedServiceEntries(entries: SchemaEntry[], service: string):
 }
 
 function moduleBody(name: string): string {
-  return `use firn/tags
-
-${name} is a Module
-
-nix module
-  arguments: config, lib, pkgs, ...
-  option myConfig.modules.${name}.enable: enable "Enable ${name}"
-  config when config.myConfig.modules.${name}.enable
-    environment.systemPackages: [pkgs.${name}]
+  return `{ config, lib, pkgs, ... }:
+{
+  options.myConfig.modules.${name}.enable = lib.mkEnableOption "${name}";
+  config = lib.mkIf config.myConfig.modules.${name}.enable {
+    environment.systemPackages = [ pkgs.${name} ];
+  };
+}
 `;
 }
-
 function submoduleBody(name: string): string {
-  return `use firn/tags
-
-${name} is a Module
-
-nix file
-  arguments: config, lib, pkgs, ...
-  value
-    options.myConfig.modules.${name}
-      enable: lib.mkEnableOption("${name} configuration")
-      extraConfig: lib.mkOption({type: lib.types.lines, default: "", description: "Extra config text."})
-    config when config.myConfig.modules.${name}.enable
-      environment.systemPackages: [pkgs.${name}]
+  return `{ config, lib, pkgs, ... }:
+{
+  options.myConfig.modules.${name} = {
+    enable = lib.mkEnableOption "${name} configuration";
+    extraConfig = lib.mkOption {
+      type = lib.types.lines;
+      default = "";
+      description = "Extra config text.";
+    };
+  };
+  config = lib.mkIf config.myConfig.modules.${name}.enable {
+    environment.systemPackages = [ pkgs.${name} ];
+  };
+}
 `;
 }
-
 function homeBody(name: string): string {
-  return `use firn/tags
-
-${name} is a Module
-
-nix module
-  arguments: config, lib, pkgs, ...
-  let username = config.myConfig.modules.users.username
-  option myConfig.modules.${name}.enable: enable "${name} (home-manager)"
-  config when config.myConfig.modules.${name}.enable
-    home-manager.users.{username}.programs.${name}.enable: true
+  return `{ config, lib, ... }:
+{
+  options.myConfig.modules.${name}.enable = lib.mkEnableOption "${name} (home-manager)";
+  config = lib.mkIf config.myConfig.modules.${name}.enable {
+    home-manager.users.\${config.myConfig.modules.users.username}.programs.${name}.enable = true;
+  };
+}
 `;
 }
-
 function hostConfigurationBody(name: string): string {
-  return `use firn/tags
-use hosts/${name}/enabled-tags
-
-users is a Module
-boot is a Module
-networking is a Module
-${name} turns on users
-${name} turns on boot
-${name} turns on networking
-
-nix module
-  arguments: config, lib, pkgs, ...
-  imports: [./_generated-enables.nix]
-  config
-    myConfig.modules.system.stateVersion: "25.11"
-    myConfig.modules.users.username: "you"
-    for ?m where ${name} turns on ?m
-      myConfig.modules.{?m}.enable: true
+  return `{ ... }:
+{
+  config.myConfig.modules = {
+    system.stateVersion = "25.11";
+    users.username = "you";
+    users.enable = true;
+    boot.enable = true;
+    networking.enable = true;
+  };
+}
 `;
 }
-
 function hostTagsBody(name: string): string {
-  return `use firn/tags
-
-${name} is a Host
-linux is a Platform
-terminal is a Tag
-cli-tools is a Tag
-development is a Tag
-${name} runs linux
-${name} enables [terminal, cli-tools, development]
-`;
+  return JSON.stringify({ platform: 'linux', enables: ['terminal', 'cli-tools', 'development'], adds: {}, drops: {}, disables: [], turnsOn: ['users', 'boot', 'networking'], turnsOff: [] }, null, 2) + '\n';
 }
-
 function serviceBody(name: string, entries: SchemaEntry[]): string {
-  const selected = selectedServiceEntries(entries, name);
-  const stubs = selected.length ? '    # common options — uncomment to override:\n' + selected.map(entry => `    # ${entry.name}: <value>   # ${entry.type}\n`).join('') : '';
-  return `use firn/tags\n\n${name} is a Module\n\nnix module\n  arguments: config, lib, pkgs, ...\n  option myConfig.modules.${name}.enable: enable "${name} service"\n  config when config.myConfig.modules.${name}.enable\n${stubs}    services.${name}.enable: true\n`;
+  return `{ config, lib, ... }:
+{
+  options.myConfig.modules.${name}.enable = lib.mkEnableOption "${name} service";
+  config = lib.mkIf config.myConfig.modules.${name}.enable {
+    services.${name}.enable = true;
+  };
+}
+`;
 }
 export function planAuthoring(action: AuthoringAction, schema: SchemaEntry[]) {
   if (action._tag.startsWith('Secret')) return { _tag: 'AuthoringPlanRejected' as const, message: 'firn authoring: not a scaffold command\n' };
   const name = (action as { name: string }).name;
   if (!safeAuthoringName(name)) return { _tag: 'AuthoringPlanRejected' as const, message: 'firn authoring: invalid name\n' };
   if (action._tag === 'TemplateHost') {
-    const configuration = `hosts/${name}/configuration.gal`, tags = `hosts/${name}/enabled-tags.gal`;
-    return { _tag: 'AuthoringPlanReady' as const, plan: { _tag: 'AuthoringPlan' as const, targets: [{ _tag: 'AuthoringTarget' as const, relative: configuration, contents: hostConfigurationBody(name) }, { _tag: 'AuthoringTarget' as const, relative: tags, contents: hostTagsBody(name) }], success_output: `Created ${configuration} (git added)\nCreated ${tags} (git added)\nDon't forget to add ${name} to flake.gal's nixosConfigurations.\n` } };
+    const configuration = `hosts/${name}/configuration.nix`, tags = `hosts/${name}/tags.json`;
+    return { _tag: 'AuthoringPlanReady' as const, plan: { _tag: 'AuthoringPlan' as const, targets: [{ _tag: 'AuthoringTarget' as const, relative: configuration, contents: hostConfigurationBody(name) }, { _tag: 'AuthoringTarget' as const, relative: tags, contents: hostTagsBody(name) }], success_output: `Created ${configuration} (git added)\nCreated ${tags} (git added)\nDon't forget to add ${name} to flake.nix's nixosConfigurations.\n` } };
   }
-  const relative = `modules/${name}/default.gal`;
+  const relative = `modules/${name}/default.nix`;
   const contents = action._tag === 'ModuleAdd' ? moduleBody(name) : action._tag === 'TemplateSubmodule' ? submoduleBody(name) : action._tag === 'TemplateHome' ? homeBody(name) : serviceBody(name, schema);
   const count = selectedServiceEntries(schema, name).length;
-  const summary = action._tag !== 'TemplateService' ? '' : count === 0 ? `  (no schema entries found for services.${name} — schema cache stale or service not in nixpkgs?)\n` : `  pre-filled ${count} common options as commented stubs (from schema)\n`;
-  return { _tag: 'AuthoringPlanReady' as const, plan: { _tag: 'AuthoringPlan' as const, targets: [{ _tag: 'AuthoringTarget' as const, relative, contents }], success_output: `Created ${relative} (git added)\n${summary}` } };
+  const summary = action._tag !== 'TemplateService' ? '' : count === 0 ? `  (no schema entries found for services.${name} — schema cache stale or service not in nixpkgs?)\n` : `  schema lists ${count} common options for services.${name}\n`;
+  return { _tag: 'AuthoringPlanReady' as const, plan: { _tag: 'AuthoringPlan' as const, targets: [{ _tag: 'AuthoringTarget' as const, relative, contents }, { _tag: 'AuthoringTarget' as const, relative: `modules/${name}/metadata.json`, contents: JSON.stringify({ tags: [], optIn: [], overrides: {}, supports: [], flakeInputs: {} }, null, 2) + '\n' }], success_output: `Created ${relative} (git added)\n${summary}` } };
 }
 
 export function schemaEntriesFromJson(source: string): SchemaParseResult {

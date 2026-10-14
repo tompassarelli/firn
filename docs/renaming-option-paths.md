@@ -1,10 +1,7 @@
 # Renaming option paths
 
-To rename an option path across all `.gal` sources (for example
-`myConfig.modules.foo` to `myConfig.modules.bar`):
-
-```bash
-galileo refs myConfig.modules.foo                                   # preview the users
-galileo rename option myConfig.modules.foo myConfig.modules.bar     # apply
-firn repo build && firn repo validate                               # regenerate and verify
-```
+Find the existing callers with `rg -n 'myConfig.modules.foo' modules hosts
+native config docs`. Change the option declaration and every caller in the
+same change, including composition metadata and tests. Run `firn repo build`
+when metadata changed, then `firn check`. Support only the current interface;
+do not retain a compatibility option for an unused path.

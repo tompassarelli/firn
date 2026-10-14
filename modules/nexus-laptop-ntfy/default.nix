@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.myConfig.modules.nexus-laptop-ntfy;
@@ -21,51 +26,58 @@ let
     LAPTOP_NTFY_ACTION_URL = "http://10.77.0.1:${builtins.toString port}";
     LAPTOP_NTFY_LISTEN = "10.77.0.1:${builtins.toString port}";
   };
-in {
-  options.myConfig.modules.nexus-laptop-ntfy.enable = lib.mkEnableOption "nexus-laptop-ntfy: ntfy topic socrates-laptop with Open and Close buttons on every laptop state change, a daily window reminder and the authenticated endpoint the buttons call";
-  options.myConfig.modules.nexus-laptop-ntfy.sopsFile = lib.mkOption {
-    type = lib.types.path;
-    description = "sops file holding laptop-action-token, the bearer token the ntfy buttons send";
+in
+{
+  options.myConfig.modules.nexus-laptop-ntfy = {
+    enable = lib.mkEnableOption "nexus-laptop-ntfy: ntfy topic socrates-laptop with Open and Close buttons on every laptop state change, a daily window reminder and the authenticated endpoint the buttons call";
+    sopsFile = lib.mkOption {
+      type = lib.types.path;
+      description = "sops file holding laptop-action-token, the bearer token the ntfy buttons send";
+    };
   };
   config = lib.mkIf cfg.enable {
     sops.secrets.laptop-action-token = {
-      sopsFile = cfg.sopsFile;
+      inherit (cfg) sopsFile;
       owner = username;
       mode = "0400";
     };
     networking.firewall.interfaces.wg-nexus.allowedTCPPorts = [ port ];
-    systemd.services.nexus-laptop-ntfy = {
-      description = "Endpoint for the laptop Open and Close buttons in ntfy";
-      wantedBy = [ "multi-user.target" ];
-      after = [ "wireguard-wg-nexus.service" ];
-      path = toolPath;
-      environment = env;
-      serviceConfig = {
-        User = username;
-        Restart = "always";
-        RestartSec = 5;
-        TimeoutStartSec = "15min";
-        ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${base} ]; do sleep 5; done'";
-        ExecStart = "${base} serve";
+    systemd = {
+      services = {
+        nexus-laptop-ntfy = {
+          description = "Endpoint for the laptop Open and Close buttons in ntfy";
+          wantedBy = [ "multi-user.target" ];
+          after = [ "wireguard-wg-nexus.service" ];
+          path = toolPath;
+          environment = env;
+          serviceConfig = {
+            User = username;
+            Restart = "always";
+            RestartSec = 5;
+            TimeoutStartSec = "15min";
+            ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${base} ]; do sleep 5; done'";
+            ExecStart = "${base} serve";
+          };
+        };
+        nexus-laptop-ntfy-notify = {
+          description = "Publish the laptop state to ntfy when it changed";
+          unitConfig.ConditionPathIsExecutable = base;
+          path = toolPath;
+          environment = env;
+          serviceConfig = {
+            Type = "oneshot";
+            User = username;
+            TimeoutStartSec = "50s";
+            ExecStart = "${base} notify";
+          };
+        };
       };
-    };
-    systemd.services.nexus-laptop-ntfy-notify = {
-      description = "Publish the laptop state to ntfy when it changed";
-      unitConfig.ConditionPathIsExecutable = base;
-      path = toolPath;
-      environment = env;
-      serviceConfig = {
-        Type = "oneshot";
-        User = username;
-        TimeoutStartSec = "50s";
-        ExecStart = "${base} notify";
-      };
-    };
-    systemd.timers.nexus-laptop-ntfy-notify = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnCalendar = "minutely";
-        AccuracySec = "1s";
+      timers.nexus-laptop-ntfy-notify = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnCalendar = "minutely";
+          AccuracySec = "1s";
+        };
       };
     };
   };

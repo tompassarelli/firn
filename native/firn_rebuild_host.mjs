@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmdirSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdtempSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -84,16 +84,6 @@ function review(previous, approved) {
   if (revision.exitCode !== 0) return revision.exitCode;
   const start = decoder.decode(base.stdout).trim();
   const end = decoder.decode(revision.stdout).trim();
-  const changes = git(['rev-list', '--first-parent', '--reverse', `${start}..${end}`, '--', 'config/galileo-revision']);
-  if (changes.exitCode !== 0) return changes.exitCode;
-  const ends = [];
-  for (const change of decoder.decode(changes.stdout).trim().split('\n').filter(Boolean)) {
-    const parent = git(['rev-parse', `${change}^`]);
-    if (parent.exitCode !== 0) return parent.exitCode;
-    ends.push(decoder.decode(parent.stdout).trim());
-  }
-  ends.push(end);
-  const versions = join(process.env.FIRN_RUNTIME_ROOT ?? `${process.env.HOME}/.local/lib/firn/cli`, 'versions');
   const directory = mkdtempSync(join(tmpdir(), 'firn-review-'));
   const snapshot = join(directory, 'snapshot');
   try {
@@ -102,40 +92,13 @@ function review(previous, approved) {
       process.stderr.write(added.stderr);
       return added.exitCode;
     }
-    let segmentStart = start;
-    for (const segmentEnd of ends) {
-      const checkout = Bun.spawnSync({ cmd: ['git', '-C', snapshot, 'checkout', '--detach', segmentEnd], stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-      if (checkout.exitCode !== 0) {
-        process.stderr.write(checkout.stderr);
-        return checkout.exitCode;
-      }
-      const pinFile = join(snapshot, 'config/galileo-revision');
-      if (!existsSync(pinFile)) {
-        process.stderr.write(`firn rebuild: ${segmentEnd} has no config/galileo-revision; review cannot approve\n`);
-        return 2;
-      }
-      const pin = readFileSync(pinFile, 'utf8').trim();
-      const cachedVersion = () => (existsSync(versions) ? readdirSync(versions) : []).find(name => {
-        const cachedPin = join(versions, name, 'galileo-revision');
-        return existsSync(cachedPin) && readFileSync(cachedPin, 'utf8').trim() === pin
-          && existsSync(join(versions, name, 'bin/galileo'));
-      });
-      let version = cachedVersion();
-      if (version === undefined) {
-        const built = Bun.spawnSync({ cmd: ['bash', join(root, 'dotfiles/bin/firn-runtime-update'), 'galileo'], env: { ...process.env, FIRN_REPO: snapshot }, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
-        if (built.exitCode !== 0) return built.exitCode ?? 2;
-        version = cachedVersion();
-        if (version === undefined) {
-          process.stderr.write(`firn rebuild: no cached Galileo binary for pin ${pin}; review cannot approve\n`);
-          return 2;
-        }
-      }
-      const galileo = join(versions, version, 'bin/galileo');
-      process.stdout.write(`reviewing ${segmentStart}..${segmentEnd} with galileo ${pin}\n`);
-      const status = Bun.spawnSync({ cmd: [galileo, 'review', '--base', segmentStart], cwd: snapshot, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' }).exitCode;
-      if (status !== 0) return status ?? 2;
-      segmentStart = segmentEnd;
-    }
+    process.stdout.write(`reviewing ${start}..${end} with Nix evaluation\n`);
+    const diff = git(['diff', '--stat', start, end]);
+    if (diff.exitCode !== 0) return diff.exitCode;
+    process.stdout.write(diff.stdout);
+    const checked = Bun.spawnSync({ cmd: ['bash', join(root, 'dotfiles/bin/firn-check')], cwd: snapshot,
+      env: { ...process.env, FIRN_REPO: snapshot }, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit' });
+    if (checked.exitCode !== 0) return checked.exitCode ?? 2;
     const originalRoot = process.env.FIRN_REPO;
     process.env.FIRN_REPO = snapshot;
     try {

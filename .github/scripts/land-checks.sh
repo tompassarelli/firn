@@ -2,24 +2,7 @@
 set -euo pipefail
 mode=${1:?native|dotfiles|drift}
 if [ "$mode" = drift ]; then
-  compiler_inputs() {
-    {
-      git ls-tree -r "$1" | awk -F '\t' '$2 ~ /\.(bnix|nix)$/ || $2 ~ /^native\// ||
-        $2 == "dotfiles/bin/firn" || $2 == "config/galileo-revision"'
-      readlink -f "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current"
-    } | sha256sum | cut -d' ' -f1
-  }
-  drift_cache=${XDG_CACHE_HOME:-$HOME/.cache}/firn/compiler-drift
-  drift_key=$(compiler_inputs HEAD)
-  if [ -n "$(git status --porcelain --untracked-files=no)" ] || [ ! -e "$drift_cache/$drift_key" ]; then
-    FIRN_REPO="$PWD" dotfiles/bin/firn repo build
-    git diff --exit-code
-    mkdir -p "$drift_cache"
-    touch "$drift_cache/$drift_key"
-  else
-    printf 'land check: compiler drift reused for input hash %s\n' "$drift_key"
-  fi
-  nix build --no-link .#checks.x86_64-linux.nix-syntax
+  FIRN_REPO="$PWD" dotfiles/bin/firn-check
   bash .github/scripts/host-diff.sh build
   exit
 fi

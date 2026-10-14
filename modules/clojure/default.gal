@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: lisp
-
-config
-  "environment"
-    "systemPackages": [pkgs.unstable.clj-kondo, pkgs.unstable.clojure-lsp, pkgs.unstable.jet, pkgs.unstable.cljfmt]
-"enable": "Clojure tooling — LSP, linting, formatting (native binaries, no JVM)"

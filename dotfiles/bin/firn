@@ -13,7 +13,7 @@ fi
 firn_repo="${FIRN_REPO:-}"
 if [[ -z "$firn_repo" ]]; then
   checkout="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  if [[ -n "$checkout" && -f "$checkout/config/galileo-revision" && -f "$checkout/flake.gal" ]]; then
+  if [[ -n "$checkout" && -f "$checkout/flake.nix" ]]; then
     firn_repo="$checkout"
   else
     firn_repo="$HOME/code/nixos-config/main" # hardcoded-repo-path:allow
@@ -31,12 +31,6 @@ bun="${FIRN_BUN:-$runtime_bin/bun}"
 if [[ ! -f "$runtime" || ! -x "$bun" ]]; then
   printf 'firn: user runtime is not installed; run firn-runtime-update\n' >&2
   exit 127
-fi
-
-if ! cmp -s "$firn_repo/config/galileo-revision" "$runtime_root/current/galileo-revision"; then
-  printf 'firn: %s declares a Galileo revision the user runtime does not have; run firn-runtime-update\n' \
-    "$firn_repo" >&2
-  exit 1
 fi
 
 export FIRN_REPO="$firn_repo"

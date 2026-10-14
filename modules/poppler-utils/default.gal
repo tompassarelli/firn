@@ -1,7 +1,0 @@
-use firn/tags
-
-tags: cli-tools
-
-enable: "Poppler PDF rendering and text extraction tools"
-config
-  environment.systemPackages: with pkgs: [poppler-utils]

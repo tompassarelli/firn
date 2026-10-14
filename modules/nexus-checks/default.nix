@@ -1,9 +1,18 @@
-{ config, lib, pkgs, jobRun, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  jobRun,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.nexus-checks;
   username = config.myConfig.modules.users.username;
   stateDir = "/var/lib/nexus-checks";
-  authorizedKeys = pkgs.writeText "nexus-authorized-keys" (lib.concatStringsSep "\n" config.myConfig.modules.users.authorizedKeys);
+  authorizedKeys = pkgs.writeText "nexus-authorized-keys" (
+    lib.concatStringsSep "\n" config.myConfig.modules.users.authorizedKeys
+  );
   checks = pkgs.writeShellApplication {
     name = "nexus-checks";
     runtimeInputs = [
@@ -28,7 +37,11 @@ let
   };
   heartbeat = pkgs.writeShellApplication {
     name = "nexus-heartbeat";
-    runtimeInputs = [ pkgs.coreutils pkgs.gnugrep "/run/current-system/sw" ];
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      "/run/current-system/sw"
+    ];
     runtimeEnv = {
       CHECKS_STATE = stateDir;
       HEARTBEAT_REPO = "tompassarelli/firn";
@@ -44,48 +57,50 @@ let
     };
   };
   notifyMask = pkgs.writeTextDir "lib/systemd/system/nexus-checks.service.d/10-nexus-notify.conf" "";
-in {
-  options.myConfig.modules.nexus-checks.enable = lib.mkEnableOption "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat";
-  config = lib.mkIf config.myConfig.modules.nexus-checks.enable {
-    systemd.packages = [ notifyMask ];
+in
+{
+  options.myConfig.modules.nexus-checks.enable =
+    lib.mkEnableOption "nexus standing checks (logins, failed units, update age, disk, backup, weekly lynis) with ntfy alerts and a GitHub heartbeat";
+  config = lib.mkIf cfg.enable {
+    systemd = {
+      packages = [ notifyMask ];
+      services = {
+        nexus-checks = {
+          description = "Run the nexus standing checks and push alerts on change";
+          serviceConfig = {
+            Type = "oneshot";
+            StateDirectory = "nexus-checks";
+            ExecStart = jobRun "nexus-checks" "${checks}/bin/nexus-checks run";
+          };
+        };
+        nexus-lynis = {
+          description = "Weekly lynis audit; alert when the hardening index drops or a new warning appears";
+          serviceConfig = {
+            Type = "oneshot";
+            StateDirectory = "nexus-checks";
+            Nice = 10;
+            ExecStart = jobRun "nexus-lynis" "${checks}/bin/nexus-checks --lynis";
+          };
+        };
+        nexus-heartbeat = {
+          description = "Publish the nexus check status to the NEXUS_HEARTBEAT variable on GitHub";
+          wants = [ "network-online.target" ];
+          after = [ "network-online.target" ];
+          environment.GH_CONFIG_DIR = "${stateDir}/gh";
+          serviceConfig = {
+            Type = "oneshot";
+            StateDirectory = "nexus-checks";
+            ExecStart = jobRun "nexus-heartbeat" "${heartbeat}/bin/nexus-heartbeat";
+          };
+        };
+      };
+      timers = {
+        nexus-checks = timer "*:0/15";
+        nexus-lynis = timer "Sat 21:30";
+        nexus-heartbeat = timer "*:0/30";
+      };
+    };
     environment.systemPackages = [ checks ];
-    systemd.services = {
-      "nexus-checks" = {
-        description = "Run the nexus standing checks and push alerts on change";
-        serviceConfig = {
-          Type = "oneshot";
-          StateDirectory = "nexus-checks";
-          ExecStart = jobRun "nexus-checks" "${checks}/bin/nexus-checks run";
-        };
-      };
-      "nexus-lynis" = {
-        description = "Weekly lynis audit; alert when the hardening index drops or a new warning appears";
-        serviceConfig = {
-          Type = "oneshot";
-          StateDirectory = "nexus-checks";
-          Nice = 10;
-          ExecStart = jobRun "nexus-lynis" "${checks}/bin/nexus-checks --lynis";
-        };
-      };
-      "nexus-heartbeat" = {
-        description = "Publish the nexus check status to the NEXUS_HEARTBEAT variable on GitHub";
-        wants = [ "network-online.target" ];
-        after = [ "network-online.target" ];
-        environment = {
-          GH_CONFIG_DIR = "${stateDir}/gh";
-        };
-        serviceConfig = {
-          Type = "oneshot";
-          StateDirectory = "nexus-checks";
-          ExecStart = jobRun "nexus-heartbeat" "${heartbeat}/bin/nexus-heartbeat";
-        };
-      };
-    };
-    systemd.timers = {
-      "nexus-checks" = timer "*:0/15";
-      "nexus-lynis" = timer "Sat 21:30";
-      "nexus-heartbeat" = timer "*:0/30";
-    };
     security.polkit.extraConfig = ''
       polkit.addRule(function(action, subject) {
         if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&

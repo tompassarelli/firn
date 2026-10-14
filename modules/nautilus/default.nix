@@ -1,15 +1,16 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.nautilus.enable {
-    "environment" = {
-      "systemPackages" = [ pkgs.nautilus ];
-    };
-    "services" = {
-      "gvfs" = {
-        "enable" = true;
-      };
-    };
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.nautilus;
+in
+{
+  config = lib.mkIf cfg.enable {
+    environment.systemPackages = [ pkgs.nautilus ];
+    services.gvfs.enable = true;
   };
-  options."myConfig"."modules"."nautilus"."enable" = lib.mkEnableOption "Nautilus file manager";
+  options.myConfig.modules.nautilus.enable = lib.mkEnableOption "Nautilus file manager";
 }

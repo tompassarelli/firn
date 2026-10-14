@@ -7,6 +7,7 @@ export function executeRuntime(name, args) {
   if (hostList.handles(args)) {
     return hostList.run(process.env.FIRN_REPO, args);
   }
+  if (name === 'firn-check') return Bun.spawnSync({ cmd: ['bash', `${process.env.FIRN_REPO}/dotfiles/bin/firn-check`, ...args], env: process.env, stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' }).exitCode;
   const runtimeBin = process.env.FIRN_RUNTIME_BIN;
   if (!runtimeBin) {
     process.stderr.write(

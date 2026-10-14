@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: javascript
-
-config
-  "environment"
-    "systemPackages": [pkgs.bun]
-"enable": "Bun JavaScript runtime and package manager"

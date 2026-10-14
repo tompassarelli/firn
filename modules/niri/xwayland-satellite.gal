@@ -1,2 +1,0 @@
-config
-  environment.systemPackages: [pkgs.unstable.xwayland-satellite]

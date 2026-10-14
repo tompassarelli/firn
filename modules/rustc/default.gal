@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: rust
-
-config
-  "environment"
-    "systemPackages": [pkgs.unstable.rustc]
-"enable": "Rust compiler"

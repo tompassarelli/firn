@@ -118,7 +118,7 @@ export function loadModules(bridge: any, root: string): ModulesLoadResult {
       if ((status === 0)) {
         return { _tag: "ModulesLoaded" as const, modules: modulesFromFacts(bridge, bridge.value(result), names) };
       }
-      return { _tag: "ModulesRejected" as const, message: ("" + "firn: cannot load module tags through galileo query: " + bridge.moduleFactsMessage(result) + "\n") };
+      return { _tag: "ModulesRejected" as const, message: ("" + "firn: cannot load module tags from metadata: " + bridge.moduleFactsMessage(result) + "\n") };
     }
   }
 }
@@ -194,7 +194,7 @@ function readHostFacts(bridge: any, root: string): HostFactsLoadResult {
   if ((bridge.status(result) === 0)) {
     return { _tag: "HostFactsLoaded" as const, facts: bridge.value(result) };
   }
-  return { _tag: "HostFactsRejected" as const, message: ("" + "firn: cannot load host tags through galileo query: " + bridge.moduleFactsMessage(result) + "\n") };
+  return { _tag: "HostFactsRejected" as const, message: ("" + "firn: cannot load host tags from metadata: " + bridge.moduleFactsMessage(result) + "\n") };
 }
 
 export function loadHost(bridge: any, root: string, host: string): HostLoadResult {
@@ -309,7 +309,7 @@ function executeEffects(bridge: any, root: string, outcome: driver.TagResolveOut
       if ((status === 0)) {
         return executeEffects(bridge, root, outcome, (index + 1));
       }
-      return emitIoError(bridge, ("" + "firn tag resolve: galileo build '" + relative + "' exited " + status + "\n"));
+      return emitIoError(bridge, ("" + "firn tag resolve: Nix evaluation '" + relative + "' exited " + status + "\n"));
     }
   }
 }
