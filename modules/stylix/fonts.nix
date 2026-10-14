@@ -1,7 +1,7 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.stylix;
+in
 {
-  config = lib.mkIf config.myConfig.modules.stylix.enable {
-    fonts.fontconfig.enable = true;
-  };
+  config = lib.mkIf cfg.enable { fonts.fontconfig.enable = true; };
 }

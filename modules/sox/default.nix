@@ -1,10 +1,14 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.sox.enable {
-    "environment" = {
-      "systemPackages" = [ pkgs.sox ];
-    };
-  };
-  options."myConfig"."modules"."sox"."enable" = lib.mkEnableOption "Enable SoX audio recording for Claude Code voice mode";
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.sox;
+in
+{
+  options.myConfig.modules.sox.enable =
+    lib.mkEnableOption "Enable SoX audio recording for Claude Code voice mode";
+  config = lib.mkIf cfg.enable { environment.systemPackages = [ pkgs.sox ]; };
 }

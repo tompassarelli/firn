@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: desktop
-
-config
-  "environment"
-    "systemPackages": [pkgs.pavucontrol]
-"enable": "PulseAudio volume control"

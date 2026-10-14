@@ -1,0 +1,10 @@
+{
+  "tags": [
+    "doom-emacs",
+    "rust"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

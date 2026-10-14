@@ -13,14 +13,12 @@ cat >"$scratch/runtime/current/bin/bun" <<'RUNNER'
 printf '%s\n' "$FIRN_REPO"
 RUNNER
 chmod +x "$scratch/runtime/current/bin/bun"
-cp "$repo/config/galileo-revision" "$scratch/runtime/current/galileo-revision"
 export HOME="$scratch/home"
 for checkout in migrated unmigrated explicit home/code/nixos-config/main; do
   mkdir -p "$scratch/$checkout/config"
-  cp "$repo/config/galileo-revision" "$scratch/$checkout/config/galileo-revision"
   git init -q "$scratch/$checkout"
 done
-: >"$scratch/migrated/flake.gal"
+: >"$scratch/migrated/flake.nix"
 : >"$scratch/unmigrated/flake.bnix"
 export FIRN_RUNTIME_ROOT="$scratch/runtime"
 unset FIRN_REPO FIRN_BUN
@@ -33,4 +31,4 @@ cd "$scratch/unmigrated"
 [[ "$("$here/firn" repo diff all)" == "$HOME/code/nixos-config/main" ]] # hardcoded-repo-path:allow
 cd "$scratch/unrelated"
 [[ "$("$here/firn" repo diff all)" == "$HOME/code/nixos-config/main" ]] # hardcoded-repo-path:allow
-printf 'ok: Firn uses the current migrated checkout (flake.gal), explicit override, or main outside a migrated checkout\n'
+printf 'ok: Firn uses the current migrated checkout (flake.nix), explicit override, or main outside a migrated checkout\n'

@@ -120,7 +120,7 @@ export function taggedModuleCount(modules: r.ModuleTags[]): number {
 
 export function renderTagList(modules: r.ModuleTags[]): string {
   const tags: string[] = tagUniverse(modules);
-  const heading: string = ((tags.length === 0) ? "No tags found. Add '<module> is tagged <tag>' facts to modules' default.gal.\n" : ("" + "Tags (" + tags.length + "):\n"));
+  const heading: string = ((tags.length === 0) ? "No tags found. Add '<module> is tagged <tag>' facts to modules' metadata.json.\n" : ("" + "Tags (" + tags.length + "):\n"));
   const body: string = (() => {
     let index: number = 0;
     let result: string = heading;
@@ -142,7 +142,7 @@ export function renderTagShow(module: r.ModuleTags): string {
   const name: string = module.name;
   const defaults: string[] = module.tags;
   const optIns: string[] = module.optIn;
-  return ("" + "module: " + name + "\n" + ":tags         " + ((defaults.length === 0) ? ("" + "(none \u2014 add '" + name + " is tagged <tag>' to modules/" + name + "/default.gal)") : stringJoin(defaults, ", ")) + "\n:tags-opt-in  " + ((optIns.length === 0) ? "(none)" : stringJoin(optIns, ", ")) + "\n");
+  return ("" + "module: " + name + "\n" + ":tags         " + ((defaults.length === 0) ? ("" + "(none \u2014 add '" + name + " is tagged <tag>' to modules/" + name + "/metadata.json)") : stringJoin(defaults, ", ")) + "\n:tags-opt-in  " + ((optIns.length === 0) ? "(none)" : stringJoin(optIns, ", ")) + "\n");
 }
 
 export function modulesWithTag(modules: r.ModuleTags[], tag: string): string[] {
@@ -238,7 +238,7 @@ export function renderTagIndex(modules: r.ModuleTags[]): TagIndexResult {
 }
 
 export function hostFactsPath(host: string): string {
-  return ("" + "hosts/" + host + "/_generated-enables.gal");
+  return ("" + "hosts/" + host + "/tags.json");
 }
 
 export function enablesFact(host: string, tag: string): string {

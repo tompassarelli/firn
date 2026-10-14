@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: doom-emacs
-
-config
-  "environment"
-    "systemPackages": [pkgs.emacs-pgtk]
-"enable": "GNU Emacs editor"

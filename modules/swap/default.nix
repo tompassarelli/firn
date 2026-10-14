@@ -1,30 +1,30 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.swap;
+in
 {
-  config = lib.mkIf config.myConfig.modules.swap.enable {
-    "boot" = {
-      "kernel" = {
-        "sysctl" = {
-          "vm.page-cluster" = 0;
-          "vm.swappiness" = 60;
-          "vm.watermark_boost_factor" = 0;
-          "vm.watermark_scale_factor" = 125;
-        };
+  options.myConfig.modules.swap.enable = lib.mkEnableOption "zram-based compressed swap";
+  config = lib.mkIf cfg.enable {
+    boot = {
+      kernel.sysctl = {
+        "vm.page-cluster" = 0;
+        "vm.swappiness" = 60;
+        "vm.watermark_boost_factor" = 0;
+        "vm.watermark_scale_factor" = 125;
       };
-      "kernelParams" = [ "resume_offset=347227782" ];
-      "resumeDevice" = "/dev/mapper/cryptroot";
+      kernelParams = [ "resume_offset=347227782" ];
+      resumeDevice = "/dev/mapper/cryptroot";
     };
-    "swapDevices" = [
+    swapDevices = [
       {
-        "device" = "/swap/swapfile";
-        "priority" = 0;
+        device = "/swap/swapfile";
+        priority = 0;
       }
     ];
-    "zramSwap" = {
-      "algorithm" = "zstd";
-      "enable" = true;
-      "memoryPercent" = 50;
+    zramSwap = {
+      algorithm = "zstd";
+      enable = true;
+      memoryPercent = 50;
     };
   };
-  options."myConfig"."modules"."swap"."enable" = lib.mkEnableOption "zram-based compressed swap";
 }

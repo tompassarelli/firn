@@ -1,0 +1,151 @@
+{
+  "platform": "linux",
+  "enables": [
+    "auth",
+    "browsers",
+    "cli-tools",
+    "communication",
+    "creative",
+    "database",
+    "desktop",
+    "development",
+    "doom-emacs",
+    "gaming",
+    "javascript",
+    "lisp",
+    "media",
+    "notes",
+    "office",
+    "python",
+    "racket",
+    "rust",
+    "terminal",
+    "theming",
+    "vpn",
+    "writing"
+  ],
+  "disables": [
+    "antigravity-cli",
+    "anytype",
+    "blender",
+    "bun",
+    "cargo",
+    "clang",
+    "clippy",
+    "clojure",
+    "dbeaver",
+    "drracket",
+    "gcc",
+    "glide",
+    "mail",
+    "nodejs",
+    "obs-studio",
+    "obsidian",
+    "promptfoo",
+    "racket",
+    "rust-analyzer",
+    "rustc",
+    "rustfmt",
+    "slack",
+    "spotify",
+    "wine",
+    "wowup",
+    "zoom"
+  ],
+  "turnsOn": [
+    "agent-slice",
+    "airplane",
+    "appimage",
+    "auto-upgrade",
+    "bitwarden-desktop",
+    "boot",
+    "capacity-watchdog",
+    "claude",
+    "codex",
+    "codex-runtime",
+    "delivery-liveness",
+    "framework",
+    "framework13-mic",
+    "fwupd",
+    "g203-led",
+    "input",
+    "kanata",
+    "lane-gc",
+    "libsecret",
+    "mini-serve",
+    "musl",
+    "neovim",
+    "networking",
+    "nexus-pull",
+    "nh",
+    "nix-ld",
+    "nix-settings",
+    "parted",
+    "pipewire",
+    "remmina",
+    "swap",
+    "thermal-management",
+    "timezone",
+    "tmp-retention",
+    "users",
+    "vscode",
+    "worker-ledger"
+  ],
+  "turnsOff": [
+    "bluetooth",
+    "glide",
+    "guix",
+    "piper",
+    "ssh",
+    "windows-vm"
+  ],
+  "adds": {
+    "development": [
+      "agent-runtime-update",
+      "alsa-lib",
+      "claude",
+      "laptop-runner",
+      "machine-update",
+      "model-watch",
+      "outside-watch",
+      "procps",
+      "proton-log-watchdog",
+      "socat",
+      "supply-chain-scan",
+      "update-notify",
+      "vast-reaper",
+      "watch-alerts"
+    ],
+    "browsers": [
+      "chrome",
+      "qutebrowser",
+      "zen-browser"
+    ],
+    "desktop": [
+      "river"
+    ],
+    "cli-tools": [
+      "tmux"
+    ]
+  },
+  "drops": {
+    "creative": [
+      "godot"
+    ],
+    "office": [
+      "libreoffice"
+    ],
+    "desktop": [
+      "mako"
+    ],
+    "database": [
+      "postgresql"
+    ],
+    "vpn": [
+      "protonvpn-cli"
+    ],
+    "media": [
+      "youtube-music"
+    ]
+  }
+}

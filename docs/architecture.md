@@ -1,37 +1,25 @@
 # Architecture
 
-- **Module** = atom. One package or service. Lives in
-  `modules/<name>/default.gal` (with a regenerated `default.nix`
-  sibling).
-- **Tags** = composition. A module joins a tag with `<module> is tagged
-  <tag>` (default-on) or `<module> can opt into <tag>` in its `.gal`. A
-  host's `_generated-enables.gal` enables tags and edits them; the resolver
-  unions per-tag memberships and subtracts the host's disables. See
-  [TAGS.md](TAGS.md).
-- **Host** = leaf. `hosts/<host>/configuration.gal` sets options and may
-  turn single modules on or off; `hosts/<host>/_generated-enables.gal`
-  picks the tag set.
+A module owns one package or service in `modules/<name>/default.nix`.
+It declares typed options under `myConfig.modules.<name>` and applies its
+configuration under `lib.mkIf cfg.enable`. Multi-file modules keep option
+and configuration concerns together in that directory.
 
-`firn rebuild` provisionally refreshes local harness inputs, then runs
-`firn repo build` → `firn repo validate` → host-closure build → verified lock commit →
-system switch → tag. Modules auto-discover via the flake's dynamic `imports` — adding a
-module means creating the directory + `.gal`, running `firn repo build`,
-and `git add`-ing both files. No flake edits.
+Module `metadata.json` records tags, opt-in tags, per-tag overrides, platform
+support and required flake inputs. Host `tags.json` records enabled tags,
+additions, drops, disables and direct module choices. The resolver unions
+memberships and applies host edits. The NixOS module system checks the
+resulting options and assertions at evaluation. See [TAGS.md](TAGS.md).
 
-```
-.
-├── flake.gal          source-of-truth flake (Galileo)
-├── flake.nix          generated
-├── modules/  hosts/   .gal source (+ generated .nix siblings)
-├── native/            Firn CLI commands, policies and workflow controllers (TypeScript on Bun `.ts`)
-├── template/          starting point for `nix flake init -t`
-├── dotfiles/  secrets/  assets/
-└── docs/              TAGS.md — composition model
-```
+`flake.nix` owns inputs, overlays and the system constructors. Dynamic imports
+discover module directories. `configuration.nix` owns a host's settings;
+private overlay flakes supply secrets and private host identity.
 
-Both `.gal` and `.nix` are committed because the flake reads from the
-git tree. **Edit the `.gal`** — `firn repo build` overwrites direct `.nix`
-edits.
+The CLI's command tables and workflow controllers live in `native/` and run
+as TypeScript on Bun. `dotfiles/bin/firn` launches that runtime. Configuration
+needs no separate compiler. `firn repo build` resolves composition;
+`firn check` evaluates and lints before a build. `firn rebuild` uses committed
+snapshots, builds the host closure and activates the exact resulting path.
 
-North is promoted independently and reached through `~/.local/share/north/bin/north`;
-Firn owns only the stable launcher, guard wiring, and delivery-liveness entry.
+North is promoted independently through `~/.local/share/north/bin/north`.
+Firn owns its stable launcher, guard wiring and delivery-liveness entry.

@@ -24,11 +24,6 @@ die() {
 }
 
 command -v bun >/dev/null 2>&1 || die "Bun is unavailable"
-command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
-  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
-
-
-
 run_once() {
   local result="$1"
   shift
@@ -80,45 +75,17 @@ make_fixture() {
     "$root/modules/plain" \
     "$root/hosts/$host"
   git init -q -b main "$root"
-  cat >"$root/flake.bnix" <<'EOF'
-#lang beagle/nix
-(ns flake)
-{}
-EOF
-  mkdir -p "$root/config"
-  cat >"$root/config/tags.gal" <<'EOF'
-use firn/tags
+  for module in alpha beta delta epsilon gamma plain; do
+    printf '{ ... }: {}\n' >"$root/modules/$module/default.nix"
+  done
+  printf '%s\n' '{"tags":["desktop","terminal"]}' >"$root/modules/alpha/metadata.json"
+  printf '%s\n' '{"tags":["desktop"]}' >"$root/modules/beta/metadata.json"
+  printf '%s\n' '{"optIn":["desktop"]}' >"$root/modules/delta/metadata.json"
+  printf '%s\n' '{"tags":["creative"],"optIn":["desktop"]}' >"$root/modules/epsilon/metadata.json"
+  printf '%s\n' '{"tags":["terminal"]}' >"$root/modules/gamma/metadata.json"
+  printf '%s\n' '{}' >"$root/modules/plain/metadata.json"
+  printf '%s\n' '{"platform":"linux","enables":["desktop","terminal"],"drops":{"desktop":["beta"]},"adds":{"desktop":["delta"]},"disables":["gamma"]}' >"$root/hosts/$host/tags.json"
 
-creative is a Tag
-desktop is a Tag
-terminal is a Tag
-alpha is a Module
-beta is a Module
-delta is a Module
-epsilon is a Module
-gamma is a Module
-plain is a Module
-alpha is tagged desktop
-alpha is tagged terminal
-beta is tagged desktop
-delta can opt into desktop
-epsilon is tagged creative
-epsilon can opt into desktop
-gamma is tagged terminal
-linux is a Platform
-linux allows every module
-EOF
-  cat >"$root/hosts/$host/_generated-enables.gal" <<EOF
-use firn/tags
-
-$host is a Host
-$host runs linux
-$host enables desktop
-$host drops beta from desktop
-$host adds delta to desktop
-$host enables terminal
-$host disables gamma
-EOF
 }
 
 run_native() {
@@ -165,15 +132,15 @@ mutate() {
   local name="$1" expect="$2"
   shift 2
   local root="$scratch/mutation-$name"
-  local facts="$root/hosts/fixture/_generated-enables.gal"
+  local facts="$root/hosts/fixture/tags.json"
   make_fixture "$root"
-  cp "$facts" "$scratch/$name.before.gal"
+  cp "$facts" "$scratch/$name.before.json"
   run_native "$scratch/$name.first" "$root" fixture "$@"
   assert_status "$scratch/$name.first" 0 "$name first call"
   assert_empty "$scratch/$name.first.err" "$name first stderr"
-  cmp -s "$scratch/$name.before.gal" "$facts" \
+  cmp -s "$scratch/$name.before.json" "$facts" \
     && die "$name reported an update without changing bytes"
-  cp "$facts" "$scratch/$name.after.gal"
+  cp "$facts" "$scratch/$name.after.json"
   run_native "$scratch/$name.first-status" "$root" fixture tag status fixture
   assert_status "$scratch/$name.first-status" 0 "$name status after first call"
   run_native "$scratch/$name.second" "$root" fixture "$@"
@@ -186,7 +153,7 @@ mutate() {
     rg -q '^no change to ' "$scratch/$name.second.out" \
       || die "$name repeated call changed facts"
   fi
-  assert_same "$scratch/$name.after.gal" "$facts" "$name repeated bytes"
+  assert_same "$scratch/$name.after.json" "$facts" "$name repeated bytes"
   run_native "$scratch/$name.second-status" "$root" fixture tag status fixture
   assert_status "$scratch/$name.second-status" 0 "$name status after repeated call"
   resolved "$scratch/$name.first-status" >"$scratch/$name.first.set"
@@ -209,21 +176,21 @@ mutate module-enable "alpha delta gamma" module enable gamma
 printf 'tag-family: checking refusal paths\n' >&2
 refusal_root="$scratch/refusal-repo"
 make_fixture "$refusal_root"
-cp "$refusal_root/hosts/fixture/_generated-enables.gal" \
-  "$scratch/refusal.before.gal"
+cp "$refusal_root/hosts/fixture/tags.json" \
+  "$scratch/refusal.before.json"
 run_native "$scratch/module-refusal" "$refusal_root" fixture module enable beta
 assert_status "$scratch/module-refusal" 1 "module enable refusal"
 assert_empty "$scratch/module-refusal.out" "module enable refusal stdout"
-assert_same "$scratch/refusal.before.gal" \
-  "$refusal_root/hosts/fixture/_generated-enables.gal" \
+assert_same "$scratch/refusal.before.json" \
+  "$refusal_root/hosts/fixture/tags.json" \
   "module enable refusal source"
 
 run_native "$scratch/malformed" "$refusal_root" fixture \
   tag opt-in desktop-epsilon
 assert_status "$scratch/malformed" 1 "malformed tag opt-in"
 assert_empty "$scratch/malformed.out" "malformed tag opt-in stdout"
-assert_same "$scratch/refusal.before.gal" \
-  "$refusal_root/hosts/fixture/_generated-enables.gal" \
+assert_same "$scratch/refusal.before.json" \
+  "$refusal_root/hosts/fixture/tags.json" \
   "malformed tag opt-in source"
 
 run_native "$scratch/malformed-missing" "$refusal_root" missing \

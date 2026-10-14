@@ -1,11 +1,20 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.myConfig.modules.nexus-paperclip-notify;
   username = config.myConfig.modules.users.username;
   notify = pkgs.writeShellApplication {
     name = "nexus-paperclip-notify";
-    runtimeInputs = [ pkgs.curl pkgs.jq pkgs.coreutils ];
+    runtimeInputs = [
+      pkgs.curl
+      pkgs.jq
+      pkgs.coreutils
+    ];
     runtimeEnv = {
       PAPERCLIP_API = cfg.apiUrl;
       PAPERCLIP_COMPANY = cfg.company;
@@ -17,46 +26,51 @@ let
     };
     text = builtins.readFile ./nexus-paperclip-notify.sh;
   };
-in {
-  options.myConfig.modules.nexus-paperclip-notify.enable = lib.mkEnableOption "push each new Paperclip item waiting on Tom (questions, confirmations, approvals, blocked issues) to ntfy once, with a deep link";
-  options.myConfig.modules.nexus-paperclip-notify.company = lib.mkOption {
-    type = lib.types.str;
-    description = "Paperclip company id whose attention feed is watched";
-  };
-  options.myConfig.modules.nexus-paperclip-notify.apiUrl = lib.mkOption {
-    type = lib.types.str;
-    default = "http://127.0.0.1:3100";
-    description = "Loopback Paperclip API base";
-  };
-  options.myConfig.modules.nexus-paperclip-notify.linkBase = lib.mkOption {
-    type = lib.types.str;
-    default = "http://10.77.0.1:3100";
-    description = "Paperclip UI base the notification click link points at";
-  };
-  options.myConfig.modules.nexus-paperclip-notify.topic = lib.mkOption {
-    type = lib.types.str;
-    default = "normal";
-    description = "ntfy topic the phone already reads";
+in
+{
+  options.myConfig.modules.nexus-paperclip-notify = {
+    enable = lib.mkEnableOption "push each new Paperclip item waiting on Tom (questions, confirmations, approvals, blocked issues) to ntfy once, with a deep link";
+    company = lib.mkOption {
+      type = lib.types.str;
+      description = "Paperclip company id whose attention feed is watched";
+    };
+    apiUrl = lib.mkOption {
+      type = lib.types.str;
+      default = "http://127.0.0.1:3100";
+      description = "Loopback Paperclip API base";
+    };
+    linkBase = lib.mkOption {
+      type = lib.types.str;
+      default = "http://10.77.0.1:3100";
+      description = "Paperclip UI base the notification click link points at";
+    };
+    topic = lib.mkOption {
+      type = lib.types.str;
+      default = "normal";
+      description = "ntfy topic the phone already reads";
+    };
   };
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ notify ];
-    systemd.services.nexus-paperclip-notify = {
-      description = "Push new Paperclip items waiting on Tom to ntfy";
-      after = [ "ntfy-sh.service" ];
-      serviceConfig = {
-        Type = "oneshot";
-        User = username;
-        StateDirectory = "nexus-paperclip-notify";
-        StateDirectoryMode = "0700";
-        ExecStart = "${notify}/bin/nexus-paperclip-notify";
+    systemd = {
+      services.nexus-paperclip-notify = {
+        description = "Push new Paperclip items waiting on Tom to ntfy";
+        after = [ "ntfy-sh.service" ];
+        serviceConfig = {
+          Type = "oneshot";
+          User = username;
+          StateDirectory = "nexus-paperclip-notify";
+          StateDirectoryMode = "0700";
+          ExecStart = "${notify}/bin/nexus-paperclip-notify";
+        };
       };
-    };
-    systemd.timers.nexus-paperclip-notify = {
-      wantedBy = [ "timers.target" ];
-      timerConfig = {
-        OnBootSec = "1min";
-        OnUnitActiveSec = "30s";
-        AccuracySec = "5s";
+      timers.nexus-paperclip-notify = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "1min";
+          OnUnitActiveSec = "30s";
+          AccuracySec = "5s";
+        };
       };
     };
     security.polkit.extraConfig = ''

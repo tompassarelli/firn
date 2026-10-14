@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: communication
-
-config
-  "environment"
-    "systemPackages": [pkgs.slack]
-"enable": "Slack messaging"

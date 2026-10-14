@@ -8,28 +8,23 @@ cleanup() { rm -rf -- "${scratch:?}"; }
 trap cleanup EXIT
 mkdir -p "$scratch/hosts" "$scratch/modules/sample" "$scratch/config"
 git init -q -b main "$scratch"
-cp "$repo/config/galileo-revision" "$scratch/config/galileo-revision"
-cp "$repo/flake.gal" "$scratch/flake.gal"
-cat >"$scratch/modules/sample/default.gal" <<'SOURCE'
-nix file
-  value
-    answer: 42
-SOURCE
+printf '{ inputs = {}; outputs = _: {}; }\n' >"$scratch/flake.nix"
+printf '{ ... }: { answer = 42; }\n' >"$scratch/modules/sample/default.nix"
 export FIRN_REPO="$scratch"
 "$repo/dotfiles/bin/firn" repo build >"$scratch/build.out"
 "$repo/dotfiles/bin/firn" repo diff all >"$scratch/clean.out"
 mtime="$(stat -c %y "$scratch/modules/sample/default.nix")"
 "$repo/dotfiles/bin/firn" repo build >"$scratch/repeat.out"
 [[ "$(stat -c %y "$scratch/modules/sample/default.nix")" == "$mtime" ]]
-printf 'deliberate output drift\n' >"$scratch/modules/sample/default.nix"
-touch -d '2030-01-01 UTC' "$scratch/modules/sample/default.nix"
+printf '{ deliberate syntax failure\n' >"$scratch/modules/sample/default.nix"
 set +e
-"$repo/dotfiles/bin/firn" repo diff modules/sample >"$scratch/drift.out"
+"$repo/dotfiles/bin/firn" repo diff modules/sample >"$scratch/drift.out" 2>"$scratch/drift.err"
 status=$?
 set -e
-[[ "$status" == 1 ]]
-rg -Fq -- '-deliberate output drift' "$scratch/drift.out"
-[[ "$(<"$scratch/modules/sample/default.nix")" == 'deliberate output drift' ]]
+[[ "$status" != 0 ]]
+rg -Fq 'syntax error' "$scratch/drift.err"
+[[ "$(<"$scratch/modules/sample/default.nix")" == '{ deliberate syntax failure' ]]
+printf '{ ... }: { answer = 42; }\n' >"$scratch/modules/sample/default.nix"
 "$repo/dotfiles/bin/firn" repo build >"$scratch/repair.out"
 "$repo/dotfiles/bin/firn" repo diff all >"$scratch/repaired.out"
 set +e
@@ -37,4 +32,4 @@ set +e
 status=$?
 set -e
 [[ "$status" == 64 ]]
-printf 'ok: real compiler detects newer-output drift, diff is read-only, build repairs it and preserves identical output\n'
+printf 'ok: Nix source validation rejects syntax errors, diff preserves source, and repeated builds preserve identical source\n'

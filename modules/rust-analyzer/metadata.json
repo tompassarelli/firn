@@ -1,0 +1,9 @@
+{
+  "tags": [
+    "rust"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

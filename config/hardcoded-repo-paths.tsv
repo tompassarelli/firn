@@ -5,7 +5,7 @@
 # `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/niri/config.kdl	7
-nixos-config/modules/theme-switcher/default.gal	1
+nixos-config/modules/theme-switcher/default.nix	1
 nixos-config/native/rebuild.ts	1
 north/bin/agents	2
 north/bin/lane-gc-classify.test.sh	17

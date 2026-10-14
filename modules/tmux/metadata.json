@@ -1,0 +1,9 @@
+{
+  "tags": [],
+  "optIn": [
+    "cli-tools"
+  ],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

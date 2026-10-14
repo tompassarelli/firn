@@ -3,7 +3,7 @@ import * as tagDriver from './tag_resolve_driver.ts';
 import * as tagFamily from './tag_resolve_family.ts';
 import * as flakeFamily from './flake_input_family.ts';
 const maxDirectoryEntries: number = 16384;
-const maxCompilerOutputBytes: number = 16777216;
+const maxParserOutputBytes: number = 16777216;
 type InventoryLoadResult = { _tag: "InventoryLoaded"; inventory: build.SourceInventory }
   | { _tag: "InventoryRejected"; message: string };
 
@@ -101,7 +101,7 @@ function runPreparation(bridge: any, root: string): number {
   }
 }
 
-function emitCompilerOutput(bridge: any, stdout: string, stderr: string): number {
+function emitParserOutput(bridge: any, stdout: string, stderr: string): number {
   ((stdout === "") ? 0 : (() => {
     bridge.out(stdout);
     return 0;
@@ -113,58 +113,18 @@ function emitCompilerOutput(bridge: any, stdout: string, stderr: string): number
   return 0;
 }
 
-function galileoBinary(bridge: any): string {
-  const runtime: string | null = bridge.env("FIRN_RUNTIME_BIN");
-  if (((runtime !== null) && (bridge.status(bridge.pathKind(("" + runtime + "/galileo"))) === 0))) {
-    return ("" + runtime + "/galileo");
-  }
-  return "galileo";
-}
-
-function runGalileoBuild(bridge: any, root: string, argumentsValue: string[]): number {
-  const capture: any = bridge.runCapture([...["env", "-C", root, galileoBinary(bridge), "build", "--layout", "idiomatic"], ...argumentsValue], maxCompilerOutputBytes);
-  const errno: number = bridge.status(capture);
-  if ((!(errno === 0))) {
-    return emitError(bridge, ("" + "firn-build: cannot start galileo build: errno " + errno + "\n"));
-  }
-  const result: any = bridge.value(capture);
-  const status: number = bridge.exitStatus(result);
-  emitCompilerOutput(bridge, bridge.stdout(result), bridge.stderr(result));
-  if ((status === 0)) {
-    return 0;
-  }
-  return emitError(bridge, ("" + "firn-build: galileo build exited " + status + "\n"));
-}
-
-function removeObsoleteOutput(bridge: any, root: string, relative: string): number {
-  const errno: number = bridge.removeFile(absolutePath(root, relative));
-  if (((errno === 0) || (errno === 2))) {
-    return 0;
-  }
-  return emitError(bridge, build.errnoMessage("cannot remove obsolete output", relative, errno));
-}
-
-function removeObsoleteOutputs(bridge: any, root: string, paths: string[], index: number): number {
-  if ((index >= paths.length)) {
-    return 0;
-  }
-  const status: number = removeObsoleteOutput(bridge, root, paths[index]);
-  if ((status === 0)) {
-    return removeObsoleteOutputs(bridge, root, paths, (index + 1));
-  }
-  return status;
+function runNixCheck(bridge: any, root: string, paths: string[]): number {
+  const capture = bridge.runCapture(['env', '-C', root, 'nix-instantiate', '--parse', ...paths], maxParserOutputBytes);
+  if (bridge.status(capture) !== 0) return emitError(bridge, `firn-build: cannot start Nix parser: errno ${bridge.status(capture)}\n`);
+  const result = bridge.value(capture);
+  if (bridge.exitStatus(result) !== 0) emitParserOutput(bridge, bridge.stdout(result), bridge.stderr(result));
+  return bridge.exitStatus(result);
 }
 
 function executePlan(bridge: any, root: string, plan: build.RepoBuildPlan): number {
   const sources: build.SourceState[] = plan.sources;
-  const compileStatus: number = runGalileoBuild(bridge, root, []);
-  if ((!(compileStatus === 0))) {
-    return compileStatus;
-  }
-  const cleanupStatus: number = removeObsoleteOutputs(bridge, root, plan.obsoleteOutputs, 0);
-  if ((!(cleanupStatus === 0))) {
-    return cleanupStatus;
-  }
+  const parseStatus = sources.length === 0 ? 0 : runNixCheck(bridge, root, sources.map(source => source.relative));
+  if (parseStatus !== 0) return parseStatus;
   ((sources.length === 0) ? bridge.out("firn-build: nothing to rebuild.\n") : 0);
   return 0;
 }
@@ -199,7 +159,7 @@ function runDiff(bridge: any, root: string, target: string): number {
         bridge.out("firn diff: 0 checked\n");
         return 1;
       }
-      const status: number = runGalileoBuild(bridge, root, [...["--check"], ...((target === "all") ? [] : selected)]);
+      const status: number = runNixCheck(bridge, root, selected);
       bridge.out(("" + "firn diff: " + selected.length + " checked, " + ((status === 0) ? "clean" : "differing or failed") + "\n"));
       return status;
     }

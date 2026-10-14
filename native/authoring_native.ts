@@ -9,7 +9,7 @@ export interface AuthoringBridge {
   writeTextAtomic(path: string, text: string): HostResult;
   listDirectoryBounded(path: string, limit: number): HostResult;
   runInherit(argv: string[]): number;
-  runGalileo(root: string, argv: string[]): number;
+  runNix(root: string, argv: string[]): number;
   out(text: string): void;
   err(text: string): void;
 }
@@ -52,10 +52,8 @@ function runScaffold(bridge: AuthoringBridge, root: string, action: AuthoringAct
     if (write.tag === 'error') return emitError(bridge, errnoMessage('cannot write', target.relative, write.errno));
   }
   const files = plan.targets.map(target => target.relative);
-  const checked = bridge.runGalileo(root, ['check', ...files]);
-  if (checked !== 0) return childStatus(bridge, 'galileo', checked);
-  const built = bridge.runGalileo(root, ['build', '--layout', 'idiomatic', ...files]);
-  if (built !== 0) return childStatus(bridge, 'galileo', built);
+  const checked = bridge.runNix(root, files.filter(file => file.endsWith('.nix')));
+  if (checked !== 0) return childStatus(bridge, 'nix-instantiate', checked);
   const staged = bridge.runInherit(['git', '-C', root, 'add', '--', ...plan.targets.map(target => path(root, target.relative))]);
   if (staged !== 0) return childStatus(bridge, 'git', staged);
   bridge.out(plan.success_output);

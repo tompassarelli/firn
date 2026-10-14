@@ -1,10 +1,13 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.fwupd.enable {
-    "environment" = {
-      "systemPackages" = [ pkgs.fwupd ];
-    };
-  };
-  options."myConfig"."modules"."fwupd"."enable" = lib.mkEnableOption "fwupd firmware updater";
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.fwupd;
+in
+{
+  options.myConfig.modules.fwupd.enable = lib.mkEnableOption "fwupd firmware updater";
+  config = lib.mkIf cfg.enable { environment.systemPackages = [ pkgs.fwupd ]; };
 }

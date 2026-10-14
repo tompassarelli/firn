@@ -1,0 +1,13 @@
+{
+  "tags": [
+    "theming"
+  ],
+  "optIn": [],
+  "overrides": {
+    "theming": {
+      "myConfig.modules.stylix.chosenTheme": "tokyo-night-dark"
+    }
+  },
+  "supports": [],
+  "flakeInputs": {}
+}

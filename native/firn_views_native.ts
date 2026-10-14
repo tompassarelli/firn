@@ -53,51 +53,29 @@ export function run(argv: string[], host: ViewsHost): number {
       : views.childResult(result.status, result.stdout, result.stderr);
   }
 
-  function galileoBinary(): string {
-    const runtime = host.env('FIRN_RUNTIME_BIN');
-    if (runtime === null || runtime === '') return 'galileo';
-    const candidate = runtime + '/galileo';
-    return host.pathKind(candidate).tag === 'ok' ? candidate : 'galileo';
-  }
-
-  function galileoQuery(galileo: string, question: string): QueryTextResult {
-    const result = host.runCapture(['env', '-C', root!, galileo, 'query', question, '--json'], '', maxChildOutput);
-    if (result.tag === 'error') return { tag: 'QueryTextRejected', message: `firn views: cannot run '${galileo}': errno ${result.errno}\n` };
-    return result.status === 0 ? { tag: 'QueryText', text: result.stdout }
-      : { tag: 'QueryTextRejected', message: result.stderr + `firn views: galileo query '${question}' exited ${result.status}\n` };
-  }
-
-  function queryNames(galileo: string, question: string): views.QueryNamesResult {
-    const result = galileoQuery(galileo, question);
-    if (result.tag === 'QueryTextRejected') return { _tag: 'QueryNamesRejected', message: result.message };
-    const decoded = views.queryNamesFromJson(result.text);
-    return decoded._tag === 'QueryNamesRejected'
-      ? { _tag: 'QueryNamesRejected', message: `firn views: galileo query '${question}': ${decoded.message}\n` } : decoded;
-  }
-
-  function queryRows(galileo: string, question: string): views.QueryRowsResult {
-    const result = galileoQuery(galileo, question);
-    if (result.tag === 'QueryTextRejected') return { _tag: 'QueryRowsRejected', message: result.message };
-    const decoded = views.queryRowsFromJson(result.text);
-    return decoded._tag === 'QueryRowsRejected'
-      ? { _tag: 'QueryRowsRejected', message: `firn views: galileo query '${question}': ${decoded.message}\n` } : decoded;
-  }
-
   function runPlatform(action: views.ViewsAction): number {
-    const galileo = galileoBinary();
-    const modules = queryNames(galileo, 'all ?m where ?m is a Module');
-    if (modules._tag === 'QueryNamesRejected') return emitError(modules.message);
-    const everywhere = queryRows(galileo, 'all ?m, ?p where ?m is a Module and ?p allows every module');
-    if (everywhere._tag === 'QueryRowsRejected') return emitError(everywhere.message);
-    const supported = queryRows(galileo, 'all ?m, ?p where ?m supports ?p');
-    if (supported._tag === 'QueryRowsRejected') return emitError(supported.message);
-    const verdicts = views.platformMatrix(modules.names, [...everywhere.rows, ...supported.rows]);
-    switch (action._tag) {
-      case 'PlatformList': return emitResult(views.renderPlatformList(action.selection, verdicts));
-      case 'PlatformShow': return emitResult(views.renderPlatformShow(action.module, verdicts));
-      case 'PlatformSafelist': return emitResult(views.renderPlatformSafelist(everywhere.rows, supported.rows));
-      default: return emitError('firn views: invalid platform action\n');
-    }
+    const metadata = readText('config/platforms.json', maxJsonBytes, true);
+    if (metadata.tag !== 'TextLoaded') return emitError(metadata.tag === 'TextLoadRejected' ? metadata.message : 'firn views: missing platforms\n');
+    const rows = childResult(['find', root + '/modules', '-mindepth', '2', '-maxdepth', '2', '-name', 'default.nix', '-printf', '%h\n'], '');
+    if (rows.status !== 0) return emitResult(rows);
+    try {
+      const platforms = JSON.parse(metadata.text);
+      const names = rows.stdout.trim().split('\n').filter(Boolean).map(path => path.split('/').at(-1)!).sort();
+      const everywhere: [string, string][] = names.flatMap(module => Object.entries(platforms).filter(([, data]: any) => data.all).map(([platform]) => [module, platform]));
+      const supported: [string, string][] = [];
+      for (const module of names) {
+        const loaded = readText(`modules/${module}/metadata.json`, maxJsonBytes, false);
+        if (loaded.tag === 'TextLoadRejected') return emitError(loaded.message);
+        if (loaded.tag === 'TextLoaded') for (const platform of JSON.parse(loaded.text).supports ?? []) supported.push([module, platform]);
+      }
+      const verdicts = views.platformMatrix(names, [...everywhere, ...supported].map(([module, platform]) => views.platformRow(module, platform)));
+      switch (action._tag) {
+        case 'PlatformList': return emitResult(views.renderPlatformList(action.selection, verdicts));
+        case 'PlatformShow': return emitResult(views.renderPlatformShow(action.module, verdicts));
+        case 'PlatformSafelist': return emitResult(views.renderPlatformSafelist(everywhere.map(([module, platform]) => views.platformRow(module, platform)), supported.map(([module, platform]) => views.platformRow(module, platform))));
+        default: return emitError('firn views: invalid platform action\n');
+      }
+    } catch (error) { return emitError(`firn views: invalid platform metadata: ${error}\n`); }
   }
 
   const parsed = views.parseViewsArgv(argv, '');
@@ -132,7 +110,34 @@ export function run(argv: string[], host: ViewsHost): number {
     case 'SchemaExplain': {
       const option = views.extractOptionPath(action.input);
       if (option === null) return emitError(`firn schema explain: couldn't extract an option path from: ${action.input}\n`);
-      return emitResult(childResult(['env', '-C', root, galileoBinary(), 'schema', 'explain', option, '--schema', root + '/.firn-cache/schema.json'], ''));
+      const cache = readText('.firn-cache/schema.json', maxJsonBytes, false);
+      if (cache.tag === 'TextLoadRejected') return emitError(cache.message);
+      if (cache.tag === 'TextLoaded') {
+        try {
+          const entries = JSON.parse(cache.text), entry = entries.find(row => row.name === option);
+          if (entry) {
+            host.out(`path:  ${option}\ntype:  ${entry.t}\nDefault: ${JSON.stringify(entry.default ?? '<not cached>')}\n${entry.description ?? ''}\nDeclarations:\n${(entry.declarations ?? []).map(path => '  ' + path + '\n').join('')}`);
+            const refs = childResult(['rg', '-n', '--fixed-strings', '--glob', '*.nix', '--glob', '*.json', '--', option, root + '/modules', root + '/hosts', root + '/config'], '');
+            if (refs.status === 0) host.out('References:\n' + refs.stdout);
+            return 0;
+          }
+          const prefix = option.slice(0, option.lastIndexOf('.') + 1);
+          host.err(`firn schema explain: unknown option ${option}\n` + entries.filter(row => row.name.startsWith(prefix)).sort((a, b) => Number(b.name.startsWith(option)) - Number(a.name.startsWith(option)) || a.name.localeCompare(b.name)).slice(0, 8).map(row => '  ' + row.name + '\n').join(''));
+          return 1;
+        } catch (error) { return emitError(`firn schema explain: invalid schema cache: ${error}\n`); }
+      }
+      const hostName = host.env('FIRN_HOST') ?? 'whiterabbit';
+      const expression = `options: let path = builtins.fromJSON ${JSON.stringify(JSON.stringify(option.split('.')))}; walk = names: value: if names == [] then value else walk (builtins.tail names) value.\${builtins.head names}; entry = walk path options; in { type = entry.type.description or entry.type.name; description = entry.description or ""; declarations = map builtins.toString (entry.declarations or []); default = if entry ? default then (let attempt = builtins.tryEval (builtins.toJSON entry.default); in if attempt.success then builtins.fromJSON attempt.value else "<unevaluated>") else "<none>"; }`;
+      const result = childResult(['nix', 'eval', '--json', `path:${root}#nixosConfigurations.${hostName}.options`, '--apply', expression], '');
+      if (result.status !== 0) return emitResult(result);
+      try {
+        const entry = JSON.parse(result.stdout);
+        host.out(`${option}\nType: ${entry.type}\nDefault: ${JSON.stringify(entry.default)}\n${typeof entry.description === 'string' ? entry.description : JSON.stringify(entry.description)}\nDeclarations:\n${entry.declarations.map(path => '  ' + path + '\n').join('')}`);
+      } catch (error) { return emitError(`firn schema explain: invalid option metadata: ${error}\n`); }
+      const refs = childResult(['rg', '-n', '--fixed-strings', '--glob', '*.nix', '--glob', '*.json', '--', option, root + '/modules', root + '/hosts', root + '/config'], '');
+      if (refs.status > 1) return emitResult(refs);
+      if (refs.stdout !== '') host.out('References:\n' + refs.stdout);
+      return 0;
     }
     case 'HostGeneration': return emitResult(views.renderHostGeneration(childResult(['nixos-rebuild', 'list-generations'], '')));
   }

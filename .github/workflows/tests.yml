@@ -18,7 +18,7 @@ jobs:
       matrix:
         include:
           - {suite: runtime, shard: 0, name: runtime}
-          - {suite: drift, shard: 0, name: drift}
+          - {suite: check, shard: 0, name: check}
           - {suite: discovered, shard: 0, name: discovered 1/2}
           - {suite: discovered, shard: 1, name: discovered 2/2}
     runs-on: ubuntu-latest
@@ -35,25 +35,17 @@ jobs:
       - name: Read setup identities
         id: setup
         run: |
-          echo "galileo=$(cat firn/config/galileo-revision)" >> "$GITHUB_OUTPUT"
-          nix flake metadata nixpkgs --json > "$RUNNER_TEMP/test-tools-lock.json"
-          echo "tools-url=$(jq -r .url "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
-          tools_key=$(jq -r .locked.narHash "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
+          nix flake metadata ./firn --json > "$RUNNER_TEMP/test-tools-lock.json"
+          echo "tools-url=$(jq -r '.locks.nodes.nixpkgs.locked | "github:" + .owner + "/" + .repo + "/" + .rev' "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
+          tools_key=$(jq -r .locks.nodes.nixpkgs.locked.narHash "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
           echo "tools-key=$tools_key" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout galileo
-        uses: actions/checkout@v4
-        with:
-          repository: tompassarelli/galileo
-          ref: ${{ steps.setup.outputs.galileo }}
-          path: galileo
 
       - name: Cache test tools
         id: tools-cache
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/test-tools
-          key: tools-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.tools-key }}
+          key: tools-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.tools-key }}
 
       - name: Install test tools
         if: steps.tools-cache.outputs.cache-hit != 'true'
@@ -62,6 +54,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/test-tools"
           nix build --no-link --print-out-paths "$TOOLS_URL#bun" "$TOOLS_URL#ripgrep" "$TOOLS_URL#jq" \
+            "$TOOLS_URL#statix" "$TOOLS_URL#deadnix" "$TOOLS_URL#nixfmt" \
             > "$RUNNER_TEMP/test-tools/paths"
           mapfile -t tools < "$RUNNER_TEMP/test-tools/paths"
           mapfile -t closure < <(nix-store --query --requisites "${tools[@]}")
@@ -84,17 +77,16 @@ jobs:
           path: |
             ${{ runner.temp }}/firn-runtime
             ${{ runner.temp }}/firn-runtime-closure.nar
-          key: runtime-repo-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.tools-key }}-${{ hashFiles('firn/native/**', 'firn/config/galileo-revision', 'firn/dotfiles/bin/firn-runtime-update') }}
+          key: runtime-repo-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.setup.outputs.tools-key }}-${{ hashFiles('firn/native/**', 'firn/dotfiles/bin/firn-runtime-update') }}
 
       - name: Install firn user runtime
         if: matrix.suite != 'runtime' && steps.runtime-cache.outputs.cache-hit != 'true'
         working-directory: firn
         env:
-          FIRN_GALILEO_REPO: ${{ github.workspace }}/galileo
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
         run: |
           FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn-runtime-update" repo
-          mapfile -t roots < <(awk -F= '/^(bun_store_path|galileo_runtime_dependency)=\/nix\/store\// {print $2}' \
+          mapfile -t roots < <(awk -F= '/^bun_store_path=\/nix\/store\// {print $2}' \
             "$FIRN_RUNTIME_ROOT/current/manifest")
           mapfile -t closure < <(nix-store --query --requisites "${roots[@]}")
           nix-store --export "${closure[@]}" > "$RUNNER_TEMP/firn-runtime-closure.nar"
@@ -103,23 +95,17 @@ jobs:
         if: matrix.suite != 'runtime'
         run: nix-store --import < "$RUNNER_TEMP/firn-runtime-closure.nar" > /dev/null
 
-      - name: Drift check (.bnix and .nix in sync)
-        if: matrix.suite == 'drift'
+      - name: Check Nix before building
+        if: matrix.suite == 'check'
         working-directory: firn
         env:
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
-        run: |
-          FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn" repo build
-          if ! git diff --exit-code; then
-            echo "::error::Generated .nix files don't match .bnix sources. Run 'firn repo build' locally and commit."
-            exit 1
-          fi
+        run: FIRN_REPO="$PWD" "$PWD/dotfiles/bin/firn" check
 
       - name: Discovered shell tests
-        if: matrix.suite != 'drift'
+        if: matrix.suite != 'check'
         working-directory: firn
         env:
-          FIRN_GALILEO_REPO: ${{ github.workspace }}/galileo
           FIRN_RUNTIME_ROOT: ${{ runner.temp }}/firn-runtime
           FIRN_REAL_REPO: ${{ github.workspace }}/firn
           FIRN_TEST_SUITE: ${{ matrix.suite }}
@@ -130,7 +116,6 @@ jobs:
           export FIRN_BUN
           skip=(
             modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
-            native/authoring_native.test.sh # needs the private Galileo compiler; public firn CI cannot check it out
           )
           mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | LC_ALL=C sort)
           status=0

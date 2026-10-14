@@ -1,28 +1,27 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.ghostty.enable {
-    "home-manager" = {
-      "users" = {
-        ${config.myConfig.modules.users.username} = {
-          "programs" = {
-            "ghostty" = {
-              "enable" = true;
-              "package" = if pkgs.stdenv.hostPlatform.isDarwin then builtins.null else pkgs.unstable.ghostty;
-              "settings" = {
-                "app-notifications" = "no-clipboard-copy";
-                "async-backend" = "epoll";
-                "command" = "/run/current-system/sw/bin/bash";
-                "keybind" = [ "ctrl+z=text:\\x1f" ];
-                "window-padding-x" = 6;
-                "window-padding-y" = 4;
-                "working-directory" = "home";
-              };
-            };
-          };
-        };
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.ghostty;
+in
+{
+  options.myConfig.modules.ghostty.enable = lib.mkEnableOption "Ghostty terminal";
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${config.myConfig.modules.users.username}.programs.ghostty = {
+      enable = true;
+      package = if pkgs.stdenv.hostPlatform.isDarwin then builtins.null else pkgs.unstable.ghostty;
+      settings = {
+        app-notifications = "no-clipboard-copy";
+        async-backend = "epoll";
+        command = "/run/current-system/sw/bin/bash";
+        keybind = [ "ctrl+z=text:\\x1f" ];
+        window-padding-x = 6;
+        window-padding-y = 4;
+        working-directory = "home";
       };
     };
   };
-  options."myConfig"."modules"."ghostty"."enable" = lib.mkEnableOption "Ghostty terminal";
 }

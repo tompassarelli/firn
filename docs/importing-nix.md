@@ -1,9 +1,7 @@
 # Importing existing Nix
 
-To convert hand-written `.nix` to a Galileo module:
-
-```bash
-galileo import nix file.nix > default.gal
-```
-
-Review the output, then run `firn repo build` and `firn repo validate`.
+Use an existing NixOS module directly. Place it in its own module directory,
+declare its typed enable option and guard the configuration with
+`lib.mkIf config.myConfig.modules.<name>.enable`. The flake discovers module
+directories automatically. Add composition metadata only when tags or
+platform support are needed, then run `firn repo build` and `firn check`.

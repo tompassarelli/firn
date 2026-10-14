@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: vpn
-
-config
-  "environment"
-    "systemPackages": [pkgs.protonvpn-cli]
-"enable": "ProtonVPN CLI client"

@@ -1,78 +1,136 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   cfg = config.myConfig.modules.nexus-hardening;
-  wgAddress = cfg.wgAddress;
+  inherit (cfg) wgAddress;
   wgInterface = "wg-nexus";
   creds = " -p wa -k nexus-creds";
-  upgradeFlake = config.myConfig.modules.nexus-hardening.upgradeFlake;
-in {
-  options.myConfig.modules.nexus-hardening.enable = lib.mkEnableOption "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection";
-  options.myConfig.modules.nexus-hardening.upgradeFlake = lib.mkOption {
-    type = lib.types.str;
-    description = "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus";
-  };
-  options.myConfig.modules.nexus-hardening.wgAddress = lib.mkOption {
-    type = lib.types.str;
-    default = "10.77.0.1";
-    description = "wg-nexus address sshd listens on";
-  };
-  options.myConfig.modules.nexus-hardening.publicSsh = lib.mkOption {
-    type = lib.types.bool;
-    default = false;
-    description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
-  };
-  config = lib.mkIf config.myConfig.modules.nexus-hardening.enable {
-    myConfig.modules.ssh.enable = true;
-    myConfig.modules.polkit.enable = true;
-    myConfig.modules.auto-upgrade.enable = true;
-    services.openssh = {
-      openFirewall = false;
-      listenAddresses = if cfg.publicSsh then [ ] else [
-        {
-          addr = wgAddress;
-          port = 22;
-        }
-      ];
-      settings = {
-        PermitRootLogin = "no";
-        AllowUsers = [ username ];
-      };
+  inherit (cfg) upgradeFlake;
+in
+{
+  options.myConfig.modules.nexus-hardening = {
+    enable = lib.mkEnableOption "nexus server hardening: WireGuard-only sshd, nftables, no sudo, auto-upgrade, audit, memory protection";
+    upgradeFlake = lib.mkOption {
+      type = lib.types.str;
+      description = "flake reference the daily auto-upgrade and nexus-upgrade build, e.g. github:OWNER/REPO#nexus";
     };
-    systemd.services.sshd = {
-      wants = [ "network-online.target" ];
-      after = [ "network-online.target" ];
+    wgAddress = lib.mkOption {
+      type = lib.types.str;
+      default = "10.77.0.1";
+      description = "wg-nexus address sshd listens on";
     };
-    networking.nftables.enable = true;
-    networking.firewall = {
-      enable = true;
-      allowPing = true;
-      allowedTCPPorts = lib.mkForce (lib.optional cfg.publicSsh 22);
-      allowedTCPPortRanges = lib.mkForce [ ];
-      allowedUDPPorts = [ 51820 ];
-      interfaces = {
-        ${wgInterface} = {
-          allowedTCPPorts = [ 22 ];
+    publicSsh = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
+    };
+  };
+  config = lib.mkIf cfg.enable {
+    myConfig.modules = {
+      ssh.enable = true;
+      polkit.enable = true;
+      auto-upgrade.enable = true;
+    };
+    services = {
+      openssh = {
+        openFirewall = false;
+        listenAddresses =
+          if cfg.publicSsh then
+            [ ]
+          else
+            [
+              {
+                addr = wgAddress;
+                port = 22;
+              }
+            ];
+        settings = {
+          PermitRootLogin = "no";
+          AllowUsers = [ username ];
         };
       };
-    };
-    security.sudo.enable = false;
-    security.sudo-rs.enable = false;
-    security.polkit.adminIdentities = [ "unix-user:0" ];
-    security.polkit.extraConfig = ''
-      polkit.addRule(function(action, subject) {
-        if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&
-            action.lookup('unit') == 'nexus-upgrade.service' && action.lookup('verb') == 'start') {
-          return polkit.Result.YES;
-        }
-      });
+      journald = {
+        storage = "persistent";
+        extraConfig = ''
+          SystemMaxUse=1G
+          MaxRetentionSec=30day
 
-    '';
+        '';
+      };
+      resolved.settings.Resolve.LLMNR = "false";
+      earlyoom.enable = true;
+    };
+    systemd = {
+      services = {
+        sshd = {
+          wants = [ "network-online.target" ];
+          after = [ "network-online.target" ];
+        };
+        nexus-upgrade = {
+          description = "Run the NixOS auto-upgrade from the upgrade flake now";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${pkgs.systemd}/bin/systemctl start nixos-upgrade.service";
+          };
+        };
+      };
+      tmpfiles.rules = [
+        "d ${homeDir}/.ssh 0700 ${username} users -"
+        "d ${homeDir}/.claude 0700 ${username} users -"
+        "d ${homeDir}/.codex 0700 ${username} users -"
+      ];
+    };
+    networking = {
+      nftables.enable = true;
+      firewall = {
+        enable = true;
+        allowPing = true;
+        allowedTCPPorts = lib.mkForce (lib.optional cfg.publicSsh 22);
+        allowedTCPPortRanges = lib.mkForce [ ];
+        allowedUDPPorts = [ 51820 ];
+        interfaces.${wgInterface}.allowedTCPPorts = [ 22 ];
+      };
+    };
+    security = {
+      sudo.enable = false;
+      sudo-rs.enable = false;
+      polkit = {
+        adminIdentities = [ "unix-user:0" ];
+        extraConfig = ''
+          polkit.addRule(function(action, subject) {
+            if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&
+                action.lookup('unit') == 'nexus-upgrade.service' && action.lookup('verb') == 'start') {
+              return polkit.Result.YES;
+            }
+          });
+
+        '';
+      };
+      audit = {
+        enable = lib.mkDefault true;
+        rules = [
+          "-w /etc/ssh${creds}"
+          "-w ${homeDir}/.ssh${creds}"
+          "-w ${homeDir}/.claude/.credentials.json${creds}"
+          "-w ${homeDir}/.codex/auth.json${creds}"
+          "-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k nexus-privesc"
+        ];
+      };
+      auditd.enable = true;
+    };
     system.autoUpgrade = {
       flake = lib.mkForce upgradeFlake;
-      flags = lib.mkForce [ "--refresh" "--flake ${upgradeFlake}" ];
+      flags = lib.mkForce [
+        "--refresh"
+        "--flake ${upgradeFlake}"
+      ];
       dates = lib.mkForce "19:30";
       allowReboot = lib.mkForce true;
       rebootWindow = {
@@ -80,35 +138,7 @@ in {
         upper = "21:00";
       };
     };
-    systemd.services.nexus-upgrade = {
-      description = "Run the NixOS auto-upgrade from the upgrade flake now";
-      serviceConfig = {
-        Type = "oneshot";
-        ExecStart = "${pkgs.systemd}/bin/systemctl start nixos-upgrade.service";
-      };
-    };
-    services.journald.storage = "persistent";
-    services.journald.extraConfig = ''
-      SystemMaxUse=1G
-      MaxRetentionSec=30day
-
-    '';
     users.allowNoPasswordLogin = true;
-    security.audit.enable = lib.mkDefault true;
-    security.auditd.enable = true;
-    security.audit.rules = [
-      "-w /etc/ssh${creds}"
-      "-w ${homeDir}/.ssh${creds}"
-      "-w ${homeDir}/.claude/.credentials.json${creds}"
-      "-w ${homeDir}/.codex/auth.json${creds}"
-      "-a always,exit -F arch=b64 -S execve -F euid=0 -F auid>=1000 -F auid!=unset -k nexus-privesc"
-    ];
-    services.resolved.settings.Resolve.LLMNR = "false";
-    systemd.tmpfiles.rules = [
-      "d ${homeDir}/.ssh 0700 ${username} users -"
-      "d ${homeDir}/.claude 0700 ${username} users -"
-      "d ${homeDir}/.codex 0700 ${username} users -"
-    ];
     boot.kernel.sysctl = {
       "net.ipv4.ip_nonlocal_bind" = 1;
       "net.ipv4.conf.all.rp_filter" = 1;
@@ -147,6 +177,5 @@ in {
         size = 8192;
       }
     ];
-    services.earlyoom.enable = true;
   };
 }

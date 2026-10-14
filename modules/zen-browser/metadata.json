@@ -1,0 +1,11 @@
+{
+  "tags": [],
+  "optIn": [
+    "browsers"
+  ],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {
+    "zen-browser": "github:0xc000022070/zen-browser-flake"
+  }
+}

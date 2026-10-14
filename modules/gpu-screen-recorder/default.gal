@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: desktop
-
-config
-  "environment"
-    "systemPackages": [pkgs.gpu-screen-recorder]
-"enable": "GPU-accelerated screen recorder (X11 + Wayland; NVENC/VAAPI/V4L2)"

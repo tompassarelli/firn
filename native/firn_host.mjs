@@ -3,20 +3,8 @@
 import { dirname } from 'node:path';
 import { executeRuntime } from './firn_io.mjs';
 
-const runtimeBin = process.env.FIRN_RUNTIME_BIN ?? '';
-const galileo = process.env.FIRN_GALILEO ?? `${runtimeBin}/galileo`;
-const dispatch = process.env.FIRN_GALILEO_DISPATCH ?? `${runtimeBin}/../lib/firn/dispatch.gal`;
-
-function query(question) {
-  const child = Bun.spawnSync({ cwd: dirname(dirname(dirname(dispatch))), cmd: [galileo, 'query', dispatch, question, '--json'], stdout: 'pipe', stderr: 'pipe' });
-  if (child.exitCode !== 0) {
-    process.stderr.write(`firn: galileo query failed\n${new TextDecoder().decode(child.stderr)}`);
-    process.exit(127);
-  }
-  return JSON.parse(new TextDecoder().decode(child.stdout));
-}
-
-const commands = query('all ?order, ?node, ?edge, ?executable, ?arguments, ?required, ?usage, ?summary, ?gap where ?command is number ?order and ?command walks ?node then ?edge and ?command plans ?executable with ?arguments and ?command needs leaf ?required and ?command takes ?usage and ?command is summarized as ?summary after ?gap, sorted by ?order');
+import catalog from './commands.json';
+const { commands, common: commonCommands } = catalog;
 
 const find = (node, edge) => commands.find(c => c.node === node && c.edge === edge);
 const nodeKnown = node => commands.some(c => c.node === node);
@@ -34,13 +22,13 @@ const nodeHelp = node => commands.filter(c => c.node === node)
   .reduce((text, c) => `${text}  firn ${c.node} ${usageOf(c)}\n      ${c.summary}\n`, `Edges on '${node}':\n`);
 
 function fullHelp() {
-  const common = query('all ?order, ?node, ?label, ?summary, ?gap where ?command is common command ?order as ?label summarized as ?summary after ?gap and ?command walks ?node then ?edge, sorted by ?order')
+  const common = commonCommands
     .map(c => `  firn ${c.node} ${c.label}${c.gap}${c.summary}\n`).join('');
   let graph = '';
   for (const node of nodeNames()) {
     graph += `${node}\n` + commands.filter(c => c.node === node).map(c => `  ${usageOf(c)}${c.gap}${c.summary}\n`).join('') + '\n';
   }
-  return `firn — config management with galileo\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host] [--dry-run]  review + build + validate + switch\n  firn rollback <generation>      activate one exact prior generation\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
+  return `firn — Nix configuration management\n\nUsage:\n  firn <node> <edge> [<leaf>]  [<node> <edge> [<leaf>] ...]\n\nOperator shortcuts:\n  firn rebuild [host] [--dry-run]  review + build + validate + switch\n  firn rollback <generation>      activate one exact prior generation\n  firn check                      evaluate, lint and format-check Nix sources\n\nCommon graph commands:\n${common}\nFull graph:\n\n${graph}`;
 }
 
 const prewarm = new Set(['--print-warm-key', '--plan-detached', '--plan-reference-transaction', '--reference-transaction', '--worker']);
@@ -99,6 +87,7 @@ function finish(state) {
 }
 
 export function parseDispatch(args) {
+  if (args[0] === 'check') return args.length === 1 ? { steps: [{ executable: 'firn-check', arguments: [] }] } : error('Usage: firn check\n');
   if ((args[0] === 'rebuild' || (args[0] === 'host' && args[1] === 'rebuild')) && args.includes('--dry-run')) {
     const words = args.filter(word => word !== '--dry-run');
     const leaf = words.slice(words[0] === 'host' ? 2 : 1);

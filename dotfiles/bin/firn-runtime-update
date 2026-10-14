@@ -2,38 +2,30 @@
 set -euo pipefail
 
 firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
-galileo_path="${FIRN_GALILEO_REPO:-$HOME/code/galileo/main}" # hardcoded-repo-path:allow
 runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
 versions="$runtime_root/versions"
 next=""
 scope="${1:-full}"
 
 if [[ "$#" -gt 1 ]]; then
-  printf 'usage: firn-runtime-update [repo|full|galileo]\n' >&2
+  printf 'usage: firn-runtime-update [repo|full]\n' >&2
   exit 64
 fi
 case "$scope" in
-  repo|full|galileo) ;;
+  repo|full) ;;
   *)
     printf 'firn-runtime-update: unknown runtime scope: %s\n' "$scope" >&2
     exit 64
     ;;
 esac
 
-for prerequisite in cmp find git ldd nix nix-store readlink sha256sum tar; do
+for prerequisite in cmp find git nix-store readlink sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
     exit 127
   fi
 done
-galileo_revision="$(cat "$firn_repo/config/galileo-revision")"
-if [[ ! "$galileo_revision" =~ ^[0-9a-f]{40}$ ]] ||
-   [[ "$(git -C "$galileo_path" rev-parse --verify "$galileo_revision^{commit}")" != "$galileo_revision" ]]; then
-  printf 'firn-runtime-update: declared Galileo revision is unavailable: %s\n' \
-    "$galileo_revision" >&2
-  exit 1
-fi
 bun_candidate="${FIRN_BUN:-}"
 if [[ -z "$bun_candidate" && -x "$runtime_root/current/bin/bun" ]]; then
   bun_candidate="$runtime_root/current/bin/bun"
@@ -65,6 +57,7 @@ host_list_source="$firn_repo/native/firn-host-list.ts"
 host_list_os="$firn_repo/native/firn-host-list-os.mjs"
 
 dispatcher_sources=(
+  "$firn_repo/native/commands.json"
   "$dispatcher_bridge"
   "$dispatcher_io"
   "$host_list_source"
@@ -152,7 +145,6 @@ system_policy_sources=(
 system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
 
 case "$scope" in
-  galileo) selected_sources=() ;;
   repo)
     selected_sources=(
       "${dispatcher_sources[@]}"
@@ -218,7 +210,6 @@ manifest="$stage/manifest"
   printf 'format=firn-cli-runtime/v5\n'
   printf 'scope=%s\n' "$scope"
   printf 'firn_revision=%s\n' "$firn_revision"
-  printf 'galileo_revision=%s\n' "$galileo_revision"
   printf 'bun_store_path=%s\n' "${bun_store_path:-copied}"
 } >"$manifest"
 
@@ -253,61 +244,15 @@ record_generated_artifact() {
     "$component" "$relative" "$artifact_id" >>"$manifest"
 }
 
-materialize_galileo() {
-  local dependencies
-  local dependency
-  local store_relative
-  local store_path
-  local policy
-
-  mkdir -p "$galileo_build"
-  git -C "$galileo_path" archive "$galileo_revision" | tar -x -C "$galileo_build"
-  nix develop "path:$galileo_build" --command cargo build --locked --release \
-    --manifest-path "$galileo_build/Cargo.toml" --target-dir "$galileo_build/target" \
-    -p galileo-cli
-  cp -- "$galileo_build/target/release/galileo" "$stage/bin/galileo-core"
-  cp -- "$firn_repo/native/firn-galileo" "$stage/bin/galileo"
-  cp -- "$firn_repo/native/firn-module-lowering" "$stage/bin/firn-module-lowering"
-  cp -- "$firn_repo/native/firn_module_lowering.ts" "$stage/lib/firn-module-lowering.ts"
-  chmod +x "$stage/bin/galileo" "$stage/bin/firn-module-lowering"
-  printf '%s\n' "$galileo_revision" >"$stage/galileo-revision"
-  record_generated_artifact galileo-core bin/galileo-core
-  record_artifact galileo bin/galileo "$firn_repo/native/firn-galileo"
-  record_artifact firn-module-lowering bin/firn-module-lowering "$firn_repo/native/firn-module-lowering"
-  record_artifact firn-module-lowering-source lib/firn-module-lowering.ts "$firn_repo/native/firn_module_lowering.ts"
-  record_artifact galileo-revision galileo-revision "$firn_repo/config/galileo-revision"
-  binaries+=(galileo galileo-core firn-module-lowering)
-  mkdir -p "$stage/lib/firn"
-  for policy in dispatch host-list; do
-    cp -- "$galileo_build/lib/firn/$policy.gal" "$stage/lib/firn/$policy.gal"
-    record_artifact "$policy-policy" "lib/firn/$policy.gal" \
-      "$galileo_build/lib/firn/$policy.gal"
-  done
-
-  dependencies="$(ldd "$stage/bin/galileo-core")"
-  if [[ "$dependencies" == *'not found'* ]]; then
-    printf 'firn-runtime-update: Galileo runtime dependencies are unavailable\n%s\n' \
-      "$dependencies" >&2
-    exit 1
-  fi
-  while IFS= read -r dependency; do
-    store_relative="${dependency#/nix/store/}"
-    store_path="/nix/store/${store_relative%%/*}"
-    galileo_store_paths["$store_path"]=1
-  done < <(printf '%s\n' "$dependencies" | \
-    awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\/nix\/store\//) print $i }')
-  for store_path in "${!galileo_store_paths[@]}"; do
-    printf 'galileo_runtime_dependency=%s\n' "$store_path"
-  done | sort >>"$manifest"
-}
-
 materialize_dispatcher() {
+  cp -- "$firn_repo/native/commands.json" "$stage/bin/commands.json"
+  record_artifact commands bin/commands.json "$firn_repo/native/commands.json"
   cp -- "$dispatcher_bridge" "$stage/bin/firn-host.mjs"
-  cp -- "$dispatcher_io" "$stage/bin/firn-io.mjs"
+  cp -- "$dispatcher_io" "$stage/bin/firn_io.mjs"
   cp -- "$host_list_source" "$stage/bin/firn-host-list.ts"
   cp -- "$host_list_os" "$stage/bin/firn-host-list-os.mjs"
   record_artifact bridge bin/firn-host.mjs "$dispatcher_bridge"
-  record_artifact dispatcher-io bin/firn-io.mjs "$dispatcher_io"
+  record_artifact dispatcher-io bin/firn_io.mjs "$dispatcher_io"
   record_artifact host-list-source bin/firn-host-list.ts "$host_list_source"
   record_artifact host-list-os bin/firn-host-list-os.mjs "$host_list_os"
 }
@@ -337,9 +282,6 @@ materialize_js() {
     prewarm)
       cp -- "$1" "$module"
       record_artifact "$component-source" "lib/$component/$module_relative" "$1"
-      mkdir -p "$stage/lib/firn"
-      cp -- "$2" "$stage/lib/firn/prewarm.gal"
-      record_artifact "$component-policy" lib/firn/prewarm.gal "$2"
       ;;
   esac
   if [[ ! -f "$module" ]]; then
@@ -406,10 +348,7 @@ else
   chmod +x "$stage/bin/bun"
 fi
 record_artifact bun bin/bun "$bun_source"
-declare -A galileo_store_paths=()
-galileo_build="$stage/.galileo-build"
-materialize_galileo
-if [[ "$scope" != galileo ]]; then materialize_dispatcher; fi
+materialize_dispatcher
 case "$scope" in
   repo)
     materialize_js repo-build firn-repo-build repo_build_family.ts \
@@ -432,15 +371,13 @@ case "$scope" in
     materialize_js rebuild firn-rebuild firn_rebuild_family.ts \
       FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
     materialize_js prewarm firn-prewarm prewarm.ts \
-      FIRN_PREWARM_MODULE "$prewarm_bridge" "$prewarm_source" \
-      "$galileo_build/lib/firn/prewarm.gal"
+      FIRN_PREWARM_MODULE "$prewarm_bridge" "$prewarm_source"
     materialize_js system-policy firn-system-policy system_policy_native.ts \
       FIRN_SYSTEM_POLICY_MODULE "$system_policy_bridge" \
       "${system_policy_sources[@]}"
     ;;
 esac
 
-rm -rf -- "${galileo_build:?}"
 read -r bundle_id _ < <(sha256sum "$manifest")
 destination="$versions/$bundle_id"
 if [[ -e "$destination" ]]; then
@@ -501,17 +438,6 @@ if [[ -n "$bun_store_path" ]]; then
       "$bun_store_path" >&2
     exit 1
   fi
-fi
-
-mkdir -p "$destination/.galileo-gcroots"
-for store_path in "${!galileo_store_paths[@]}"; do
-  nix-store --add-root "$destination/.galileo-gcroots/${store_path##*/}" \
-    --indirect --realise "$store_path" >/dev/null
-done
-
-if [[ "$scope" == galileo ]]; then
-  printf 'firn Galileo materialized: %s\n' "$destination/bin/galileo"
-  exit 0
 fi
 
 next="$runtime_root/.current.$$"

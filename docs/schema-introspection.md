@@ -1,11 +1,9 @@
-# Schema introspection
-
-Before adding or changing options, ask the schema:
+# Option introspection
 
 ```bash
-galileo schema explain services.openssh.enable      # path, type and default
-firn schema explain <path-or-validator-error>       # the same through firn
+firn schema explain services.openssh.enable
 ```
 
-This answers "does option X exist?" and "what type does X want?" better than
-grepping `schema.json`.
+Use the selected host's NixOS `options` to inspect types and declarations.
+`firn check` evaluates configured values and assertions. For editor feedback,
+configure nixd or nil; see [verification.md](verification.md).

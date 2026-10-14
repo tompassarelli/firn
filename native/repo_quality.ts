@@ -29,7 +29,7 @@ export function pathBasename(segments: string[]): string {
 }
 
 function qualityTarget(path: string): boolean {
-  return path.endsWith('.gal') && !excludedQualityPath(pathSegments(path));
+  return path.endsWith('.nix') && !excludedQualityPath(pathSegments(path));
 }
 
 function selectQualityTargets(paths: string[]): string[] {

@@ -1,49 +1,56 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.supply-chain-scan;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [
-    pkgs.osv-scanner
-    pkgs.git
-    pkgs.jq
-    pkgs.openssh
-    pkgs.coreutils
-    pkgs.gnugrep
-    pkgs.bash
-  ]}";
-in {
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${
+    lib.makeBinPath [
+      pkgs.osv-scanner
+      pkgs.git
+      pkgs.jq
+      pkgs.openssh
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.bash
+    ]
+  }";
+in
+{
   options.myConfig.modules.supply-chain-scan.enable = lib.mkEnableOption description;
-  config = lib.mkIf config.myConfig.modules.supply-chain-scan.enable {
+  config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.osv-scanner ];
-    home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.supply-chain-scan = {
-        Unit = {
-          Description = description;
-          After = [ "network-online.target" ];
-          OnFailure = [ "update-notify@%n.service" ];
+    home-manager.users.${username} = _: {
+      systemd.user = {
+        services.supply-chain-scan = {
+          Unit = {
+            Description = description;
+            After = [ "network-online.target" ];
+            OnFailure = [ "update-notify@%n.service" ];
+          };
+          Service = {
+            Type = "oneshot";
+            Nice = 10;
+            TimeoutStartSec = "10min";
+            Environment = [ path ];
+            ExecStart = "${homeDir}/.local/share/north/bin/supply-chain-scan";
+          };
         };
-        Service = {
-          Type = "oneshot";
-          Nice = 10;
-          TimeoutStartSec = "10min";
-          Environment = [ path ];
-          ExecStart = "${homeDir}/.local/share/north/bin/supply-chain-scan";
-        };
-      };
-      systemd.user.timers.supply-chain-scan = {
-        Unit = {
-          Description = description;
-        };
-        Timer = {
-          OnCalendar = "*-*-* 07:23:00";
-          Persistent = true;
-        };
-        Install = {
-          WantedBy = [ "timers.target" ];
+        timers.supply-chain-scan = {
+          Unit.Description = description;
+          Timer = {
+            OnCalendar = "*-*-* 07:23:00";
+            Persistent = true;
+          };
+          Install.WantedBy = [ "timers.target" ];
         };
       };
-    });
+    };
   };
 }

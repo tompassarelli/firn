@@ -1,7 +1,12 @@
-{ config, lib, pkgs, ... }:
-
 {
-  config = lib.mkIf config.myConfig.modules.niri.enable {
-    environment.systemPackages = [ pkgs.unstable.xwayland-satellite ];
-  };
+  config,
+  lib,
+  pkgs,
+  ...
+}:
+let
+  cfg = config.myConfig.modules.niri;
+in
+{
+  config = lib.mkIf cfg.enable { environment.systemPackages = [ pkgs.unstable.xwayland-satellite ]; };
 }

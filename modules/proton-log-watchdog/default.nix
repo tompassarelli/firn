@@ -1,37 +1,49 @@
-{ config, lib, pkgs, jobRun, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  jobRun,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.proton-log-watchdog;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Proton debug-log watchdog: PROTON_LOG on Wisp clones wrote ~280 GB per clone at 100+ MB/s and hung the desktop, so strip it from launch.sh and truncate clone steam-*.log over 1 GiB";
-in {
+in
+{
   options.myConfig.modules.proton-log-watchdog.enable = lib.mkEnableOption description;
-  config = lib.mkIf config.myConfig.modules.proton-log-watchdog.enable {
-    home-manager.users.${username} = ({ config, ... }: {
-      systemd.user.services.proton-log-watchdog = {
-        Unit = {
-          Description = description;
+  config = lib.mkIf cfg.enable {
+    home-manager.users.${username} = _: {
+      systemd.user = {
+        services.proton-log-watchdog = {
+          Unit.Description = description;
+          Service = {
+            Type = "oneshot";
+            Environment = [
+              "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                lib.makeBinPath [
+                  pkgs.bash
+                  pkgs.coreutils
+                  pkgs.gnugrep
+                  pkgs.gnused
+                  pkgs.libnotify
+                ]
+              }"
+            ];
+            ExecStart = jobRun "proton-log-watchdog" "${homeDir}/.local/share/firn/bin/proton-log-watchdog";
+          };
         };
-        Service = {
-          Type = "oneshot";
-          Environment = [
-            "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${lib.makeBinPath [ pkgs.bash pkgs.coreutils pkgs.gnugrep pkgs.gnused pkgs.libnotify ]}"
-          ];
-          ExecStart = jobRun "proton-log-watchdog" "${homeDir}/.local/share/firn/bin/proton-log-watchdog";
+        timers.proton-log-watchdog = {
+          Unit.Description = description;
+          Timer = {
+            OnStartupSec = "1min";
+            OnUnitActiveSec = "10min";
+          };
+          Install.WantedBy = [ "timers.target" ];
         };
       };
-      systemd.user.timers.proton-log-watchdog = {
-        Unit = {
-          Description = description;
-        };
-        Timer = {
-          OnStartupSec = "1min";
-          OnUnitActiveSec = "10min";
-        };
-        Install = {
-          WantedBy = [ "timers.target" ];
-        };
-      };
-    });
+    };
   };
 }

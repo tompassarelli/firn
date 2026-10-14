@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: database
-
-config
-  "environment"
-    "systemPackages": [pkgs.sqlite]
-"enable": "SQLite database"

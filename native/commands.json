@@ -1,0 +1,760 @@
+{
+  "commands": [
+    {
+      "arguments": [
+        "flake",
+        "inputs",
+        "all"
+      ],
+      "edge": "inputs",
+      "executable": "firn-views",
+      "gap": "  ",
+      "node": "flake",
+      "order": 1,
+      "required": false,
+      "summary": "List flake inputs: source, age, locked rev, follows, broken-path check.",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "flake-input",
+        "resolve",
+        "emit"
+      ],
+      "edge": "resolve",
+      "executable": "firn-flake-input",
+      "gap": "  ",
+      "node": "flake-input",
+      "order": 2,
+      "required": false,
+      "summary": "synchronize declared module flake inputs",
+      "usage": "emit"
+    },
+    {
+      "arguments": [
+        "host",
+        "prepare"
+      ],
+      "edge": "prepare",
+      "executable": "firn-rebuild",
+      "gap": "   ",
+      "node": "host",
+      "order": 3,
+      "required": false,
+      "summary": "pin, validate, and realize one exact commit without activation",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "host",
+        "activate"
+      ],
+      "edge": "activate",
+      "executable": "firn-rebuild",
+      "gap": "  ",
+      "node": "host",
+      "order": 4,
+      "required": true,
+      "summary": "activate one already-realized exact NixOS toplevel without building",
+      "usage": "<exact-store-path>"
+    },
+    {
+      "arguments": [
+        "host",
+        "rebuild"
+      ],
+      "edge": "rebuild",
+      "executable": "firn-rebuild",
+      "gap": "   ",
+      "node": "host",
+      "order": 5,
+      "required": false,
+      "summary": "plan pins \u2192 build+validate commit snapshot \u2192 switch verified closure \u2192 tag generation",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "host",
+        "rollback"
+      ],
+      "edge": "rollback",
+      "executable": "firn-rebuild",
+      "gap": "  ",
+      "node": "host",
+      "order": 6,
+      "required": true,
+      "summary": "activate one exact prior NixOS system-profile generation",
+      "usage": "<generation>"
+    },
+    {
+      "arguments": [
+        "host",
+        "impact"
+      ],
+      "edge": "impact",
+      "executable": "firn-rebuild",
+      "gap": "  ",
+      "node": "host",
+      "order": 7,
+      "required": false,
+      "summary": "dry-run impact prediction (what will rebuild, estimated time)",
+      "usage": "[<host>]"
+    },
+    {
+      "arguments": [
+        "host",
+        "list",
+        "all"
+      ],
+      "edge": "list",
+      "executable": "firn-inventory",
+      "gap": "         ",
+      "node": "host",
+      "order": 8,
+      "required": false,
+      "summary": "list every host directory under hosts/",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "host",
+        "status"
+      ],
+      "edge": "status",
+      "executable": "firn-inventory",
+      "gap": "    ",
+      "node": "host",
+      "order": 9,
+      "required": false,
+      "summary": "modules enabled by the host configuration",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "host",
+        "gen"
+      ],
+      "edge": "gen",
+      "executable": "firn-views",
+      "gap": "       ",
+      "node": "host",
+      "order": 10,
+      "required": false,
+      "summary": "current and next NixOS generation numbers",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "host",
+        "deploy"
+      ],
+      "edge": "deploy",
+      "executable": "firn-host-deploy",
+      "gap": "    ",
+      "node": "host",
+      "order": 11,
+      "required": true,
+      "summary": "start a remote host's self-upgrade from origin/main and print its revision",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "module",
+        "list",
+        "all"
+      ],
+      "edge": "list",
+      "executable": "firn-inventory",
+      "gap": "  ",
+      "node": "module",
+      "order": 12,
+      "required": false,
+      "summary": "list modules (all, used = enabled somewhere, unused = orphan)",
+      "usage": "all|used|unused"
+    },
+    {
+      "arguments": [
+        "module",
+        "refs"
+      ],
+      "edge": "refs",
+      "executable": "firn-inventory",
+      "gap": "           ",
+      "node": "module",
+      "order": 13,
+      "required": true,
+      "summary": "show which hosts reference a module (direct + via tags)",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "module",
+        "status",
+        "all"
+      ],
+      "edge": "status",
+      "executable": "firn-inventory",
+      "gap": "            ",
+      "node": "module",
+      "order": 14,
+      "required": false,
+      "summary": "modules enabled by the default host",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "module",
+        "add"
+      ],
+      "edge": "add",
+      "executable": "firn-authoring",
+      "gap": "            ",
+      "node": "module",
+      "order": 15,
+      "required": true,
+      "summary": "scaffold and validate a NixOS module",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "module",
+        "enable"
+      ],
+      "edge": "enable",
+      "executable": "firn-tag",
+      "gap": "         ",
+      "node": "module",
+      "order": 16,
+      "required": true,
+      "summary": "remove <name> from :disabled (no module-level force-on)",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "module",
+        "disable"
+      ],
+      "edge": "disable",
+      "executable": "firn-tag",
+      "gap": "        ",
+      "node": "module",
+      "order": 17,
+      "required": true,
+      "summary": "disable a module in the host tags.json",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "platform",
+        "list",
+        "all"
+      ],
+      "edge": "list",
+      "executable": "firn-views",
+      "gap": "  ",
+      "node": "platform",
+      "order": 18,
+      "required": false,
+      "summary": "platform compat overview (all = full matrix; others = filtered)",
+      "usage": "all|darwin|linux"
+    },
+    {
+      "arguments": [
+        "platform",
+        "show"
+      ],
+      "edge": "show",
+      "executable": "firn-views",
+      "gap": "            ",
+      "node": "platform",
+      "order": 19,
+      "required": true,
+      "summary": "compat report for one module",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "platform",
+        "safelist",
+        "all"
+      ],
+      "edge": "safelist",
+      "executable": "firn-views",
+      "gap": "           ",
+      "node": "platform",
+      "order": 20,
+      "required": false,
+      "summary": "print the Darwin module support list",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "repo",
+        "watch",
+        "all"
+      ],
+      "edge": "watch",
+      "executable": "firn-repo-workflow",
+      "gap": "                ",
+      "node": "repo",
+      "order": 21,
+      "required": false,
+      "summary": "validate whenever Nix sources change",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "repo",
+        "diff",
+        "all"
+      ],
+      "edge": "diff",
+      "executable": "firn-repo-build",
+      "gap": "        ",
+      "node": "repo",
+      "order": 22,
+      "required": false,
+      "summary": "validate selected Nix sources without writing them",
+      "usage": "<target>|all"
+    },
+    {
+      "arguments": [
+        "repo",
+        "doctor",
+        "all"
+      ],
+      "edge": "doctor",
+      "executable": "firn-repo-workflow",
+      "gap": "               ",
+      "node": "repo",
+      "order": 23,
+      "required": false,
+      "summary": "repo health check (untracked, stale, schema, orphans, validator)",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "repo",
+        "pin-ancestry",
+        "all"
+      ],
+      "edge": "pin-ancestry",
+      "executable": "firn-repo-workflow",
+      "gap": "         ",
+      "node": "repo",
+      "order": 24,
+      "required": false,
+      "summary": "check first-party input pins against local main ancestry",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "repo",
+        "upgrade",
+        "now"
+      ],
+      "edge": "upgrade",
+      "executable": "firn-repo-workflow",
+      "gap": "      ",
+      "node": "repo",
+      "order": 25,
+      "required": false,
+      "summary": "flake update + schema diff + validate (use dry-run leaf to preview)",
+      "usage": "now|dry-run"
+    },
+    {
+      "arguments": [
+        "repo",
+        "build",
+        "all"
+      ],
+      "edge": "build",
+      "executable": "firn-repo-build",
+      "gap": "              ",
+      "node": "repo",
+      "order": 26,
+      "required": false,
+      "summary": "resolve tags and synchronize module flake inputs",
+      "usage": "[all]"
+    },
+    {
+      "arguments": [
+        "repo",
+        "validate",
+        "all"
+      ],
+      "edge": "validate",
+      "executable": "firn-schema",
+      "gap": "           ",
+      "node": "repo",
+      "order": 27,
+      "required": false,
+      "summary": "lint .nix syntax + validate option paths, types, packages",
+      "usage": "[all]"
+    },
+    {
+      "arguments": [
+        "repo",
+        "lint",
+        "all"
+      ],
+      "edge": "lint",
+      "executable": "firn-repo-workflow",
+      "gap": "               ",
+      "node": "repo",
+      "order": 28,
+      "required": false,
+      "summary": "syntax-check Nix sources",
+      "usage": "[all]"
+    },
+    {
+      "arguments": [
+        "repo",
+        "architecture",
+        "all"
+      ],
+      "edge": "architecture",
+      "executable": "firn-repo-workflow",
+      "gap": "  ",
+      "node": "repo",
+      "order": 29,
+      "required": false,
+      "summary": "render the tracked agent-configuration map; bundle prints the full read",
+      "usage": "all|bundle"
+    },
+    {
+      "arguments": [
+        "schema",
+        "explain"
+      ],
+      "edge": "explain",
+      "executable": "firn-views",
+      "gap": "    ",
+      "node": "schema",
+      "order": 30,
+      "required": true,
+      "summary": "show schema entry + repo references for an option",
+      "usage": "<path>"
+    },
+    {
+      "arguments": [
+        "schema",
+        "extract"
+      ],
+      "edge": "extract",
+      "executable": "firn-schema",
+      "gap": "  ",
+      "node": "schema",
+      "order": 31,
+      "required": false,
+      "summary": "regenerate options schema cache from nix eval",
+      "usage": "[<host>]"
+    },
+    {
+      "arguments": [
+        "secret",
+        "list",
+        "all"
+      ],
+      "edge": "list",
+      "executable": "firn-authoring",
+      "gap": "     ",
+      "node": "secret",
+      "order": 32,
+      "required": false,
+      "summary": "list secret names under secrets/",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "secret",
+        "show"
+      ],
+      "edge": "show",
+      "executable": "firn-authoring",
+      "gap": "  ",
+      "node": "secret",
+      "order": 33,
+      "required": true,
+      "summary": "decrypt and print a secret to stdout",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "secret",
+        "edit"
+      ],
+      "edge": "edit",
+      "executable": "firn-authoring",
+      "gap": "  ",
+      "node": "secret",
+      "order": 34,
+      "required": true,
+      "summary": "open an existing secret in $EDITOR via sops",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "list",
+        "all"
+      ],
+      "edge": "list",
+      "executable": "firn-tag",
+      "gap": "                    ",
+      "node": "tag",
+      "order": 35,
+      "required": false,
+      "summary": "tag universe (sourced from modules' :tags / :tags-opt-in)",
+      "usage": "all"
+    },
+    {
+      "arguments": [
+        "tag",
+        "show"
+      ],
+      "edge": "show",
+      "executable": "firn-tag",
+      "gap": "               ",
+      "node": "tag",
+      "order": 36,
+      "required": true,
+      "summary": "show a module's :tags and :tags-opt-in",
+      "usage": "<module>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "filter"
+      ],
+      "edge": "filter",
+      "executable": "firn-tag",
+      "gap": "                ",
+      "node": "tag",
+      "order": 37,
+      "required": true,
+      "summary": "list modules carrying a tag",
+      "usage": "<tag>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "index",
+        "repo"
+      ],
+      "edge": "index",
+      "executable": "firn-tag",
+      "gap": "           ",
+      "node": "tag",
+      "order": 38,
+      "required": false,
+      "summary": "write .firn-cache/tags.jsonl (or 'stdout' to pipe)",
+      "usage": "repo|stdout"
+    },
+    {
+      "arguments": [
+        "tag",
+        "resolve"
+      ],
+      "edge": "resolve",
+      "executable": "firn-tag",
+      "gap": "  ",
+      "node": "tag",
+      "order": 39,
+      "required": false,
+      "summary": "resolve tag metadata; +emit validates Nix evaluation",
+      "usage": "<host>|all [+emit]"
+    },
+    {
+      "arguments": [
+        "tag",
+        "enable"
+      ],
+      "edge": "enable",
+      "executable": "firn-tag",
+      "gap": "                ",
+      "node": "tag",
+      "order": 40,
+      "required": true,
+      "summary": "add '<host> enables <tag>' to the current host's tags.json",
+      "usage": "<tag>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "disable"
+      ],
+      "edge": "disable",
+      "executable": "firn-tag",
+      "gap": "               ",
+      "node": "tag",
+      "order": 41,
+      "required": true,
+      "summary": "remove a tag's enables, adds and drops facts from the current host's tags.json",
+      "usage": "<tag>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "opt-in"
+      ],
+      "edge": "opt-in",
+      "executable": "firn-tag",
+      "gap": "       ",
+      "node": "tag",
+      "order": 42,
+      "required": true,
+      "summary": "add '<host> adds <module> to <tag>' to tags.json, enabling <tag>",
+      "usage": "<tag>+<module>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "opt-out"
+      ],
+      "edge": "opt-out",
+      "executable": "firn-tag",
+      "gap": "      ",
+      "node": "tag",
+      "order": 43,
+      "required": true,
+      "summary": "add '<host> drops <module> from <tag>' to tags.json, enabling <tag>",
+      "usage": "<tag>+<module>"
+    },
+    {
+      "arguments": [
+        "tag",
+        "status"
+      ],
+      "edge": "status",
+      "executable": "firn-tag",
+      "gap": "               ",
+      "node": "tag",
+      "order": 44,
+      "required": false,
+      "summary": "show the host's tag facts in tags.json + resolved active modules",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "template",
+        "service"
+      ],
+      "edge": "service",
+      "executable": "firn-authoring",
+      "gap": "    ",
+      "node": "template",
+      "order": 45,
+      "required": true,
+      "summary": "scaffold a NixOS service-wrapping module from schema",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "template",
+        "submodule"
+      ],
+      "edge": "submodule",
+      "executable": "firn-authoring",
+      "gap": "  ",
+      "node": "template",
+      "order": 46,
+      "required": true,
+      "summary": "scaffold a module with an option-attrs submodule shape",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "template",
+        "home"
+      ],
+      "edge": "home",
+      "executable": "firn-authoring",
+      "gap": "       ",
+      "node": "template",
+      "order": 47,
+      "required": true,
+      "summary": "scaffold a home-manager-only module",
+      "usage": "<name>"
+    },
+    {
+      "arguments": [
+        "template",
+        "host"
+      ],
+      "edge": "host",
+      "executable": "firn-authoring",
+      "gap": "       ",
+      "node": "template",
+      "order": 48,
+      "required": true,
+      "summary": "scaffold a NixOS host with tags.json",
+      "usage": "<name>"
+    }
+  ],
+  "common": [
+    {
+      "gap": "       ",
+      "label": "build",
+      "node": "repo",
+      "order": 1,
+      "summary": "resolve tags and module flake inputs"
+    },
+    {
+      "gap": "    ",
+      "label": "validate",
+      "node": "repo",
+      "order": 2,
+      "summary": "lint + type/package/path check"
+    },
+    {
+      "gap": "      ",
+      "label": "impact",
+      "node": "host",
+      "order": 3,
+      "summary": "what will rebuild, estimated time"
+    },
+    {
+      "gap": "      ",
+      "label": "doctor",
+      "node": "repo",
+      "order": 4,
+      "summary": "repo health check"
+    },
+    {
+      "gap": "       ",
+      "label": "status",
+      "node": "tag",
+      "order": 5,
+      "summary": "tag facts + resolved active modules"
+    },
+    {
+      "gap": "   ",
+      "label": "enable <t>",
+      "node": "tag",
+      "order": 6,
+      "summary": "add a tag to the current host"
+    },
+    {
+      "gap": "   ",
+      "label": "opt-in <t>+<m>",
+      "node": "tag",
+      "order": 7,
+      "summary": "add +<module> under tag <t>"
+    },
+    {
+      "gap": "   ",
+      "label": "disable <m>",
+      "node": "module",
+      "order": 8,
+      "summary": "add <m> to :disabled (hard off)"
+    },
+    {
+      "gap": "        ",
+      "label": "diff",
+      "node": "repo",
+      "order": 9,
+      "summary": "validate selected Nix sources"
+    }
+  ]
+}

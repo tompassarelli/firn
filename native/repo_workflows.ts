@@ -398,7 +398,7 @@ function upgradePhases(dryRun: boolean): UpgradePhase[] {
 }
 
 function phaseName(phase: UpgradePhase): string {
-  return { UpgradeSnapshot: 'schema snapshot', UpgradeLockUpdate: 'nix flake update', UpgradeSchemaExtract: 'Galileo schema extraction', UpgradeSchemaCompare: 'schema comparison', UpgradeValidate: 'repository validation' }[phase.kind];
+  return { UpgradeSnapshot: 'schema snapshot', UpgradeLockUpdate: 'nix flake update', UpgradeSchemaExtract: 'Nix schema extraction', UpgradeSchemaCompare: 'schema comparison', UpgradeValidate: 'repository validation' }[phase.kind];
 }
 
 function firstUpgradeFailure(results: UpgradePhaseResult[]): UpgradeFailure {
@@ -410,7 +410,7 @@ function firstUpgradeFailure(results: UpgradePhaseResult[]): UpgradeFailure {
 
 function renderUpgradeDryRun(): string {
   return '>> [dry-run] would run: nix flake update --flake <repo>\n'
-    + '>> [dry-run] would run: galileo schema extract for NixOS\n'
+    + '>> [dry-run] would run: firn schema extract for NixOS\n'
     + 'firn upgrade: dry run complete; no files were changed.\n';
 }
 
@@ -426,10 +426,10 @@ function lintProcesses(root: string, tracked: string[]): ProcessBoundary[] {
 function upgradeProcesses(root: string, dryRun: boolean): ProcessBoundary[] {
   if (dryRun) return [];
   return [
-    { kind: 'InheritProcess', phase: 'current Galileo schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
+    { kind: 'InheritProcess', phase: 'current Nix schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
     { kind: 'CaptureToFileProcess', phase: 'schema snapshot', argv: ['cat', rootPath(root, '.firn-cache/schema.json')], stdin: '', maxOutput: 67108864, outputPath: rootPath(root, '.firn-cache/schema.before.json') },
     { kind: 'InheritProcess', phase: 'nix flake update', argv: ['nix', 'flake', 'update', '--flake', root] },
-    { kind: 'InheritProcess', phase: 'Galileo schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
+    { kind: 'InheritProcess', phase: 'Nix schema extraction', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'schema', 'extract'] },
     { kind: 'CompareProcess', phase: 'schema comparison', argv: ['diff', '--unified', rootPath(root, '.firn-cache/schema.before.json'), rootPath(root, '.firn-cache/schema.json')] },
     { kind: 'InheritProcess', phase: 'repository validation', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'repo', 'validate'] },
   ];
@@ -437,7 +437,7 @@ function upgradeProcesses(root: string, dryRun: boolean): ProcessBoundary[] {
 
 function watchProcesses(root: string, ownership: WatchOwnership): ProcessBoundary[] {
   return [
-    { kind: 'InheritProcess', phase: 'watch for repository change', argv: ['timeout', '--foreground', String(ownership.timeoutSeconds), 'inotifywait', '--quiet', '--recursive', '--event', 'close_write,create,delete,move', '--include', '\\.gal$', root] },
+    { kind: 'InheritProcess', phase: 'watch for repository change', argv: ['timeout', '--foreground', String(ownership.timeoutSeconds), 'inotifywait', '--quiet', '--recursive', '--event', 'close_write,create,delete,move', '--include', '\\.(nix|json)$', root] },
     { kind: 'InheritProcess', phase: 'validate changed repository', argv: ['env', `FIRN_REPO=${root}`, 'firn-schema', 'repo', 'validate'] },
   ];
 }

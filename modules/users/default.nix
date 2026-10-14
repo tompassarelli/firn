@@ -1,4 +1,4 @@
-{ lib, ... }:
+_:
 
 {
   imports = [ ./users.nix ];

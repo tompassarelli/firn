@@ -1,16 +1,24 @@
-{ config, lib, pkgs, inputs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  inputs,
+  ...
+}:
 
 let
+  cfg = config.myConfig.modules.quickshell;
   username = config.myConfig.modules.users.username;
   monoFont = config.stylix.fonts.monospace.name;
-in {
+in
+{
   options.myConfig.modules.quickshell.enable = lib.mkEnableOption "Quickshell (Qt6/QML) status bar";
-  config = lib.mkIf config.myConfig.modules.quickshell.enable {
+  config = lib.mkIf cfg.enable {
     environment.systemPackages = [
-      (inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}").default
+      inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}".default
     ];
     users.users.${username}.extraGroups = [ "input" ];
-    home-manager.users.${username} = ({ config, ... }: {
+    home-manager.users.${username} = { config, ... }: {
       systemd.user.services.quickshell = {
         Unit = {
           Description = "Quickshell widget framework";
@@ -19,24 +27,32 @@ in {
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "${(inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}").default}/bin/qs";
+          ExecStart = "${inputs.quickshell.packages."${pkgs.stdenv.hostPlatform.system}".default}/bin/qs";
           Restart = "on-failure";
         };
-        Install = {
-          WantedBy = [ "niri.service" ];
-        };
+        Install.WantedBy = [ "niri.service" ];
       };
       xdg.configFile = {
-        "quickshell/shell.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/shell.qml";
-        "quickshell/Bar.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/Bar.qml";
-        "quickshell/NiriListener.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/NiriListener.qml";
-        "quickshell/BarState.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/BarState.qml";
-        "quickshell/WorkspaceRow.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspaceRow.qml";
-        "quickshell/ActivityState.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/ActivityState.qml";
-        "quickshell/WorkspacePopup.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspacePopup.qml";
-        "quickshell/key-release-monitor.py".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/key-release-monitor.py";
-        "quickshell/LayoutConfig.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/LayoutConfig.qml";
-        "quickshell/NotificationPopup.qml".source = config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/NotificationPopup.qml";
+        "quickshell/shell.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/shell.qml";
+        "quickshell/Bar.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/Bar.qml";
+        "quickshell/NiriListener.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/NiriListener.qml";
+        "quickshell/BarState.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/BarState.qml";
+        "quickshell/WorkspaceRow.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspaceRow.qml";
+        "quickshell/ActivityState.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/ActivityState.qml";
+        "quickshell/WorkspacePopup.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/WorkspacePopup.qml";
+        "quickshell/key-release-monitor.py".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/key-release-monitor.py";
+        "quickshell/LayoutConfig.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/LayoutConfig.qml";
+        "quickshell/NotificationPopup.qml".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/dotfiles/quickshell/NotificationPopup.qml";
         "quickshell/StylixColors.qml".text = with config.lib.stylix.colors; ''
           import QtQuick
 
@@ -62,6 +78,6 @@ in {
 
         '';
       };
-    });
+    };
   };
 }

@@ -1,7 +1,0 @@
-use firn/tags
-
-
-config
-  "environment"
-    "systemPackages": [pkgs.unstable.vscode]
-"enable": "Visual Studio Code (Microsoft build)"

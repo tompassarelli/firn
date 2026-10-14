@@ -73,10 +73,10 @@ const bridge: AuthoringBridge = Object.freeze({
       return child.exitCode ?? 1;
     } catch (error) { return -errnoOf(error); }
   },
-  runGalileo(root, argv) {
+  runNix(root, files) {
     try {
       const child = Bun.spawnSync({
-        cmd: ['galileo', ...argv],
+        cmd: ['nix-instantiate', '--parse', ...files],
         cwd: root,
         env: process.env,
         stdin: 'ignore',

@@ -1,24 +1,9 @@
-import { dirname } from 'node:path';
 type Invalid = { message: string };
 type Owner = { 'worker-pid': number; 'child-pid': number; key: string };
 type Identity = { pid: number; argv: string[] };
 type Snapshot = { repository: string; revision: string; branch: string; host: string; platform: string };
-type Policy = { platform: string; prefix: string; suffix: string; action: string; identity: boolean; same: boolean; success: boolean; cancelled: boolean; bounded: boolean; committed: boolean; updated: boolean; node: string; edge: string };
-
-const runtimeBin = process.env.FIRN_RUNTIME_BIN ?? '';
-const galileo = process.env.FIRN_GALILEO ?? `${runtimeBin}/galileo`;
-const source = process.env.FIRN_GALILEO_PREWARM ?? `${runtimeBin}/../lib/firn/prewarm.gal`;
-function query<T>(question: string): T[] {
-  const child = Bun.spawnSync({ cwd: dirname(dirname(dirname(source))), cmd: [galileo, 'query', source, question, '--json'], stdout: 'pipe', stderr: 'pipe' });
-  if (child.exitCode !== 0) throw new Error(`firn: galileo prewarm query failed\n${new TextDecoder().decode(child.stderr)}`);
-  return JSON.parse(new TextDecoder().decode(child.stdout));
-}
 const build = ['nix', 'build', '--no-link', '--print-out-paths'];
 const detached = ['setsid', '-f', 'nice', '-n', '19', 'ionice', '-c', '3'];
-let policies: Policy[] | undefined;
-function policy(): Policy[] {
-  return policies ??= query<Policy>('all ?platform, ?prefix, ?suffix, ?action, ?identity, ?same, ?success, ?cancelled, ?bounded, ?committed, ?updated, ?node, ?edge where ?policy targets ?platform with prefix ?prefix suffix ?suffix and ?policy chooses lease ?action for identity ?identity same key ?same and ?policy writes stamp for success ?success cancelled ?cancelled bounded ?bounded and ?policy launches hook for committed ?committed updated main ?updated and ?policy recognizes rebuild ?node then ?edge');
-}
 
 function splitDelimited(text: string, delimiter: string): string[] {
   if (text === '') return [];
@@ -38,8 +23,7 @@ function containerMainCandidates(checkout: string, common: string | Invalid): st
 function shortHost(host: string): string { return host.split('.')[0]; }
 function warmSpec(snapshot: Snapshot) {
   const uri = `git+file://${snapshot.repository}?rev=${snapshot.revision}${snapshot.branch === '' ? '' : `&ref=${snapshot.branch}`}`;
-  const target = policy().find(row => row.platform === snapshot.platform)!;
-  const attribute = `${target.prefix}${snapshot.host}${target.suffix}`;
+  const attribute = snapshot.platform === 'darwin' ? `darwinConfigurations.${snapshot.host}.system` : `nixosConfigurations.${snapshot.host}.config.system.build.toplevel`;
   return {uri, attribute, key: `${uri}#${attribute}`};
 }
 function parseLeaseOwner(text: string): Owner | Invalid {
@@ -60,13 +44,13 @@ function supersedePlan(desired: string, current: number, executable: string, rep
   const identity = owner['worker-pid'] !== current
     && matches(worker, owner['worker-pid'], workerArgv(executable, repository, owner.key))
     && matches(child, owner['child-pid'], nixBuildArgv(owner.key));
-  const action = policy().find(row => row.identity === identity && row.same === (desired === owner.key))!.action;
+  const action = !identity ? 'contended' : desired === owner.key ? 'deduplicated' : 'supersede';
   return action === 'supersede' ? {'child-pid': owner['child-pid'], 'worker-pid': owner['worker-pid']}
     : {[action]: action === 'deduplicated' ? desired : owner.key};
 }
 function stampCurrent(stamp: string, key: string): boolean { return stamp.replace(/[\r\n]+$/u, '') === key; }
 function stampPlan(key: string, status: number, cancelled: boolean, size: number, limit: number) {
-  return policy().some(row => row.success === (status === 0) && row.cancelled === cancelled && row.bounded === (size <= limit))
+  return status === 0 && !cancelled && size <= limit
     ? {text: `${key}\n`} : {status};
 }
 function hookPlan(state: string, lines: string[], executable: string, repository: string, key: string) {
@@ -74,12 +58,12 @@ function hookPlan(state: string, lines: string[], executable: string, repository
     const fields = splitDelimited(line, ' ');
     return fields.length === 3 && fields[2] === 'refs/heads/main' && fields[0] !== fields[1] && !/^0+$/u.test(fields[1]);
   });
-  return policy().some(row => row.committed === (state === 'committed') && row.updated === updated)
+  return state === 'committed' && updated
     ? {argv: detachedWorkerArgv(executable, repository, key)} : {state};
 }
 function rebuildArgv(argv: string[]): boolean {
   return argv.some((value, index) => (value === 'firn' || value.endsWith('/firn'))
-    && policy().some(row => argv[index + 1] === row.node && (row.edge === '' || argv[index + 2] === row.edge)));
+    && (argv[index + 1] === 'rebuild' || argv[index + 1] === 'host' && argv[index + 2] === 'rebuild'));
 }
 export {
   containerMainCandidates as 'container-main-candidates', shortHost as 'short-host', warmSpec as 'warm-spec',

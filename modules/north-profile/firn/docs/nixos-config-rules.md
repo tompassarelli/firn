@@ -26,7 +26,7 @@ loop for live tools.
   the bytes. An edit that can safely take effect through reload or restart must
   not require a generation merely to copy those bytes into the store.
 - A rebuild is for a real system-generation change. It is never the delivery
-  channel for North, Galileo, or another hot-loop checkout. A request whose
+  channel for North or another hot-loop checkout. A request whose
   purpose is code adoption identifies a missing promotion/reload channel.
 - Purity applies when publishing a generation: the rebuild consumes a committed
   snapshot and switches the exact verified closure. It does not require the
@@ -133,36 +133,32 @@ global/system edit, say so and commit it — don't leave it dangling in `~`.
 ## Configuration source and module authoring
 
 
-The write interface is Galileo: edit `.gal` sources and run `firn repo build`
-(`galileo build`) to regenerate their sibling `.nix` targets. Never edit a
-generated `.nix`. Both files are committed because the flake reads the Git
-tree. Run `firn repo build` before any Nix build after a `.gal` change.
+Edit ordinary `.nix` sources. Run `firn check` before building: it evaluates
+the flake and every NixOS host derivation, enforces types and assertions,
+then runs statix, deadnix and nixfmt. For editor errors, configure nixd or nil.
+Use `firn schema explain` to inspect an option's type and declarations.
 
-`firn-runtime-update` builds the runtime's `galileo` from the commit in
-`nixos-config:config/galileo-revision`. Ask it for forms, option paths, types
-and users (`galileo help`, `galileo schema explain`, `galileo refs`,
-`galileo query`); never trust a copied inventory.
+Composition lives in module `metadata.json` and host `tags.json`. Run
+`firn repo build` after changing it. The Bun runtime reads those sources;
+Nix evaluates the shared tag resolver directly.
 
 ## Configuration architecture
 
 - Use the `myConfig.modules.*` namespace and keep one package or service per
-  module. Multi-file modules separate option declarations in `default.gal`
-  from guarded configuration in `<name>.gal`.
-- `modules/<name>/default.gal` implies the Module fact. Module sources imply
-  the standard Nix module arguments and enable guard; `tags:` and `enable:`
-  retain tag membership and custom option descriptions. Explicit declarations,
-  argument lists and guards override those defaults.
-- Compose modules only through `firn/tags` facts: `<module> is tagged <tag>`,
-  `<module> can opt into <tag>` and `<tag> sets <path> to <value> for
-  <module>`. Hosts enable tags; explicit host disables subtract from the
-  union. Nothing proxies enablement through a bundle.
+  module. Multi-file modules separate typed option declarations in
+  `default.nix` from configuration guarded by `lib.mkIf cfg.enable`.
+- Use `lib.mkEnableOption` and `lib.mkOption` with the actual NixOS types.
+  State cross-option requirements as NixOS assertions with clear messages.
+- Compose modules through JSON tag membership, opt-ins and overrides.
+  Hosts enable tags; explicit disables subtract from the union. Keep direct
+  module settings in the host's Nix configuration or composition metadata.
 - Add new modules to `whiterabbit` unless the operator names another host.
 - Let the flake's dynamic imports discover a new module directory; do not edit
   the flake to register it.
-- Git-add every new `.gal` and generated `.nix` before evaluation. Untracked
-  files are invisible to Nix flakes.
-- Co-locate flake inputs in the module as `<module> needs flake input "<name>"
-  from "<url>"`; never hand-edit generated input sections in `flake.nix`.
+- Git-add new `.nix` and metadata sources before committed builds. Untracked
+  files are invisible to Git snapshot flakes.
+- Record required inputs in module `metadata.json` and keep `flake.nix`'s
+  inputs and `specialArgs` consistent with them.
 
 ## Dotfiles and commands
 

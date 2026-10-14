@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: tasks
-
-config
-  "environment"
-    "systemPackages": [pkgs.todoist-electron]
-"enable": "Todoist task manager"

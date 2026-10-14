@@ -18,11 +18,11 @@ export function runRoot(bridge: any, root: string): number {
   const before: string = readFlake(bridge, root);
   const buildStatus: number = bridge.runFlakeBuild(root);
   if ((!(buildStatus === 0))) {
-    return emitError(bridge, ("" + "galileo build of flake.gal exited " + buildStatus));
+    return emitError(bridge, ("" + "flake input synchronization exited " + buildStatus));
   }
   const facts: any = bridge.readFlakeInputs(root);
   if ((!(bridge.status(facts) === 0))) {
-    return emitError(bridge, ("" + "cannot read flake inputs through galileo query: " + bridge.moduleFactsMessage(facts)));
+    return emitError(bridge, ("" + "cannot read flake inputs from metadata: " + bridge.moduleFactsMessage(facts)));
   }
   bridge.out(driver.summaryText(driver.inputsFromRows(bridge.value(facts)), (!(before === readFlake(bridge, root)))));
   return 0;

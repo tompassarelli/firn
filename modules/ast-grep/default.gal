@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: cli-tools
-
-config
-  "environment"
-    "systemPackages": [pkgs.ast-grep]
-"enable": "ast-grep structural code search"

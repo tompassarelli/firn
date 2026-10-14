@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: cli-tools
-
-config
-  "environment"
-    "systemPackages": [pkgs.unrar]
-"enable": "unrar archive tool"

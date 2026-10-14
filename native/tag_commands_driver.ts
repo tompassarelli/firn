@@ -358,7 +358,7 @@ export function preloadTagCommand(action: TagCommandAction): TagCommandPreload {
 }
 
 export function moduleEnableRefusal(host: string, module: string): TagCommandOutcome {
-  return stderrOutcome(1, ("" + "firn module enable: no module-level force-on in tag-driven hosts.\n" + "\n" + "  " + module + " has no '" + host + " disables " + module + "' fact, so there is\n" + "  nothing to un-blacklist. To activate it on this host:\n" + "\n" + "    - opt in via a tag:    firn tag opt-in <tag>+" + module + "\n" + "      (where the module can opt into <tag>)\n" + "    - or enable a tag the module is tagged with:\n" + "                            firn tag enable <tag>\n" + "    - or turn it on in hosts/" + host + "/configuration.gal:\n" + "                            " + host + " turns on " + module + "\n"));
+  return stderrOutcome(1, ("" + "firn module enable: no module-level force-on in tag-driven hosts.\n" + "\n" + "  " + module + " has no '" + host + " disables " + module + "' fact, so there is\n" + "  nothing to un-blacklist. To activate it on this host:\n" + "\n" + "    - opt in via a tag:    firn tag opt-in <tag>+" + module + "\n" + "      (where the module can opt into <tag>)\n" + "    - or enable a tag the module is tagged with:\n" + "                            firn tag enable <tag>\n" + "    - or turn it on in hosts/" + host + "/configuration.nix:\n" + "                            " + host + " turns on " + module + "\n"));
 }
 
 export function runIndex(modules: r.ModuleTags[], stdout: boolean): TagCommandOutcome {

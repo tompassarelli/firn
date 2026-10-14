@@ -65,11 +65,6 @@ timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/desktop-action-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/modern-search-guard.sh"
 timeout = 10
 
@@ -107,6 +102,11 @@ timeout = 10
 
 [[hooks.PreToolUse]]
 matcher = "^(Bash|exec_command|functions[.]exec_command)$"
+
+[[hooks.PreToolUse.hooks]]
+type = "command"
+command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/desktop-action-guard.sh"
+timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"

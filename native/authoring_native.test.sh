@@ -23,11 +23,7 @@ die() {
   exit 1
 }
 
-if ! command -v galileo >/dev/null 2>&1; then
-  export PATH="$PATH:${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin"
-fi
-
-for command in bash bun cmp find galileo git nix-instantiate rg timeout; do
+for command in bash bun cmp find git nix-instantiate rg timeout; do
   command -v "$command" >/dev/null 2>&1 \
     || die "missing command: $command"
 done
@@ -136,15 +132,15 @@ run_cli module "$module_log" \
   "$scratch/authoring-native" module add sample-tool
 expect_status module 0
 expect_empty "$scratch/module.err" "module stderr"
-git -C "$fixture" ls-files --error-unmatch modules/sample-tool/default.gal >/dev/null
+git -C "$fixture" ls-files --error-unmatch modules/sample-tool/default.nix >/dev/null
 index_before=$(git -C "$fixture" ls-files --stage)
 
-module_hash="$(sha256sum "$fixture/modules/sample-tool/default.gal")"
+module_hash="$(sha256sum "$fixture/modules/sample-tool/default.nix")"
 run_cli module-again "$module_log" \
   "$scratch/authoring-native" module add sample-tool
 expect_status module-again 1
 expect_empty "$scratch/module-again.out" "repeat module stdout"
-[[ "$(sha256sum "$fixture/modules/sample-tool/default.gal")" == \
+[[ "$(sha256sum "$fixture/modules/sample-tool/default.nix")" == \
    "$module_hash" ]] || die "repeat module changed existing bytes"
 [[ "$(git -C "$fixture" ls-files --stage)" == "$index_before" ]] \
   || die "repeat module changed the index"
@@ -161,7 +157,7 @@ for template in submodule home; do
     "$scratch/authoring-native" template "$template" "$name"
   expect_status "$template" 0
   expect_empty "$scratch/$template.err" "$template stderr"
-  git -C "$fixture" ls-files --error-unmatch "modules/$name/default.gal" >/dev/null
+  git -C "$fixture" ls-files --error-unmatch "modules/$name/default.nix" >/dev/null
 done
 
 host_log="$scratch/host.log"
@@ -170,21 +166,21 @@ run_cli host "$host_log" \
 expect_status host 0
 expect_empty "$scratch/host.err" "host stderr"
 git -C "$fixture" ls-files --error-unmatch \
-  hosts/sample-host/configuration.gal hosts/sample-host/enabled-tags.gal >/dev/null
+  hosts/sample-host/configuration.nix hosts/sample-host/tags.json >/dev/null
 index_before=$(git -C "$fixture" ls-files --stage)
 
 mkdir -p "$fixture/hosts/collision-host"
 printf '%s\n' 'preserve' \
-  >"$fixture/hosts/collision-host/enabled-tags.gal"
+  >"$fixture/hosts/collision-host/tags.json"
 collision_log="$scratch/collision.log"
 run_cli collision "$collision_log" \
   "$scratch/authoring-native" template host collision-host
 expect_status collision 1
 expect_empty "$scratch/collision.out" "collision stdout"
-[[ ! -e "$fixture/hosts/collision-host/configuration.gal" ]] \
+[[ ! -e "$fixture/hosts/collision-host/configuration.nix" ]] \
   || die "host collision created the earlier target"
 [[ "$(git -C "$fixture" ls-files --stage)" == "$index_before" ]] || die "host collision changed the index"
-[[ "$(<"$fixture/hosts/collision-host/enabled-tags.gal")" == preserve ]] \
+[[ "$(<"$fixture/hosts/collision-host/tags.json")" == preserve ]] \
   || die "host collision changed the existing target"
 
 invalid_log="$scratch/invalid-name.log"
@@ -200,24 +196,12 @@ run_cli git-failure "$scratch/git-failure.log" \
   "$scratch/authoring-native" template home git-failure
 expect_status git-failure 128
 expect_empty "$scratch/git-failure.out" "failed git success output"
-[[ -f "$fixture/modules/git-failure/default.gal" ]] || die "git failure lost authored file"
+[[ -f "$fixture/modules/git-failure/default.nix" ]] || die "git failure lost authored file"
 [[ "$(git -C "$fixture" ls-files --stage)" == "$index_before" ]] || die "failed staging changed the index"
 rm "$fixture/.git/index.lock"
 
-printf 'authoring-native: Galileo check/build and intended Nix semantics\n' >&2
-(
-  cd "$fixture"
-  galileo check modules hosts/sample-host >"$scratch/galileo-check.out" 2>"$scratch/galileo-check.err"
-  galileo build --check --layout idiomatic modules hosts/sample-host >"$scratch/galileo-build.out" 2>"$scratch/galileo-build.err"
-) || die "authored Galileo source or generated Nix failed"
-for module_kind in sample-tool openssh sample-submodule sample-home; do
-  [[ -f "$fixture/modules/$module_kind/default.nix" ]] \
-    || die "$module_kind did not generate Nix"
-done
-[[ -f "$fixture/hosts/sample-host/configuration.nix" ]] \
-  || die "host did not generate Nix"
-[[ ! -e "$fixture/hosts/sample-host/enabled-tags.nix" ]] \
-  || die "host facts generated an unintended Nix file"
+printf 'authoring-native: Nix parsing and intended module semantics\n' >&2
+find "$fixture/modules" "$fixture/hosts/sample-host" -name '*.nix' -exec nix-instantiate --parse {} + >"$scratch/nix-parse.out"
 
 check_nix() {
   local relative="$1" enabled="$2" expected="$3"
@@ -266,20 +250,11 @@ for enabled in true false; do
   check_nix modules/sample-submodule/default.nix "$enabled" "$submodule_config"
   check_nix modules/sample-home/default.nix "$enabled" "$home_config"
 done
-(
-  cd "$fixture"
-  galileo query modules hosts/sample-host 'all ?m where ?m is enabled on sample-host' --json
-) >"$scratch/host-enabled.json" || die "host enabled query failed"
 for module_name in boot networking users; do
-  rg -q "\"$module_name\"" "$scratch/host-enabled.json" || die "sample-host does not enable $module_name"
+  rg -q "\"$module_name\"" "$fixture/hosts/sample-host/tags.json" || die "sample-host does not enable $module_name"
 done
-[[ "$(rg -c 'modules\.(boot|networking|users)\.enable = true;' "$fixture/hosts/sample-host/configuration.nix")" == 3 ]] \
-  || die "host configuration does not set its three direct enables"
 check_nix hosts/sample-host/configuration.nix true \
   '{myConfig.modules = {system.stateVersion = "25.11"; users.username = "you"; users.enable = true; boot.enable = true; networking.enable = true;};}'
-[[ "$(nix-instantiate --eval --strict --expr "let m = import $fixture/hosts/sample-host/configuration.nix {config = {}; lib = {}; pkgs = {};}; in map toString m.imports")" == \
-   "[ \"$fixture/hosts/sample-host/_generated-enables.nix\" ]" ]] \
-  || die "host imports changed"
 
 printf 'authoring-native: inherited sops streams and real staging\n' >&2
 printf 'shown\n' >"$fixture/secrets/alpha.yaml"
@@ -339,4 +314,4 @@ run_cli usage "$scratch/usage.log" "$scratch/authoring-native" host gen whiterab
 expect_status usage 64
 expect_empty "$scratch/usage.out" "usage stdout"
 
-printf 'ok: authoring scenarios=%s with real Git and Galileo/Nix checks\n' "$scenario_count"
+printf 'ok: authoring scenarios=%s with real Git and Nix checks\n' "$scenario_count"

@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: development
-
-config
-  "environment"
-    "systemPackages": [pkgs.unstable.antigravity-cli.overrideAttrs({"src": pkgs.fetchurl({"hash": "sha512-q+Pd9c8w062qWGrPUFIhqhlwL1ynGvPIsfmxpZdr2OXBUcQeozs5xBZ10lhDRio+jDgsBU9YDp1+FoiRnTtREA==", "url": "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.3.3-5524738307653632/linux-x64/cli_linux_x64.tar.gz"}), "version": "1.3.3"})]
-"enable": "Antigravity CLI (agy) for free-tier adversarial review"

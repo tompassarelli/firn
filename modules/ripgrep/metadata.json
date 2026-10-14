@@ -1,0 +1,12 @@
+{
+  "tags": [
+    "development",
+    "doom-emacs"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [
+    "darwin"
+  ],
+  "flakeInputs": {}
+}

@@ -1,0 +1,9 @@
+{
+  "tags": [],
+  "optIn": [
+    "browsers"
+  ],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {}
+}

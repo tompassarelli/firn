@@ -26,9 +26,6 @@ die() {
 
 
 
-command -v galileo >/dev/null || [[ -x "${FIRN_RUNTIME_BIN:-}/galileo" ]] \
-  || die "galileo is not on PATH or in FIRN_RUNTIME_BIN"
-
 timeout --foreground 30 bun "$repo/native/flake_input_family_test_host.mjs" \
   >"$scratch/pure.out" 2>"$scratch/driver.err" \
   || die "driver test cases did not all pass"
@@ -37,41 +34,35 @@ module() {
   local root="$1" name="$2"
   shift 2
   mkdir -p "$root/modules/$name"
-  {
-    printf 'use firn/tags\n\n%s is a Module\n' "$name"
-    for url in "$@"; do
-      printf '%s needs flake input %s\n' "$name" "$url"
-    done
-  } >"$root/modules/$name/default.gal"
+  bun - "$root/modules/$name/metadata.json" "$@" <<'JS'
+import {writeFileSync} from 'node:fs';
+const [path,...facts]=process.argv.slice(2), flakeInputs={};
+for (const fact of facts) {
+  const [,name,url] = /^"([^"\n]+)" from "([^"\n]+)"$/.exec(fact);
+  flakeInputs[name]=url;
+}
+writeFileSync(path,JSON.stringify({flakeInputs},null,2)+'\n');
+JS
 }
 
 make_fixture() {
   local root="$1"
   mkdir -p "$root/config"
   git init -q -b main "$root"
-  printf 'use firn/tags\n\ncli-tools is a Tag\n' >"$root/config/tags.gal"
-  module "$root" alpha '"zeta" from "github:zeta/project"' \
-    '"alpha" from "github:alpha/project"'
+  module "$root" alpha '"zeta" from "github:zeta/project"' '"alpha" from "github:alpha/project"'
   module "$root" beta '"zeta" from "github:zeta/project"'
   module "$root" plain
-  cat >"$root/flake.gal" <<'EOF'
-use firn/tags
-
-given flake input ?name: Text follows ?input: Text from ?target: Text
-
-flake input "zeta" follows "nixpkgs" from "nixpkgs"
-
-nix file
-  value
-    inputs
-      nixpkgs
-        url: "github:nixos/nixpkgs/nixos-26.05"
-      for ?name, ?url where ?name flake input url ?url
-        {?name}
-          for ?input, ?target where flake input ?name follows ?input from ?target
-            inputs.{?input}.follows: ?target
-          url: ?url
-    outputs: ({self, nixpkgs, for ?n where ?n flake input url ?_: `{?n}`, ...}) => {lib.mkSystem: nixpkgs.lib.nixosSystem({specialArgs: {inputs: {for ?n where ?n flake input url ?_: {?n}: `{?n}`}}})}
+  cat >"$root/flake.nix" <<'EOF'
+{
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
+    zeta = {
+      url = "github:old/project";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+  outputs = inputs: { inherit inputs; };
+}
 EOF
 }
 
@@ -99,7 +90,10 @@ expected="$repo/docs/fixtures/flake-input-expected.nix"
 emit "$scratch/native" "$native_root"
 [[ "$(<"$scratch/native.status")" == "0" ]] \
   || die "native command failed with status $(<"$scratch/native.status")"
-diff -u "$expected" "$native_root/flake.nix"
+nix-instantiate --eval --strict --json --expr "(import $expected).inputs" >"$scratch/expected.inputs"
+nix-instantiate --eval --strict --json --expr "(import $native_root/flake.nix).inputs" >"$scratch/actual.inputs"
+cmp "$scratch/expected.inputs" "$scratch/actual.inputs"
+cp "$native_root/flake.nix" "$scratch/resolved.nix"
 grep -qx '  zeta (from alpha)' "$scratch/native.out" \
   || die "summary does not name alpha as zeta's first module"
 grep -qx 'flake-inputs: updated flake.nix' "$scratch/native.out" \
@@ -107,7 +101,7 @@ grep -qx 'flake-inputs: updated flake.nix' "$scratch/native.out" \
 
 emit "$scratch/native-second" "$native_root"
 [[ "$(<"$scratch/native-second.status")" == "0" ]] || die "second native run failed"
-cmp -s "$expected" "$native_root/flake.nix" || die "idempotent run changed flake.nix"
+cmp -s "$scratch/resolved.nix" "$native_root/flake.nix" || die "idempotent run changed flake.nix"
 grep -qx 'flake-inputs: flake.nix is up to date' "$scratch/native-second.out" \
   || die "second run did not report up to date"
 
@@ -115,9 +109,9 @@ module "$native_root" beta '"zeta" from "github:other/project"'
 emit "$scratch/conflict" "$native_root"
 [[ "$(<"$scratch/conflict.status")" == "1" ]] || die "conflicting urls did not fail"
 [[ ! -s "$scratch/conflict.out" ]] || die "conflict wrote a summary"
-grep -q 'two values for "zeta"' "$scratch/conflict.err" \
+grep -q "conflicting URLs for 'zeta'" "$scratch/conflict.err" \
   || die "conflict diagnostic does not name zeta"
-cmp -s "$expected" "$native_root/flake.nix" || die "conflict changed flake.nix"
+cmp -s "$scratch/resolved.nix" "$native_root/flake.nix" || die "conflict changed flake.nix"
 
 run_once "$scratch/invalid" env \
   FIRN_FLAKE_INPUT_MODULE="$repo/native/flake_input_family.ts" \
@@ -126,4 +120,4 @@ run_once "$scratch/invalid" env \
   || die "invalid grammar did not return 64"
 [[ ! -s "$scratch/invalid.out" ]] || die "invalid grammar wrote stdout"
 
-printf 'ok: flake-input emit builds flake.gal to the recorded flake.nix, is idempotent and refuses conflicts or invalid input\n'
+printf 'ok: flake-input emit synchronizes the recorded flake input declarations, is idempotent and refuses conflicts or invalid input\n'

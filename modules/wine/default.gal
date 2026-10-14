@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: gaming
-
-config
-  "environment"
-    "systemPackages": [pkgs.wineWowPackages.unstable, pkgs.unstable.winetricks]
-"enable": "Wine (unstable, 32+64-bit)"

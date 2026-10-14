@@ -1,8 +1,0 @@
-use firn/tags
-
-tags: csharp
-
-config
-  "environment"
-    "systemPackages": [pkgs.sqlcmd]
-"enable": "sqlcmd for Microsoft SQL Server"

@@ -1,3 +1,0 @@
-arguments: config, lib, ...
-config
-  fonts.fontconfig.enable: true

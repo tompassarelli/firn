@@ -261,12 +261,12 @@ export function renderPrettyResolution(resolution: r.Resolution): string {
 }
 
 export function generatedPath(host: string): string {
-  return ("" + "hosts/" + host + "/_generated-enables.gal");
+  return ("" + "hosts/" + host + "/tags.json");
 }
 
 export function emitSuccessEffects(resolution: r.Resolution): TagResolveEffect[] {
   const path: string = generatedPath(resolution.host);
-  return [{ _tag: "BuildGenerated" as const, path: path }, { _tag: "StdoutText" as const, text: ("" + "tag-resolve: built " + path + " (" + resolution.active.length + " modules)\n") }];
+  return [{ _tag: "BuildGenerated" as const, path: path }, { _tag: "StdoutText" as const, text: ("" + "tag-resolve: evaluated " + path + " (" + resolution.active.length + " modules)\n") }];
 }
 
 export function withActive(resolution: r.Resolution, active: string[]): r.Resolution {

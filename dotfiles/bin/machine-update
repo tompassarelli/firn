@@ -88,7 +88,7 @@ main() {
     if [[ -n "$(git status --porcelain)" ]]; then
       while IFS= read -r -d '' path; do
         case "$path" in
-          flake.lock|*.gal|*.nix) git add -- "$path" ;;
+          flake.lock|*.nix|*.json) git add -- "$path" ;;
           *) printf 'machine-update: unexpected generated change: %s\n' "$path" >&2; return 1 ;;
         esac
       done < <(git ls-files --modified --others --exclude-standard -z)

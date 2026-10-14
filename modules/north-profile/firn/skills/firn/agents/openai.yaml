@@ -1,4 +1,4 @@
 interface:
   display_name: "Firn"
   short_description: "Edit and verify the personal NixOS configuration"
-  default_prompt: "Use $firn to make this NixOS configuration change through its Galileo source and focused checks."
+  default_prompt: "Use $firn to make this NixOS configuration change through its Nix source and focused checks."

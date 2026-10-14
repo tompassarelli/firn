@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "cli-tools"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [
+    "darwin"
+  ],
+  "flakeInputs": {}
+}
