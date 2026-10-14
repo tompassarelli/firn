@@ -26,6 +26,7 @@ whiterabbit adds laptop-runner to development
 whiterabbit adds socat to development
 whiterabbit adds procps to development
 whiterabbit adds alsa-lib to development
+whiterabbit adds agents-supervise to development
 whiterabbit enables javascript
 whiterabbit enables python
 whiterabbit enables database

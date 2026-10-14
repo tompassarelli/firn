@@ -109,6 +109,7 @@
       "app-niri-*.scope"
       "init.scope"
       "laptop-runner.timer"
+      "agents-supervise.service"
       "worker-ledger.timer"
       "agents-flow-stall.timer"
       "watch-alerts.timer"

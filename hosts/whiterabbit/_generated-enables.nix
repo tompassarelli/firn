@@ -3,6 +3,7 @@
 {
   myConfig.modules.activity.enable = lib.mkDefault true;
   myConfig.modules.agent-runtime-update.enable = lib.mkDefault true;
+  myConfig.modules.agents-supervise.enable = lib.mkDefault true;
   myConfig.modules.alsa-lib.enable = lib.mkDefault true;
   myConfig.modules.ast-grep.enable = lib.mkDefault true;
   myConfig.modules.atuin.enable = lib.mkDefault true;
