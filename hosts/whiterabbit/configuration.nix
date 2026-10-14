@@ -65,6 +65,7 @@
           "agents-flow-stall.timer"
           "watch-alerts.timer"
           "vast-reaper.timer"
+          "outside-watch.timer"
           "lane-gc.timer"
           "lane-gc-remote.timer"
           "nexus-pull.timer"

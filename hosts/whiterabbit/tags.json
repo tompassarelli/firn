@@ -107,6 +107,7 @@
       "laptop-runner",
       "machine-update",
       "model-watch",
+      "outside-watch",
       "procps",
       "proton-log-watchdog",
       "socat",
