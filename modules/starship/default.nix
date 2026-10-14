@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.starship;
 in
 {
+  options.myConfig.modules.starship.enable = lib.mkEnableOption "starship prompt";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.programs.starship = {
       enable = true;
@@ -27,5 +28,4 @@ in
       };
     };
   };
-  options.myConfig.modules.starship.enable = lib.mkEnableOption "starship prompt";
 }

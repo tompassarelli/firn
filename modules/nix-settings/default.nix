@@ -3,6 +3,8 @@ let
   cfg = config.myConfig.modules.nix-settings;
 in
 {
+  options.myConfig.modules.nix-settings.enable =
+    lib.mkEnableOption "Nix configuration and package settings";
   config = lib.mkIf cfg.enable {
     boot.loader.systemd-boot.configurationLimit = 10;
     nix = {
@@ -45,6 +47,4 @@ in
     nixpkgs.config.allowUnfree = true;
     systemd.services.nix-daemon.serviceConfig.CPUWeight = 50;
   };
-  options.myConfig.modules.nix-settings.enable =
-    lib.mkEnableOption "Nix configuration and package settings";
 }

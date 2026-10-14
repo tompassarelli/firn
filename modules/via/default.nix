@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.via;
 in
 {
+  options.myConfig.modules.via.enable = lib.mkEnableOption "VIA keyboard configurator support";
   config = lib.mkIf cfg.enable {
     services.udev.extraRules = ''
       # VIA keyboard access rules
@@ -17,5 +18,4 @@ in
       users.${config.myConfig.modules.users.username}.extraGroups = [ "plugdev" ];
     };
   };
-  options.myConfig.modules.via.enable = lib.mkEnableOption "VIA keyboard configurator support";
 }

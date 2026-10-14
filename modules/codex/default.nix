@@ -10,7 +10,7 @@ let
   cfg = config.myConfig.modules.codex;
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
-  codexConfigFile = config.myConfig.modules.codex.configFile;
+  codexConfigFile = cfg.configFile;
   context = builtins.fromJSON (builtins.readFile ../north-profile/context.json);
   contextWindow =
     if (context.window < context.modelMaxContextWindow) then

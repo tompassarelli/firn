@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.swap;
 in
 {
+  options.myConfig.modules.swap.enable = lib.mkEnableOption "zram-based compressed swap";
   config = lib.mkIf cfg.enable {
     boot = {
       kernel.sysctl = {
@@ -26,5 +27,4 @@ in
       memoryPercent = 50;
     };
   };
-  options.myConfig.modules.swap.enable = lib.mkEnableOption "zram-based compressed swap";
 }

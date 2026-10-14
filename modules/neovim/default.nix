@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.neovim;
 in
 {
+  options.myConfig.modules.neovim.enable = lib.mkEnableOption "Neovim text editor";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       xdg.configFile = {
@@ -62,5 +63,4 @@ in
       enable = true;
     };
   };
-  options.myConfig.modules.neovim.enable = lib.mkEnableOption "Neovim text editor";
 }

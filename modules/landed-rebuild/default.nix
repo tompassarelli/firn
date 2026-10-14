@@ -24,7 +24,7 @@ in
       description = "Immutable installed private system flake to preserve during landed Firn activation";
     };
   };
-  config = lib.mkIf config.myConfig.modules.landed-rebuild.enable {
+  config = lib.mkIf cfg.enable {
     systemd = {
       sockets.firn-landed-rebuild = {
         description = "Firn landed-commit rebuild requests";

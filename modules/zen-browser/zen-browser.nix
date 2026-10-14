@@ -13,7 +13,7 @@ in
     environment.systemPackages = [
       inputs.zen-browser.packages."${pkgs.stdenv.hostPlatform.system}".default
     ];
-    xdg.mime.defaultApplications = lib.mkIf config.myConfig.modules.zen-browser.default {
+    xdg.mime.defaultApplications = lib.mkIf cfg.default {
       "text/html" = "zen.desktop";
       "x-scheme-handler/http" = "zen.desktop";
       "x-scheme-handler/https" = "zen.desktop";

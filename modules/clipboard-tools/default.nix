@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.clipboard-tools;
 in
 {
+  options.myConfig.modules.clipboard-tools.enable =
+    lib.mkEnableOption "Clipboard persistence daemon and X selection diagnostics";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       pkgs.wl-clip-persist
@@ -17,7 +19,7 @@ in
       systemd.user.services.wl-clip-persist = {
         Install.WantedBy = [ "niri.service" ];
         Service = {
-          ExecStart = "${builtins.toString pkgs.wl-clip-persist}/bin/wl-clip-persist --clipboard regular";
+          ExecStart = "${pkgs.wl-clip-persist}/bin/wl-clip-persist --clipboard regular";
           Restart = "on-failure";
         };
         Unit = {
@@ -29,6 +31,4 @@ in
       };
     };
   };
-  options.myConfig.modules.clipboard-tools.enable =
-    lib.mkEnableOption "Clipboard persistence daemon and X selection diagnostics";
 }

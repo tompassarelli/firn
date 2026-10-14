@@ -5,7 +5,7 @@
     { nixpkgs, ... }:
     let
       system = "x86_64-linux";
-      pkgs = builtins.getAttr system nixpkgs.legacyPackages;
+      pkgs = nixpkgs.legacyPackages.${system};
     in
     {
       devShells.${system}.default = pkgs.mkShell { packages = [ ]; };

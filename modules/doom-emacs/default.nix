@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.doom-emacs;
 in
 {
+  options.myConfig.modules.doom-emacs.enable =
+    lib.mkEnableOption "Doom Emacs configuration (dotfiles, daemon, secrets)";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       home = {
@@ -20,7 +22,7 @@ in
               echo "warning: $DOOM_DIR is a broken or non-directory symlink; leaving it untouched" >&2
             fi
           elif [ ! -e "$DOOM_DIR" ]; then
-            $DRY_RUN_CMD ${builtins.toString pkgs.git}/bin/git clone --depth 1 https://github.com/doomemacs/doomemacs "$DOOM_DIR"
+            $DRY_RUN_CMD ${pkgs.git}/bin/git clone --depth 1 https://github.com/doomemacs/doomemacs "$DOOM_DIR"
             echo "Doom Emacs cloned to ~/.config/emacs"
             echo "Run: ~/.config/emacs/bin/doom install"
           elif [ ! -d "$DOOM_DIR" ]; then
@@ -71,6 +73,4 @@ in
       '';
     };
   };
-  options.myConfig.modules.doom-emacs.enable =
-    lib.mkEnableOption "Doom Emacs configuration (dotfiles, daemon, secrets)";
 }

@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.ghostty;
 in
 {
+  options.myConfig.modules.ghostty.enable = lib.mkEnableOption "Ghostty terminal";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.programs.ghostty = {
       enable = true;
@@ -23,5 +24,4 @@ in
       };
     };
   };
-  options.myConfig.modules.ghostty.enable = lib.mkEnableOption "Ghostty terminal";
 }

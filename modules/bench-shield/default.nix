@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.bench-shield;
 in
 {
+  options.myConfig.modules.bench-shield.enable =
+    lib.mkEnableOption "runtime CPU shield for timing-sensitive experiment runs";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       (pkgs.writeShellScriptBin "bench-shield" ''
@@ -218,6 +220,4 @@ in
       '')
     ];
   };
-  options.myConfig.modules.bench-shield.enable =
-    lib.mkEnableOption "runtime CPU shield for timing-sensitive experiment runs";
 }

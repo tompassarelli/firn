@@ -8,11 +8,11 @@ let
   cfg = config.myConfig.modules.steam;
 in
 {
+  options.myConfig.modules.steam.enable = lib.mkEnableOption "Steam gaming platform";
   config = lib.mkIf cfg.enable {
     programs.steam = {
       enable = true;
       package = pkgs.unstable.steam;
     };
   };
-  options.myConfig.modules.steam.enable = lib.mkEnableOption "Steam gaming platform";
 }

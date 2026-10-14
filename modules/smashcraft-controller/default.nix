@@ -3,6 +3,8 @@ let
   cfg = config.myConfig.modules.smashcraft-controller;
 in
 {
+  options.myConfig.modules.smashcraft-controller.enable =
+    lib.mkEnableOption "padbridge service: Tom's Xbox controller in Warcraft III, with Smashcraft's plug-in";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       systemd.user.services.padbridge = {
@@ -21,6 +23,4 @@ in
       };
     };
   };
-  options.myConfig.modules.smashcraft-controller.enable =
-    lib.mkEnableOption "padbridge service: Tom's Xbox controller in Warcraft III, with Smashcraft's plug-in";
 }

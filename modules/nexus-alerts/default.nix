@@ -11,9 +11,9 @@ let
   port = 2586;
   listen = "10.77.0.1:${builtins.toString port}";
   baseUrl = "http://${listen}";
-  sopsFile = config.myConfig.modules.nexus-alerts.sopsFile;
+  inherit (cfg) sopsFile;
   ph = config.sops.placeholder;
-  envTemplate = builtins.getAttr "ntfy-auth.env" config.sops.templates;
+  envTemplate = config.sops.templates."ntfy-auth.env";
   nexusAlert = pkgs.writeShellApplication {
     name = "nexus-alert";
     runtimeInputs = [

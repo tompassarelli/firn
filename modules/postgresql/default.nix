@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.postgresql;
 in
 {
+  options.myConfig.modules.postgresql.enable =
+    lib.mkEnableOption "PostgreSQL database server for local development";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.unstable.postgresql_18 ];
     services.postgresql = {
@@ -29,6 +31,4 @@ in
       package = pkgs.unstable.postgresql_18;
     };
   };
-  options.myConfig.modules.postgresql.enable =
-    lib.mkEnableOption "PostgreSQL database server for local development";
 }

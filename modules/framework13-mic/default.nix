@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.framework13-mic;
 in
 {
+  options.myConfig.modules.framework13-mic.enable =
+    lib.mkEnableOption "Framework 13 AMD AI 300 mic fix + firn-mic CLI (forces UCM profile that exposes the actual internal mic; see `firn-mic doctor`)";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       (pkgs.writeShellApplication {
@@ -30,24 +32,22 @@ in
         Install.WantedBy = [ "pipewire.service" ];
         Service = {
           ExecStart = "${
-            builtins.toString (
-              pkgs.writeShellApplication {
-                name = "firn-mic";
-                runtimeInputs = [
-                  pkgs.wireplumber
-                  pkgs.pipewire
-                  pkgs.jq
-                  pkgs.python3
-                  pkgs.coreutils
-                  pkgs.gnugrep
-                  pkgs.gawk
-                  pkgs.gnused
-                ];
-                text = builtins.readFile ./firn-mic;
-              }
-            )
+            pkgs.writeShellApplication {
+              name = "firn-mic";
+              runtimeInputs = [
+                pkgs.wireplumber
+                pkgs.pipewire
+                pkgs.jq
+                pkgs.python3
+                pkgs.coreutils
+                pkgs.gnugrep
+                pkgs.gawk
+                pkgs.gnused
+              ];
+              text = builtins.readFile ./firn-mic;
+            }
           }/bin/firn-mic --quiet";
-          ExecStartPre = "${builtins.toString pkgs.coreutils}/bin/sleep 2";
+          ExecStartPre = "${pkgs.coreutils}/bin/sleep 2";
           RemainAfterExit = true;
           Type = "oneshot";
         };
@@ -97,6 +97,4 @@ in
       wantedBy = [ "multi-user.target" ];
     };
   };
-  options.myConfig.modules.framework13-mic.enable =
-    lib.mkEnableOption "Framework 13 AMD AI 300 mic fix + firn-mic CLI (forces UCM profile that exposes the actual internal mic; see `firn-mic doctor`)";
 }

@@ -60,16 +60,10 @@
     }:
     let
       firnModules = ./modules;
-      moduleMetadata = nixpkgs.lib.mapAttrs (
-        name: _:
-        let
-          path = ./modules + "/${name}/metadata.json";
-        in
-        {
-          flakeInputs = { };
-        }
-        // nixpkgs.lib.optionalAttrs (builtins.pathExists path) (builtins.fromJSON (builtins.readFile path))
-      ) (nixpkgs.lib.filterAttrs (_: kind: kind == "directory") (builtins.readDir ./modules));
+      moduleMetadata = import ./config/module-metadata.nix {
+        inherit (nixpkgs) lib;
+        modulesPath = firnModules;
+      };
       moduleInputNames = nixpkgs.lib.unique (
         nixpkgs.lib.concatMap (metadata: builtins.attrNames metadata.flakeInputs) (
           builtins.attrValues moduleMetadata

@@ -49,6 +49,7 @@ let
   };
 in
 {
+  options.myConfig.modules.framework.enable = lib.mkEnableOption "Framework Computer specific tools";
   config = lib.mkIf cfg.enable {
     boot.extraModprobeConfig = ''
       options mt7925_common disable_clc=1
@@ -62,5 +63,4 @@ in
       HandleLidSwitchExternalPower = "ignore";
     };
   };
-  options.myConfig.modules.framework.enable = lib.mkEnableOption "Framework Computer specific tools";
 }

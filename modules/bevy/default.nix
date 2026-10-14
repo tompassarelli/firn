@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.bevy;
 in
 {
+  options.myConfig.modules.bevy.enable = lib.mkEnableOption "Bevy game engine development libraries";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       pkgs.alsa-lib
@@ -34,5 +35,4 @@ in
       pkgs.libudev-zero
     ];
   };
-  options.myConfig.modules.bevy.enable = lib.mkEnableOption "Bevy game engine development libraries";
 }

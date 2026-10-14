@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.delivery-liveness;
 in
 {
+  options.myConfig.modules.delivery-liveness.enable =
+    lib.mkEnableOption "periodically build the committed Firn toplevel without switching";
   config = lib.mkIf cfg.enable {
     environment.etc."north/delivery-liveness-required".text = ''
       1
@@ -36,7 +38,7 @@ in
                 ]
               }"
             ];
-            ExecStart = "${builtins.toString pkgs.bash}/bin/bash ${hm.config.home.homeDirectory}/.local/share/north/bin/job-run --path ${
+            ExecStart = "${pkgs.bash}/bin/bash ${hm.config.home.homeDirectory}/.local/share/north/bin/job-run --path ${
               lib.makeBinPath [
                 pkgs.python3
                 pkgs.openssh
@@ -62,6 +64,4 @@ in
       };
     };
   };
-  options.myConfig.modules.delivery-liveness.enable =
-    lib.mkEnableOption "periodically build the committed Firn toplevel without switching";
 }

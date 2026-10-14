@@ -12,7 +12,7 @@ let
   inherit (cfg) wgAddress;
   wgInterface = "wg-nexus";
   creds = " -p wa -k nexus-creds";
-  upgradeFlake = config.myConfig.modules.nexus-hardening.upgradeFlake;
+  inherit (cfg) upgradeFlake;
 in
 {
   options.myConfig.modules.nexus-hardening = {
@@ -32,7 +32,7 @@ in
       description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
     };
   };
-  config = lib.mkIf config.myConfig.modules.nexus-hardening.enable {
+  config = lib.mkIf cfg.enable {
     myConfig.modules = {
       ssh.enable = true;
       polkit.enable = true;

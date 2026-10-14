@@ -7,8 +7,7 @@
 
 let
   cfg = config.myConfig.modules.users;
-  username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
+  inherit (cfg) username homeDir;
 in
 {
   options.myConfig.modules.users = {
@@ -65,21 +64,21 @@ in
   };
   config = lib.mkIf cfg.enable {
     users = {
-      mutableUsers = config.myConfig.modules.users.mutable;
+      mutableUsers = cfg.mutable;
       users.${username} = {
         shell = pkgs.bashInteractive;
         isNormalUser = true;
         home = homeDir;
-        extraGroups = config.myConfig.modules.users.extraGroups;
-        openssh.authorizedKeys.keys = config.myConfig.modules.users.authorizedKeys;
+        inherit (cfg) extraGroups;
+        openssh.authorizedKeys.keys = cfg.authorizedKeys;
         hashedPasswordFile = lib.mkIf (
-          config.myConfig.modules.users.passwordHashSopsFile != null
+          cfg.passwordHashSopsFile != null
         ) config.sops.secrets.user-password-hash.path;
       };
     };
-    sops.secrets = lib.mkIf (config.myConfig.modules.users.passwordHashSopsFile != null) {
+    sops.secrets = lib.mkIf (cfg.passwordHashSopsFile != null) {
       user-password-hash = {
-        sopsFile = config.myConfig.modules.users.passwordHashSopsFile;
+        sopsFile = cfg.passwordHashSopsFile;
         key = "password_hash";
         neededForUsers = true;
       };

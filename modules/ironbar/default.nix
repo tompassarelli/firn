@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.ironbar;
 in
 {
+  options.myConfig.modules.ironbar.enable = lib.mkEnableOption "Ironbar status bar for Wayland";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.unstable.ironbar ];
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
@@ -15,7 +16,7 @@ in
         ironbar = {
           Install.WantedBy = [ "niri.service" ];
           Service = {
-            ExecStart = "${builtins.toString pkgs.unstable.ironbar}/bin/ironbar";
+            ExecStart = "${pkgs.unstable.ironbar}/bin/ironbar";
             Restart = "on-failure";
           };
           Unit = {
@@ -86,5 +87,4 @@ in
       };
     };
   };
-  options.myConfig.modules.ironbar.enable = lib.mkEnableOption "Ironbar status bar for Wayland";
 }

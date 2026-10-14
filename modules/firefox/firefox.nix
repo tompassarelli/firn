@@ -5,7 +5,7 @@ in
 {
   config = lib.mkIf cfg.enable {
     programs.firefox.enable = true;
-    xdg.mime.defaultApplications = lib.mkIf config.myConfig.modules.firefox.default {
+    xdg.mime.defaultApplications = lib.mkIf cfg.default {
       "text/html" = "firefox.desktop";
       "x-scheme-handler/http" = "firefox.desktop";
       "x-scheme-handler/https" = "firefox.desktop";

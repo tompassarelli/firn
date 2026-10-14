@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.waybar;
 in
 {
+  options.myConfig.modules.waybar.enable = lib.mkEnableOption "Waybar status bar for Wayland";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.waybar ];
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
@@ -15,7 +16,7 @@ in
         waybar = {
           Install.WantedBy = [ "niri.service" ];
           Service = {
-            ExecStart = "${builtins.toString pkgs.waybar}/bin/waybar";
+            ExecStart = "${pkgs.waybar}/bin/waybar";
             Restart = "on-failure";
           };
           Unit = {
@@ -109,5 +110,4 @@ in
       };
     };
   };
-  options.myConfig.modules.waybar.enable = lib.mkEnableOption "Waybar status bar for Wayland";
 }

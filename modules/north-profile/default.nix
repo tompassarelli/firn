@@ -18,6 +18,8 @@ let
   );
 in
 {
+  options.myConfig.modules.north-profile.enable =
+    lib.mkEnableOption "Publish shared agent surfaces at ~/.agents";
   config = lib.mkIf cfg.enable {
     environment.etc."north/agent-context.json".text = builtins.toJSON {
       window = contextWindow;
@@ -26,7 +28,7 @@ in
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       home = {
         activation.projectNorthClaudeHooks = hm.config.lib.dag.entryAfter [ "writeBoundary" ] ''
-          run ${builtins.toString pkgs.coreutils}/bin/env CHMOD_BIN=${builtins.toString pkgs.coreutils}/bin/chmod FLOCK_BIN=${builtins.toString pkgs.util-linux}/bin/flock JQ_BIN=${builtins.toString pkgs.jq}/bin/jq MKDIR_BIN=${builtins.toString pkgs.coreutils}/bin/mkdir MV_BIN=${builtins.toString pkgs.coreutils}/bin/mv REALPATH_BIN=${builtins.toString pkgs.coreutils}/bin/realpath RM_BIN=${builtins.toString pkgs.coreutils}/bin/rm ${builtins.toString (pkgs.writeShellScript "north-claude-hook-projector" (builtins.readFile ./claude-hook-projector.sh))} ${builtins.toString (pkgs.writeText "north-claude-hooks.json" claudeProjection)} $HOME/.claude/settings.json
+          run ${pkgs.coreutils}/bin/env CHMOD_BIN=${pkgs.coreutils}/bin/chmod FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm ${pkgs.writeShellScript "north-claude-hook-projector" (builtins.readFile ./claude-hook-projector.sh)} ${pkgs.writeText "north-claude-hooks.json" claudeProjection} $HOME/.claude/settings.json
         '';
         file = {
           ".agents/AGENTS.md".source =
@@ -41,6 +43,4 @@ in
       };
     };
   };
-  options.myConfig.modules.north-profile.enable =
-    lib.mkEnableOption "Publish shared agent surfaces at ~/.agents";
 }

@@ -13,7 +13,7 @@ let
   dataDir = "/var/lib/continuwuity";
   wgInterface = "wg-nexus";
   domain = cfg.serverName;
-  acmeEnv = builtins.getAttr "acme-cloudflare.env" config.sops.templates;
+  acmeEnv = config.sops.templates."acme-cloudflare.env";
 in
 {
   options.myConfig.modules.nexus-matrix = {

@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.babashka;
 in
 {
+  options.myConfig.modules.babashka.enable = lib.mkEnableOption "Babashka native Clojure scripting";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       (pkgs.stdenvNoCC.mkDerivation {
@@ -32,5 +33,4 @@ in
       })
     ];
   };
-  options.myConfig.modules.babashka.enable = lib.mkEnableOption "Babashka native Clojure scripting";
 }

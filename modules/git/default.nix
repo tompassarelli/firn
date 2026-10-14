@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.git;
 in
 {
+  options.myConfig.modules.git.enable = lib.mkEnableOption "Git configuration";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username} = _hm: {
       programs = {
@@ -35,5 +36,4 @@ in
       };
     };
   };
-  options.myConfig.modules.git.enable = lib.mkEnableOption "Git configuration";
 }

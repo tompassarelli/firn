@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.windows-vm;
 in
 {
+  options.myConfig.modules.windows-vm.enable =
+    lib.mkEnableOption "Windows VM via QEMU/KVM with virt-manager";
   config = lib.mkIf cfg.enable {
     boot.kernel.sysctl."net.ipv4.ip_forward" = 1;
     environment.systemPackages = [
@@ -54,6 +56,4 @@ in
       };
     };
   };
-  options.myConfig.modules.windows-vm.enable =
-    lib.mkEnableOption "Windows VM via QEMU/KVM with virt-manager";
 }

@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.wireguard;
 in
 {
+  options.myConfig.modules.wireguard.enable = lib.mkEnableOption "WireGuard VPN support";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.wireguard-tools ];
     networking.firewall.checkReversePath = "loose";
@@ -15,7 +16,7 @@ in
       {
         commands = [
           {
-            command = "${builtins.toString pkgs.wireguard-tools}/bin/wg";
+            command = "${pkgs.wireguard-tools}/bin/wg";
             options = [ "NOPASSWD" ];
           }
         ];
@@ -86,5 +87,4 @@ in
       wantedBy = [ "multi-user.target" ];
     };
   };
-  options.myConfig.modules.wireguard.enable = lib.mkEnableOption "WireGuard VPN support";
 }

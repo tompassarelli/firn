@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.bluetooth;
 in
 {
+  options.myConfig.modules.bluetooth.enable = lib.mkEnableOption "bluetooth";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.bluez ];
     hardware.bluetooth = {
@@ -20,5 +21,4 @@ in
     };
     services.blueman.enable = true;
   };
-  options.myConfig.modules.bluetooth.enable = lib.mkEnableOption "bluetooth";
 }

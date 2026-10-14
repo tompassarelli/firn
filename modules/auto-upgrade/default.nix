@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.auto-upgrade;
 in
 {
+  options.myConfig.modules.auto-upgrade.enable = lib.mkEnableOption "Automatic system updates";
   config = lib.mkIf cfg.enable {
     system.autoUpgrade = {
       allowReboot = false;
@@ -19,5 +20,4 @@ in
       randomizedDelaySec = "30min";
     };
   };
-  options.myConfig.modules.auto-upgrade.enable = lib.mkEnableOption "Automatic system updates";
 }

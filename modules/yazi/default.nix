@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.yazi;
 in
 {
+  options.myConfig.modules.yazi.enable = lib.mkEnableOption "Yazi file manager";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.programs.yazi = {
       enable = true;
@@ -16,5 +17,4 @@ in
       shellWrapperName = "yy";
     };
   };
-  options.myConfig.modules.yazi.enable = lib.mkEnableOption "Yazi file manager";
 }

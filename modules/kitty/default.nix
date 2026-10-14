@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.kitty;
 in
 {
+  options.myConfig.modules.kitty.enable = lib.mkEnableOption "Kitty terminal configuration";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.programs.kitty = {
       enable = true;
@@ -13,5 +14,4 @@ in
       };
     };
   };
-  options.myConfig.modules.kitty.enable = lib.mkEnableOption "Kitty terminal configuration";
 }

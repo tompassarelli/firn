@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.gtk;
 in
 {
+  options.myConfig.modules.gtk.enable = lib.mkEnableOption "GTK theming configuration";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       dconf.settings."org/gnome/desktop/interface".color-scheme = lib.mkForce (
@@ -36,5 +37,4 @@ in
       };
     };
   };
-  options.myConfig.modules.gtk.enable = lib.mkEnableOption "GTK theming configuration";
 }

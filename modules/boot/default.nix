@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.boot;
 in
 {
+  options.myConfig.modules.boot.enable = lib.mkEnableOption "boot configuration";
   config = lib.mkIf cfg.enable {
     boot = {
       kernel.sysctl = {
@@ -24,5 +25,4 @@ in
       };
     };
   };
-  options.myConfig.modules.boot.enable = lib.mkEnableOption "boot configuration";
 }

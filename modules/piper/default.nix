@@ -8,10 +8,10 @@ let
   cfg = config.myConfig.modules.piper;
 in
 {
+  options.myConfig.modules.piper.enable =
+    lib.mkEnableOption "gaming mouse configuration (Piper + ratbagd)";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.piper ];
     services.ratbagd.enable = true;
   };
-  options.myConfig.modules.piper.enable =
-    lib.mkEnableOption "gaming mouse configuration (Piper + ratbagd)";
 }

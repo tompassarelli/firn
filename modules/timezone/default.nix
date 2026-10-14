@@ -3,7 +3,8 @@ let
   cfg = config.myConfig.modules.timezone;
 in
 {
-  config = lib.mkIf cfg.enable { time.timeZone = config.myConfig.modules.timezone.zone; };
+  options.myConfig.modules.timezone.enable = lib.mkEnableOption "timezone configuration";
+  config = lib.mkIf cfg.enable { time.timeZone = cfg.zone; };
   imports = [
     {
       options.myConfig.modules.timezone.zone = lib.mkOption {
@@ -13,5 +14,4 @@ in
       };
     }
   ];
-  options.myConfig.modules.timezone.enable = lib.mkEnableOption "timezone configuration";
 }

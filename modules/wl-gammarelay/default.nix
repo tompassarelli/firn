@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.wl-gammarelay;
 in
 {
+  options.myConfig.modules.wl-gammarelay.enable =
+    lib.mkEnableOption "Wayland gamma/temperature control";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.wl-gammarelay-rs ];
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
@@ -15,7 +17,7 @@ in
         Install.WantedBy = [ "niri.service" ];
         Service = {
           BusName = "rs.wl-gammarelay";
-          ExecStart = "${builtins.toString pkgs.wl-gammarelay-rs}/bin/wl-gammarelay-rs";
+          ExecStart = "${pkgs.wl-gammarelay-rs}/bin/wl-gammarelay-rs";
           Restart = "on-failure";
           Type = "dbus";
         };
@@ -30,6 +32,4 @@ in
         hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/dotfiles/wl-gammarelay/temperature-control";
     };
   };
-  options.myConfig.modules.wl-gammarelay.enable =
-    lib.mkEnableOption "Wayland gamma/temperature control";
 }

@@ -10,7 +10,7 @@ let
   cfg = config.myConfig.modules.machine-update;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  writer = config.myConfig.modules.machine-update.writer;
+  inherit (cfg) writer;
   command = if writer then "--write" else "--apply";
   jobName = if writer then "machine-update" else "machine-update-apply";
 in

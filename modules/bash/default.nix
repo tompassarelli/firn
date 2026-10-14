@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.bash;
 in
 {
+  options.myConfig.modules.bash.enable = lib.mkEnableOption "Bash shell configuration";
   config = lib.mkIf cfg.enable {
     environment = {
       etc.bash_logout.text = lib.mkForce ''
@@ -31,10 +32,10 @@ in
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       home = {
         activation.linkLocalBin = hm.config.lib.dag.entryAfter [ "linkGeneration" ] ''
-          run ${builtins.toString (pkgs.writeShellScript "local-bin-links" (builtins.readFile ./local-bin-links.sh))}
+          run ${pkgs.writeShellScript "local-bin-links" (builtins.readFile ./local-bin-links.sh)}
         '';
         file = {
-          ".local/libexec/convo/python3".source = "${builtins.toString pkgs.python3}/bin/python3";
+          ".local/libexec/convo/python3".source = "${pkgs.python3}/bin/python3";
           ".local/share/firn/bin".source =
             hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/main/dotfiles/bin";
           ".local/share/north/bin".source =
@@ -133,5 +134,4 @@ in
     };
     programs.bash.completion.enable = true;
   };
-  options.myConfig.modules.bash.enable = lib.mkEnableOption "Bash shell configuration";
 }

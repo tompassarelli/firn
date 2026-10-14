@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.atuin;
 in
 {
+  options.myConfig.modules.atuin.enable = lib.mkEnableOption "atuin shell history sync";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.programs.atuin = {
       enable = true;
@@ -14,5 +15,4 @@ in
       };
     };
   };
-  options.myConfig.modules.atuin.enable = lib.mkEnableOption "atuin shell history sync";
 }

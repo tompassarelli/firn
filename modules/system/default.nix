@@ -1,7 +1,8 @@
 { config, lib, ... }:
-
+let
+  cfg = config.myConfig.modules.system;
+in
 {
-  config.system.stateVersion = config.myConfig.modules.system.stateVersion;
   options.myConfig.modules.system.stateVersion = lib.mkOption {
     type = lib.types.str;
     description = ''
@@ -14,4 +15,5 @@
 
     '';
   };
+  config.system.stateVersion = cfg.stateVersion;
 }

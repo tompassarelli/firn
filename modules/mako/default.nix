@@ -3,6 +3,7 @@ let
   cfg = config.myConfig.modules.mako;
 in
 {
+  options.myConfig.modules.mako.enable = lib.mkEnableOption "Mako notification daemon";
   config = lib.mkIf cfg.enable {
     home-manager.users.${config.myConfig.modules.users.username}.services.mako = {
       enable = true;
@@ -14,5 +15,4 @@ in
       };
     };
   };
-  options.myConfig.modules.mako.enable = lib.mkEnableOption "Mako notification daemon";
 }

@@ -3,6 +3,8 @@ let
   cfg = config.myConfig.modules.thermal-management;
 in
 {
+  options.myConfig.modules.thermal-management.enable =
+    lib.mkEnableOption "CPU thermal management for sustained builds";
   config = lib.mkIf cfg.enable {
     boot.kernelParams = [ "amd_pstate=active" ];
     services.auto-cpufreq = {
@@ -21,6 +23,4 @@ in
       };
     };
   };
-  options.myConfig.modules.thermal-management.enable =
-    lib.mkEnableOption "CPU thermal management for sustained builds";
 }

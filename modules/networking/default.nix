@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.networking;
 in
 {
+  options.myConfig.modules.networking.enable = lib.mkEnableOption "network configuration";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.networkmanagerapplet ];
     networking.networkmanager = {
@@ -17,5 +18,4 @@ in
       wifi.powersave = false;
     };
   };
-  options.myConfig.modules.networking.enable = lib.mkEnableOption "network configuration";
 }

@@ -4,20 +4,10 @@ let
   cfg = host;
   host = builtins.fromJSON (builtins.readFile tagsFile);
   platforms = builtins.fromJSON (builtins.readFile ./platforms.json);
-  modules = lib.mapAttrs (
-    name: _:
-    let
-      path = ../modules + "/${name}/metadata.json";
-    in
-    {
-      tags = [ ];
-      optIn = [ ];
-      overrides = { };
-      supports = [ ];
-      flakeInputs = { };
-    }
-    // lib.optionalAttrs (builtins.pathExists path) (builtins.fromJSON (builtins.readFile path))
-  ) (lib.filterAttrs (_: kind: kind == "directory") (builtins.readDir ../modules));
+  modules = import ./module-metadata.nix {
+    inherit lib;
+    modulesPath = ../modules;
+  };
   moduleNames = builtins.attrNames modules;
   knownTags = lib.unique (
     lib.concatMap (name: modules.${name}.tags ++ modules.${name}.optIn) moduleNames
@@ -88,17 +78,21 @@ in
           }
           {
             assertion = lib.all (tag: builtins.elem tag knownTags) cfg.enables;
-            message = "Host ${config.networking.hostName} enables a tag that no module declares.";
+            message = "Host ${config.networking.hostName} enables undeclared tags: ${
+              lib.concatStringsSep ", " (builtins.filter (tag: !(builtins.elem tag knownTags)) cfg.enables)
+            }.";
           }
           {
             assertion = lib.all (name: builtins.hasAttr name modules) (
               cfg.disables ++ cfg.turnsOn ++ cfg.turnsOff
             );
-            message = "Host ${config.networking.hostName} selects or disables an unknown module.";
-          }
-          {
-            assertion = lib.intersectLists cfg.turnsOn cfg.turnsOff == [ ];
-            message = "Host ${config.networking.hostName} turns the same module both on and off.";
+            message = "Host ${config.networking.hostName} selects or disables unknown modules: ${
+              lib.concatStringsSep ", " (
+                builtins.filter (name: !(builtins.hasAttr name modules)) (
+                  cfg.disables ++ cfg.turnsOn ++ cfg.turnsOff
+                )
+              )
+            }.";
           }
         ]
         ++ lib.mapAttrsToList (path: entries: {

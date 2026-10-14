@@ -9,7 +9,7 @@ let
   cfg = config.myConfig.modules.wg-nexus;
   hubPublicKey = "Dvmfg8eA5NBuadrl3CoEW1ZstHMxD7CT9r3l6HlMQx4=";
   laptopPublicKey = "ynrELQcn+uM+tllUWa/o5IpPbjHKPPJAStI3gq23EhI=";
-  template = builtins.getAttr "wg-nexus.conf" config.sops.templates;
+  template = config.sops.templates."wg-nexus.conf";
   peerNames = lib.concatStringsSep " " (
     lib.concatLists [
       [ "laptop:${laptopPublicKey}" ]
@@ -140,7 +140,7 @@ in
             restartUnits = [ "wg-quick-wg-nexus.service" ];
             content = ''
               [Interface]
-              PrivateKey = ${builtins.getAttr cfg.keySecret config.sops.placeholder}
+              PrivateKey = ${config.sops.placeholder.${cfg.keySecret}}
               Address = ${cfg.address}/24
 
               [Peer]

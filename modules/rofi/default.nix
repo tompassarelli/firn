@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.rofi;
 in
 {
+  options.myConfig.modules.rofi.enable = lib.mkEnableOption "Rofi application launcher";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       pkgs.rofi
@@ -35,5 +36,4 @@ in
         hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/dotfiles/rofi/config.rasi";
     };
   };
-  options.myConfig.modules.rofi.enable = lib.mkEnableOption "Rofi application launcher";
 }

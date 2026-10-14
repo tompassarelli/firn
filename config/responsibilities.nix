@@ -24,6 +24,51 @@ let
     software.${program}.module != null
     && builtins.hasAttr software.${program}.module options.myConfig.modules;
   enabled = program: realized program && config.myConfig.modules.${software.${program}.module}.enable;
+  unrealized = builtins.filter (obligation: !realized obligation.program) obligations;
+  coupledEnvironment = builtins.filter (
+    obligation:
+    responsibilities.${obligation.name}.domain == "environment" && enabled obligation.program
+  ) obligations;
+  coupledBoot = builtins.filter (
+    name:
+    responsibilities.${name}.domain == "boot"
+    && lib.any (dependency: responsibilities.${dependency}.domain == "environment") (
+      closure responsibilities.${name}.dependsOn
+    )
+  ) responsible;
+  incomplete = builtins.filter (
+    obligation:
+    !(
+      realized obligation.program
+      && responsibilities.${obligation.name}.domain != null
+      && responsibilities.${obligation.name}.criticality != null
+      && (
+        responsibilities.${obligation.name}.domain != "boot"
+        || responsibilities.${obligation.name}.lifecycle != null
+      )
+    )
+  ) obligations;
+  missingCapabilities = lib.concatMap (
+    name:
+    map (capability: "${name}/${capability}") (
+      builtins.filter (
+        capability:
+        !(lib.any (
+          program: builtins.elem capability software.${program}.capabilities
+        ) responsibilities.${name}.requiresSoftware)
+      ) responsibilities.${name}.requiresCapabilities
+    )
+  ) responsible;
+  invalidBoot = builtins.filter (
+    obligation:
+    responsibilities.${obligation.name}.domain == "boot"
+    && !(
+      responsibilities.${obligation.name}.lifecycle == "long-lived-system-service"
+      && enabled obligation.program
+    )
+  ) obligations;
+  obligationNames =
+    entries: lib.concatStringsSep ", " (map (entry: "${entry.name}/${entry.program}") entries);
   strings = lib.mkOption {
     type = lib.types.listOf lib.types.str;
     default = [ ];
@@ -77,61 +122,28 @@ in
   };
   config.assertions = [
     {
-      assertion = lib.all (obligation: realized obligation.program) obligations;
-      message = "Every software requirement on ${config.networking.hostName} must name a realizing module.";
+      assertion = unrealized == [ ];
+      message = "Responsibilities/software ${obligationNames unrealized} on ${config.networking.hostName} must name a realizing module.";
     }
     {
-      assertion = lib.all (
-        obligation:
-        responsibilities.${obligation.name}.domain != "environment" || !enabled obligation.program
-      ) obligations;
-      message = "Environment software on ${config.networking.hostName} must remain outside the boot system modules.";
+      assertion = coupledEnvironment == [ ];
+      message = "Environment responsibilities/software ${obligationNames coupledEnvironment} on ${config.networking.hostName} must remain outside the boot system modules.";
     }
     {
-      assertion = lib.all (
-        name:
-        responsibilities.${name}.domain != "boot"
-        || lib.all (dependency: responsibilities.${dependency}.domain != "environment") (
-          closure responsibilities.${name}.dependsOn
-        )
-      ) responsible;
-      message = "Boot responsibilities on ${config.networking.hostName} cannot depend on environment responsibilities.";
+      assertion = coupledBoot == [ ];
+      message = "Boot responsibilities ${lib.concatStringsSep ", " coupledBoot} on ${config.networking.hostName} cannot depend on environment responsibilities.";
     }
     {
-      assertion = lib.all (
-        obligation:
-        realized obligation.program
-        && responsibilities.${obligation.name}.domain != null
-        && responsibilities.${obligation.name}.criticality != null
-        && (
-          responsibilities.${obligation.name}.domain != "boot"
-          || responsibilities.${obligation.name}.lifecycle != null
-        )
-      ) obligations;
-      message = "Software responsibilities on ${config.networking.hostName} require realization, domain and criticality; boot responsibilities also require lifecycle.";
+      assertion = incomplete == [ ];
+      message = "Responsibilities/software ${obligationNames incomplete} on ${config.networking.hostName} require realization, domain and criticality; boot responsibilities also require lifecycle.";
     }
     {
-      assertion = lib.all (
-        name:
-        lib.all (
-          capability:
-          lib.any (
-            program: builtins.elem capability software.${program}.capabilities
-          ) responsibilities.${name}.requiresSoftware
-        ) responsibilities.${name}.requiresCapabilities
-      ) responsible;
-      message = "Every required capability on ${config.networking.hostName} must be provided by the responsibility's required software.";
+      assertion = missingCapabilities == [ ];
+      message = "Responsibilities/capabilities ${lib.concatStringsSep ", " missingCapabilities} on ${config.networking.hostName} must be provided by the responsibility's required software.";
     }
     {
-      assertion = lib.all (
-        obligation:
-        responsibilities.${obligation.name}.domain != "boot"
-        || (
-          responsibilities.${obligation.name}.lifecycle == "long-lived-system-service"
-          && enabled obligation.program
-        )
-      ) obligations;
-      message = "Boot software on ${config.networking.hostName} must be enabled and declared as a long-lived system service.";
+      assertion = invalidBoot == [ ];
+      message = "Boot responsibilities/software ${obligationNames invalidBoot} on ${config.networking.hostName} must be enabled and declared as a long-lived system service.";
     }
   ];
 }

@@ -8,6 +8,8 @@ let
   cfg = config.myConfig.modules.antigravity-cli;
 in
 {
+  options.myConfig.modules.antigravity-cli.enable =
+    lib.mkEnableOption "Antigravity CLI (agy) for free-tier adversarial review";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [
       (pkgs.unstable.antigravity-cli.overrideAttrs {
@@ -19,6 +21,4 @@ in
       })
     ];
   };
-  options.myConfig.modules.antigravity-cli.enable =
-    lib.mkEnableOption "Antigravity CLI (agy) for free-tier adversarial review";
 }

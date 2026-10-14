@@ -8,6 +8,7 @@ let
   cfg = config.myConfig.modules.fastfetch;
 in
 {
+  options.myConfig.modules.fastfetch.enable = lib.mkEnableOption "fastfetch";
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.fastfetch ];
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
@@ -15,5 +16,4 @@ in
         hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/dotfiles/fastfetch/config.jsonc";
     };
   };
-  options.myConfig.modules.fastfetch.enable = lib.mkEnableOption "fastfetch";
 }

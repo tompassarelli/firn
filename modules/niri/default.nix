@@ -131,6 +131,7 @@ let
   '';
 in
 {
+  options.myConfig.modules.niri.enable = lib.mkEnableOption "niri";
   imports = [
     ./xwayland-satellite.nix
     ./swaybg.nix
@@ -151,5 +152,4 @@ in
         config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/nixos-config/main/dotfiles/niri/config.kdl";
     };
   };
-  options.myConfig.modules.niri.enable = lib.mkEnableOption "niri";
 }
