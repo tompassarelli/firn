@@ -28,6 +28,31 @@ in
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
       systemd.user = {
+        services.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
+          Unit = {
+            Description = "Observe laptop gaming and seat activity for placement";
+            ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/laptop-auto";
+          };
+          Service = {
+            Type = "oneshot";
+            ExecStart = "${homeDir}/.local/share/north/bin/laptop-auto";
+            TimeoutStartSec = "55s";
+            Environment = "PATH=${
+              lib.makeBinPath [
+                pkgs.python3
+                pkgs.systemd
+                pkgs.openssh
+              ]
+            }:${homeDir}/.local/share/north/bin:/run/current-system/sw/bin";
+          };
+        };
+        timers.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
+          Timer = {
+            OnBootSec = "1min";
+            OnUnitActiveSec = "30s";
+          };
+          Install.WantedBy = [ "timers.target" ];
+        };
         services.laptop-runner = {
           Unit = {
             Description = description;
