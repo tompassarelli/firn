@@ -4,6 +4,7 @@ let
 in
 {
   config = lib.mkIf cfg.enable {
+    systemd.services."user@".serviceConfig.Delegate = "cpu cpuset io memory pids";
     systemd.user.slices = {
       agent = {
         description = "Agent lanes — yielding compute class";
