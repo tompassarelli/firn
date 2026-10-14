@@ -8,7 +8,7 @@ let
 in {
   options.myConfig.modules.agents-supervise.enable = lib.mkEnableOption description;
   config = lib.mkIf cfg.enable {
-    home-manager.users.${username} = ({ config, ... }: {
+    home-manager.users.${username} = {
       systemd.user.services.agents-supervise = {
         Unit = {
           Description = description;
@@ -36,6 +36,6 @@ in {
           WantedBy = [ "default.target" ];
         };
       };
-    });
+    };
   };
 }
