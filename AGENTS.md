@@ -18,7 +18,7 @@ Read `modules/north-profile/firn/docs/nixos-config-rules.md` for source/module/t
 
 ## Checks
 
-Tests follow `north:harness/skills/testing/SKILL.md`; see `docs/verification.md`.
+Tests follow `north:agent-machinery/skills/verification/SKILL.md`; see `docs/verification.md`.
 After source edits, run `firn check`. After composition metadata edits, run `firn repo build` first.
 For agent policy, run `~/code/north/main/harness/scripts/agent-config-check.sh`.
 For activation, run `~/code/north/main/harness/scripts/agent-config-check.sh --local`.

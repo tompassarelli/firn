@@ -90,7 +90,7 @@ owner source.
 
 ## CI validation
 
-Tests follow `north:harness/skills/testing/SKILL.md`; Firn's local check routes
+Tests follow `north:agent-machinery/skills/verification/SKILL.md`; Firn's local check routes
 are in `nixos-config:docs/verification.md`.
 
 **The agent config check lives in North** —

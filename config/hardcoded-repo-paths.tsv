@@ -17,4 +17,4 @@ north/harness/scripts/agent-config-check.sh	1
 north/src/dep_gate_tests.rs	1
 north/src/fixtures/events/describe.txt	1
 north/src/fixtures/events/row.json	1
-north/src/shellcmd_tests.rs	19
+north/src/shell/tests.rs	19
