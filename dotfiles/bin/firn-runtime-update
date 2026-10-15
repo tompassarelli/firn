@@ -19,15 +19,7 @@ case "$scope" in
     ;;
 esac
 
-if [[ "$scope" = full ]] && { ! command -v cargo >/dev/null || ! command -v rustc >/dev/null || ! command -v cc >/dev/null; }; then
-  exec nix shell --inputs-from "path:$firn_repo" nixpkgs#cargo nixpkgs#rustc nixpkgs#gcc \
-    --command env FIRN_REPO="$firn_repo" FIRN_RUNTIME_ROOT="$runtime_root" \
-    bash "$firn_repo/dotfiles/bin/firn-runtime-update" "$scope"
-fi
-
-prerequisites=(cmp find git nix-store readlink sha256sum)
-if [[ "$scope" = full ]]; then prerequisites+=(ldd rg); fi
-for prerequisite in "${prerequisites[@]}"; do
+for prerequisite in cmp find git nix-store readlink sha256sum; do
   if ! command -v "$prerequisite" >/dev/null 2>&1; then
     printf 'firn-runtime-update: required producer command is unavailable: %s\n' \
       "$prerequisite" >&2
@@ -145,13 +137,12 @@ rebuild_sources=(
 rebuild_bridge="$firn_repo/native/firn_rebuild_host.mjs"
 prewarm_source="$firn_repo/native/prewarm.ts"
 prewarm_bridge="$firn_repo/native/prewarm_host.mjs"
-rust_sources=(
-  "$firn_repo/tools/firn/Cargo.toml"
-  "$firn_repo/tools/firn/Cargo.lock"
+system_policy_sources=(
+  "$firn_repo/native/native_json.ts"
+  "$firn_repo/native/system_policy.ts"
+  "$firn_repo/native/system_policy_native.ts"
 )
-while IFS= read -r -d '' source; do
-  rust_sources+=("$source")
-done < <(find "$firn_repo/tools/firn/src" -type f -name '*.rs' -print0 | sort -z)
+system_policy_bridge="$firn_repo/native/system_policy_host.mjs"
 
 case "$scope" in
   repo)
@@ -182,7 +173,8 @@ case "$scope" in
       "$rebuild_bridge"
       "$prewarm_source"
       "$prewarm_bridge"
-      "${rust_sources[@]}"
+      "${system_policy_sources[@]}"
+      "$system_policy_bridge"
     )
     ;;
 esac
@@ -224,7 +216,6 @@ manifest="$stage/manifest"
 declare -A artifact_ids=()
 artifact_paths=()
 binaries=()
-rust_store_paths=()
 record_artifact() {
   local component="$1"
   local relative="$2"
@@ -281,7 +272,7 @@ materialize_js() {
 
   mkdir -p "$output_root"
   case "$component" in
-    tag|inventory|repo-build|flake-input|rebuild|views|repo-workflow)
+    tag|inventory|repo-build|flake-input|rebuild|system-policy|views|repo-workflow)
       for source in "$@"; do
         cp -- "$source" "$output_root/${source##*/}"
         record_artifact "$component-source" \
@@ -381,28 +372,9 @@ case "$scope" in
       FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
     materialize_js prewarm firn-prewarm prewarm.ts \
       FIRN_PREWARM_MODULE "$prewarm_bridge" "$prewarm_source"
-    bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" \
-      run --class heavy --owner rust-port --timeout-seconds 1800 -- \
-      cargo build --release --locked --manifest-path "$firn_repo/tools/firn/Cargo.toml" \
-      --target-dir "$firn_repo/tools/firn/target"
-    cp -- "$firn_repo/tools/firn/target/release/firn-tools" "$stage/bin/firn-tools"
-    rust_libraries="$(ldd "$stage/bin/firn-tools")"
-    mapfile -t rust_store_paths < <(printf '%s\n' "$rust_libraries" | rg -o '/nix/store/[^/[:space:]]+' | sort -u)
-    for store_path in "${rust_store_paths[@]}"; do
-      printf 'rust_store_path=%s\n' "$store_path" >>"$manifest"
-    done
-    record_generated_artifact rust-tools bin/firn-tools
-    printf '#!/usr/bin/env bash\nexec "${BASH_SOURCE[0]%%/*}/firn-tools" system-policy "$@"\n' >"$stage/bin/firn-system-policy"
-    chmod +x "$stage/bin/firn-system-policy"
-    record_generated_artifact system-policy bin/firn-system-policy
-    for source in "${rust_sources[@]}"; do
-      relative="artifacts/rust/${source#"$firn_repo/tools/firn/"}"
-      mkdir -p "$(dirname "$stage/$relative")"
-      cp -- "$source" "$stage/$relative"
-      record_artifact rust-source "$relative" "$source"
-    done
-    binaries+=(firn-tools firn-system-policy)
-    printf 'component=rust-tools executable=bin/firn-tools runtime=native\n' >>"$manifest"
+    materialize_js system-policy firn-system-policy system_policy_native.ts \
+      FIRN_SYSTEM_POLICY_MODULE "$system_policy_bridge" \
+      "${system_policy_sources[@]}"
     ;;
 esac
 
@@ -467,19 +439,6 @@ if [[ -n "$bun_store_path" ]]; then
     exit 1
   fi
 fi
-
-for store_path in "${rust_store_paths[@]}"; do
-  rust_gc_root="$destination/.rust-gc-roots/${store_path##*/}"
-  mkdir -p "$destination/.rust-gc-roots"
-  if [[ -L "$rust_gc_root" ]]; then
-    [[ "$(readlink "$rust_gc_root")" = "$store_path" ]] || exit 1
-  elif [[ -e "$rust_gc_root" ]]; then
-    printf 'firn-runtime-update: Rust GC root is not a symlink: %s\n' "$rust_gc_root" >&2
-    exit 1
-  else
-    nix-store --add-root "$rust_gc_root" -r "$store_path" >/dev/null
-  fi
-done
 
 next="$runtime_root/.current.$$"
 ln -s "versions/$bundle_id" "$next"

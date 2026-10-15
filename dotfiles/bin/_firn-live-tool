@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool="${1:?usage: _firn-live-tool TOOL [ARGS...]}"
+shift
+
+firn_repo="${FIRN_REPO:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
+runtime_root="${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}"
+
+case "$tool" in
+  firn-system-policy)
+    host="$firn_repo/native/system_policy_host.mjs"
+    module="$firn_repo/native/system_policy_native.ts"
+    module_environment="FIRN_SYSTEM_POLICY_MODULE"
+    ;;
+  *)
+    printf '_firn-live-tool: unknown tool: %s\n' "$tool" >&2
+    exit 2
+    ;;
+esac
+
+bun="${FIRN_BUN:-$runtime_root/current/bin/bun}"
+if [[ ! -x "$bun" ]]; then
+  printf '%s: Firn Bun runtime is unavailable: %s\n' "$tool" "$bun" >&2
+  exit 127
+fi
+exec env "$module_environment=$module" "$bun" "$host" "$@"
