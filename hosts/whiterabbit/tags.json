@@ -104,6 +104,7 @@
       "agent-runtime-update",
       "alsa-lib",
       "claude",
+      "code-health-review",
       "laptop-runner",
       "machine-update",
       "model-watch",

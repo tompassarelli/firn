@@ -77,6 +77,7 @@
           "firn-delivery-liveness.timer"
           "model-watch.timer"
           "skill-prune.timer"
+          "code-health-review.timer"
           "supply-chain-scan.timer"
           "cross-project-scan.timer"
           "proton-log-watchdog.timer"
