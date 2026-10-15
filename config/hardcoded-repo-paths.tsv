@@ -14,4 +14,5 @@ north/bin/worker-sweep.test.sh	1
 north/harness/hooks/launch-critical-worktree-guard.test.py	8
 north/harness/hooks/spawn-capacity-guard.test.sh	4
 north/harness/scripts/agent-config-check.sh	1
+north/src/dep_gate_tests.rs	1
 nixos-config/modules/landed-rebuild/runtime.mjs	1
