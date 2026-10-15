@@ -3,6 +3,7 @@
 {
   myConfig.modules = {
     agents-supervise.enable = true;
+    harness-health.enable = true;
     system.stateVersion = "25.05";
 
     capacity-watchdog = {
@@ -63,6 +64,7 @@
           "init.scope"
           "laptop-runner.timer"
           "pace-enforcement.timer"
+          "harness-health.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
           "watch-alerts.timer"
