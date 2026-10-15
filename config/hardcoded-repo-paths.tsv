@@ -11,10 +11,9 @@ nixos-config/native/rebuild.ts	1
 north/bin/agents	2
 north/bin/lane-gc-classify.test.sh	17
 north/bin/north-runtime-update	2
-north/bin/worker-sweep.test.sh	1
 north/harness/hooks/spawn-capacity-guard.test.sh	4
+north/harness/lib/flow.test.py	3
 north/harness/scripts/agent-config-check.sh	1
 north/src/dep_gate_tests.rs	1
-north/src/fixtures/events/describe.txt	1
 north/src/fixtures/events/row.json	1
 north/src/shell/tests.rs	19

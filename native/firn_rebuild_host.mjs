@@ -58,7 +58,7 @@ globalThis.firn_host_append = (path, text) => {
 const modulePath = process.env.FIRN_REBUILD_MODULE
   ?? new URL('./firn_rebuild_family.ts', import.meta.url).pathname;
 const args = Bun.argv.slice(2);
-const coreTools = ['agents', 'threads', 'safe-push', 'worker-sweep', 'capacity-watchdog'];
+const coreTools = ['agents', 'threads', 'safe-push', 'capacity-watchdog'];
 
 const systemGeneration = () => {
   const link = Bun.spawnSync({ cmd: ['readlink', '/nix/var/nix/profiles/system'], stdin: 'ignore', stderr: 'ignore' });
