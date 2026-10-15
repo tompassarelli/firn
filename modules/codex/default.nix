@@ -79,6 +79,7 @@ in
       (providerAdapter "worker-tier-guard.sh")
       (providerAdapter "session-kill-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
+      (providerAdapter "code-health-edit.sh")
       (providerAdapter "chat-post.sh")
       (providerAdapter "lib/chat_post.py")
       (providerAdapter "codex-behavior-guard.sh")
