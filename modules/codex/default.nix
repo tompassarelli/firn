@@ -91,21 +91,8 @@ in
         ".codex/config.toml".source = renderedCodexConfigFile;
         ".codex/prompts".source =
           config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/harness/codex/prompts";
-      };
-      systemd.user.services.codex-keyring-default = {
-        Unit = {
-          Description = "Select an unlocked secret collection as the Secret Service default";
-          After = [ "dbus.service" ];
-        };
-        Service = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          Environment = [
-            "PATH=${pkgs.bash}/bin:${pkgs.systemd}/bin:${pkgs.coreutils}/bin:${pkgs.gnugrep}/bin"
-          ];
-          ExecStart = "${homeDir}/.local/share/north/bin/codex-keyring-default";
-        };
-        Install.WantedBy = [ "default.target" ];
+        ".local/bin/codex".source =
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/lib/codex/current/bin/codex";
       };
     };
   };
