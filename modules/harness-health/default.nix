@@ -26,7 +26,7 @@ in
             TimeoutStartSec = "6min";
             SuccessExitStatus = "1";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/share/south/bin"
+              "PATH=/run/wrappers/bin:${homeDir}/.nix-profile/bin:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${homeDir}/.local/share/south/bin"
             ];
             ExecStart = "${homeDir}/.local/share/north/bin/north health";
           };
