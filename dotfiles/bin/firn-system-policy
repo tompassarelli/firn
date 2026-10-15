@@ -1,3 +1,2 @@
 #!/usr/bin/env bash
-set -euo pipefail
-exec "$(dirname "${BASH_SOURCE[0]}")/_firn-live-tool" firn-system-policy "$@"
+exec "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/firn-tools" system-policy "$@"

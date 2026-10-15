@@ -38,3 +38,9 @@ or `nh` directly.
 Automated tests follow the testing skill: reuse results whose inputs have not
 changed, retain meaningful properties and recorded scenarios, and never
 weaken an expectation or retry a flake to green.
+
+`FIRN_REPO="$PWD" dotfiles/bin/firn-runtime-update` builds the locked
+`tools/firn` Rust crate through machine-capacity and installs `firn-tools` in
+the atomic CLI runtime. Agent registrations retain `firn-system-policy`, whose
+one-line adapter execs `firn-tools system-policy`. Runtime promotion and
+`agents sync` activate this change without a system rebuild.
