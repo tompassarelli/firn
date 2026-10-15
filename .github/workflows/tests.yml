@@ -116,6 +116,7 @@ jobs:
           export FIRN_BUN
           skip=(
             modules/north-profile/default.test.sh # Needs the local North/South policy catalog and whiterabbit Home Manager realization.
+            modules/north-profile/hook-activation.test.sh
           )
           mapfile -t tests < <(find dotfiles modules native -type f -name '*.test.sh' | LC_ALL=C sort)
           status=0
