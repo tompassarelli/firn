@@ -58,6 +58,7 @@ in
     };
     systemd.tmpfiles.rules = [
       "d /etc/codex/hooks/lib 0755 root root -"
+      (providerAdapter "north-hook.sh")
       (providerAdapter "lib/north-agent-activation.sh")
       (providerAdapter "firn-system-policy")
       (providerAdapter "concrete-model-identity-guard.sh")
