@@ -63,7 +63,6 @@ in
       (providerAdapter "firn-system-policy")
       (providerAdapter "concrete-model-identity-guard.sh")
       (providerAdapter "lib/launch_critical_decide.py")
-      (providerAdapter "tripwire-guard.sh")
       (providerAdapter "corpus-scan-guard.sh")
       (providerAdapter "git-stash-guard.sh")
       (providerAdapter "native-item-guard.sh")
