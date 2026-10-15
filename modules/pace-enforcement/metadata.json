@@ -1,6 +1,8 @@
 {
   "tags": [],
-  "optIn": [],
+  "optIn": [
+    "development"
+  ],
   "overrides": {},
   "supports": [],
   "flakeInputs": {}

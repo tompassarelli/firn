@@ -109,6 +109,7 @@
       "machine-update",
       "model-watch",
       "outside-watch",
+      "pace-enforcement",
       "procps",
       "proton-log-watchdog",
       "socat",
