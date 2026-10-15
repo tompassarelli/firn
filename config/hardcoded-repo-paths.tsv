@@ -5,6 +5,7 @@
 # `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/niri/config.kdl	7
+nixos-config/modules/landed-rebuild/runtime.mjs	1
 nixos-config/modules/theme-switcher/default.nix	1
 nixos-config/native/rebuild.ts	1
 north/bin/agents	2
@@ -13,6 +14,7 @@ north/bin/north-runtime-update	2
 north/bin/worker-sweep.test.sh	1
 north/harness/hooks/spawn-capacity-guard.test.sh	4
 north/harness/scripts/agent-config-check.sh	1
-nixos-config/modules/landed-rebuild/runtime.mjs	1
 north/src/dep_gate_tests.rs	1
+north/src/fixtures/events/describe.txt	1
+north/src/fixtures/events/row.json	1
 north/src/shellcmd_tests.rs	19

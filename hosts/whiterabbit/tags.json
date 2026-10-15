@@ -111,6 +111,7 @@
       "outside-watch",
       "pace-enforcement",
       "procps",
+      "proxy-terminal-watch",
       "proton-log-watchdog",
       "socat",
       "supply-chain-scan",

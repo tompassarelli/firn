@@ -65,6 +65,7 @@
           "laptop-runner.timer"
           "pace-enforcement.timer"
           "harness-health.timer"
+          "proxy-terminal-watch.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
           "watch-alerts.timer"
