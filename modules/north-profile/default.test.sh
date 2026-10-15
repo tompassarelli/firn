@@ -14,6 +14,7 @@ mkdir -p "${target%/*}"
 printf '%s\n' '{
   "model": "preserved-model",
   "permissions": {"allow": ["Read"]},
+  "statusLine": {"type": "command", "command": "/run/current-system/sw/bin/retired-statusline"},
   "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "/run/current-system/sw/bin/firn-system-policy"}]}]}
 }' >"$target"
 

@@ -70,7 +70,7 @@ if [[ -e $target ]]; then
     if type != "object" then
       error("Claude settings must be a JSON object")
     else
-      . + $projection[0]
+      del(.autoCompactWindow, .hooks, .statusLine, .subagentPromptCacheTtl) + $projection[0]
     end
   ' "$target" >"$stage"
 else
