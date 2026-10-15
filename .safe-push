@@ -1,6 +1,7 @@
 [ci]
 	budget = tests.yml 345
 [land]
+	check = . :: north config agents check-owners --north-root \"$HOME/code/north/main\" --south-root \"$HOME/code/south/main\" --nixos-root \"$PWD\" # hardcoded-repo-path:allow
 	check = "tools/firn/ :: nix shell --inputs-from . nixpkgs#cargo nixpkgs#rustc nixpkgs#gcc --command bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --class heavy --owner rust-port --timeout-seconds 1800 -- cargo test --locked --manifest-path tools/firn/Cargo.toml"
 	check = native/,.github/scripts/host-diff.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh native
 	check = modules/,hosts/,config/,native/nix/,flake.nix,flake.lock,dotfiles/bin/firn-check,.github/scripts/host-diff.sh,.github/scripts/land-checks.sh :: bun \"$(dirname \"$(agents path machine-capacity)\")/scripts/machine-capacity.mjs\" run --owner land-check --timeout-seconds 1800 -- bash .github/scripts/land-checks.sh drift
