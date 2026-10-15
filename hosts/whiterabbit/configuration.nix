@@ -2,7 +2,6 @@
 
 {
   myConfig.modules = {
-    agents-supervise.enable = true;
     harness-health.enable = true;
     system.stateVersion = "25.05";
 

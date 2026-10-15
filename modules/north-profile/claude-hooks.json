@@ -1,10 +1,5 @@
 {
   "subagentPromptCacheTtl": "1h",
-  "statusLine": {
-    "type": "command",
-    "command": "$HOME/.local/share/north/bin/agent-statusline",
-    "padding": 0
-  },
   "hooks": {
     "PreToolUse": [
       {
@@ -158,11 +153,6 @@
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/inbox-surface.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
             "timeout": 10
           }
@@ -171,11 +161,6 @@
       {
         "matcher": "Agent",
         "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/lead-regrounding.sh",
-            "timeout": 10
-          },
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
@@ -201,11 +186,6 @@
       {
         "matcher": "RemoteTrigger",
         "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/chat-post.sh",
-            "timeout": 10
-          },
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
@@ -236,11 +216,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/inbox-surface.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/prompt-grounding.sh",
             "timeout": 10
           },
@@ -255,11 +230,6 @@
     "Stop": [
       {
         "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/chat-post.sh",
-            "timeout": 10
-          },
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
@@ -278,11 +248,6 @@
           },
           {
             "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/chat-post.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
             "timeout": 10
           }
@@ -295,11 +260,6 @@
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/unlanded-work.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/org-role.sh",
             "timeout": 10
           },
           {
