@@ -87,6 +87,12 @@ in
       (providerAdapter "lib/spawn_capacity.py")
       (providerAdapter "lib/shellcmd.py")
       (providerAdapter "lib/defaults.toml")
+      (providerAdapter "lib/inbox_surface.py")
+      (providerAdapter "lib/events.py")
+      (providerAdapter "lib/org.py")
+      (providerAdapter "lib/laptop_line.py")
+      (providerAdapter "lib/defaults.py")
+      (providerAdapter "defaults.toml")
     ];
     home-manager.users.${username} = { config, ... }: {
       home.file = {
