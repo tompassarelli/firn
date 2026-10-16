@@ -68,7 +68,6 @@ in
       (providerAdapter "clipboard-guard.sh")
       (providerAdapter "generated-policy-guard.sh")
       (providerAdapter "language-guard.sh")
-      (providerAdapter "heavy-command-guard.sh")
       (providerAdapter "resource-safe-search-guard.sh")
       (providerAdapter "modern-search-guard.sh")
       (providerAdapter "worker-tier-guard.sh")
