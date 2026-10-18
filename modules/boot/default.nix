@@ -10,7 +10,8 @@ in
         "kernel.hardlockup_panic" = 1;
         "kernel.panic" = 20;
         "kernel.panic_on_oops" = 1;
-        "kernel.softlockup_panic" = 1;
+        "kernel.softlockup_all_cpu_backtrace" = 1;
+        "kernel.softlockup_panic" = 0;
       };
       kernelModules = [ "uinput" ];
       kernelParams = [

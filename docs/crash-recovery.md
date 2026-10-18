@@ -31,11 +31,19 @@ fix; dropped in 7a5e18d). Crashes predate the flag (stable 9-day runs happened
 **Capture config in place** (`modules/boot/default.nix`) — the live stack turns a
 silent freeze into a captured PANIC, then auto-reboots:
 
-- **watchdog→panic** — `kernel.hardlockup_panic=1`, `kernel.softlockup_panic=1`,
-  `kernel.panic_on_oops=1` (sysctls, applied live on switch) + `nmi_watchdog=panic`
+- **watchdog→panic** — `kernel.hardlockup_panic=1`, `kernel.panic_on_oops=1` (sysctls, applied live on switch) + `nmi_watchdog=panic`
   (kernel param, covers early boot before sysctls run). nmi_watchdog already
   *detects* hard lockups; this makes detection PANIC instead of logging into the
   void on a box that never flushes the log.
+- **soft lockups log, not panic** (18 Oct 2026) — `kernel.softlockup_panic=0` with
+  `kernel.softlockup_all_cpu_backtrace=1`. Three resets on 18 Oct, each 0.5–3 min after
+  Tom launched Warcraft III, left empty pstore; boots after two of them printed
+  `Previous system reset reason [0x00800800]: internal CPU shutdown event occurred`
+  (bit 23; bit 11 is undocumented). In two, systemd user units stopped finishing
+  15–20 s before the reset while the kernel still logged — the 20 s soft-lockup
+  window — so softlockup_panic was rebooting the box before any trace reached disk.
+  A soft lockup now prints every CPU's stack to the persistent journal and leaves
+  `amdgpu.gpu_recovery` its chance; a hard lockup still panics.
 - `kernel.panic=20` — auto-reboot 20s after a panic so the box recovers; by then the
   capture is archived. Keeps an unattended desktop from sitting dead.
 - `efi_pstore` (firmware default) — now the primary catch: freeze→panic dumps the
