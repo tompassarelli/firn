@@ -1,7 +1,7 @@
 CHECKS="logins units updates lock release disk backup"
 
 urgency_of() {
-  case "$1" in logins*|lynis) echo urgent ;; *) echo normal ;; esac
+  case "$1" in logins*|lynis|units|disk|backup) echo urgent ;; *) echo normal ;; esac
 }
 
 peer_name() {
@@ -139,7 +139,7 @@ apply() {
   [ -f "$state/$check.state" ] && read -r prev notified <"$state/$check.state"
   read -r action status stamp <<<"$(decide "$prev" "$notified" "$result" "$now")"
   case "$action" in
-    alert) nexus-alert "$(urgency_of "$check")" "${result#fail: }" "$(title_of "$check" "$result")" ;;
+    alert) [ "$check" = units ] && [ "$prev" = fail ] || nexus-alert "$(urgency_of "$check")" "${result#fail: }" "$(title_of "$check" "$result")" ;;
     recover) [ "${check%%-*}" = logins ] || nexus-alert normal "$check is healthy again." "Nexus: $check recovered" ;;
   esac
   echo "$status $stamp" >"$state/$check.state"

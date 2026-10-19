@@ -55,7 +55,6 @@
           "dbus-broker.service"
           "app-nm*applet@autostart.service"
           "activity-daemon.service"
-          "socrates-chat.service"
           "capacity-watchdog.service"
           "padbridge.service"
           "dconf.service"
@@ -103,7 +102,6 @@
           "auto-cpufreq.service 0.08"
           "niri.service 0.06"
           "activity-daemon.service 0.05"
-          "socrates-chat.service 0.04"
           "wireguard-watchdog.service 0.03"
         ];
       };

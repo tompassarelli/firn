@@ -17,14 +17,12 @@ let
     ];
     text = "exec python3 ${./nexus-vulnix.py} \"$@\"";
   };
-  notifyMask = pkgs.writeTextDir "lib/systemd/system/nexus-vulnix.service.d/10-nexus-notify.conf" "";
 in
 {
   options.myConfig.modules.nexus-vulnix.enable =
     lib.mkEnableOption "Weekly system vulnerability report with alerts for new high/critical CVSSv3 findings";
   config = lib.mkIf cfg.enable {
     systemd = {
-      packages = [ notifyMask ];
       services.nexus-vulnix = {
         description = "Scan the system closure for new high/critical vulnerabilities";
         wants = [ "network-online.target" ];

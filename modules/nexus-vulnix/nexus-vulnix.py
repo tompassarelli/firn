@@ -64,7 +64,7 @@ def main():
         return run(args.state, args.report)
     except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"vulnix scan failed: {error}", file=sys.stderr)
-        subprocess.run(["nexus-alert", "urgent", "Weekly vulnerability scan failed; inspect nexus-vulnix.service and its private report directory.", "Nexus: vulnerability scan failed"], check=True)
+        subprocess.run(["nexus-alert", "normal", "Weekly vulnerability scan failed; inspect nexus-vulnix.service and its private report directory.", "Nexus: vulnerability scan failed"], check=True)
         return 2
 
 

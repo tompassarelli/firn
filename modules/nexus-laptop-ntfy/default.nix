@@ -29,7 +29,7 @@ let
 in
 {
   options.myConfig.modules.nexus-laptop-ntfy = {
-    enable = lib.mkEnableOption "nexus-laptop-ntfy: ntfy topic socrates-laptop with Open and Close buttons on every laptop state change, a daily window reminder and the authenticated endpoint the buttons call";
+    enable = lib.mkEnableOption "nexus-laptop-ntfy: ntfy topic socrates-laptop with a daily window reminder carrying Open and Close buttons, and the authenticated endpoint the buttons call";
     sopsFile = lib.mkOption {
       type = lib.types.path;
       description = "sops file holding laptop-action-token, the bearer token the ntfy buttons send";
@@ -60,7 +60,7 @@ in
           };
         };
         nexus-laptop-ntfy-notify = {
-          description = "Publish the laptop state to ntfy when it changed";
+          description = "Publish the daily laptop window reminder to ntfy";
           unitConfig.ConditionPathIsExecutable = base;
           path = toolPath;
           environment = env;
