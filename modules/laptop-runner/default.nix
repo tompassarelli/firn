@@ -36,6 +36,7 @@ in
           };
           Service = {
             Type = "oneshot";
+            Slice = "control.slice";
             ExecStart = "${northBin}/laptop-auto";
             TimeoutStartSec = "55s";
             Environment = "PATH=${

@@ -33,6 +33,7 @@ in
           };
           Service = {
             Type = "oneshot";
+            Slice = "control.slice";
             TimeoutStartSec = "110s";
             Environment = [ path ];
             ExecStart = jobRun "pace-enforcement" "${northBin}/pace-control";

@@ -38,6 +38,7 @@ in
           };
           Service = {
             Type = "oneshot";
+            Slice = "control.slice";
             TimeoutStartSec = "50s";
             Environment = [ path ];
             ExecStart = jobRun "fleet-relay" "${northBin}/north fleet relay ${lib.escapeShellArgs cfg.hosts}";

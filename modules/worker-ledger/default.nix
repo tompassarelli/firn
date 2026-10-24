@@ -25,6 +25,7 @@ in
           };
           Service = {
             Type = "oneshot";
+            Slice = "control.slice";
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [

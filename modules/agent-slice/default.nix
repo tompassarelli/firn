@@ -16,6 +16,13 @@ in
           MemoryHigh = "61G";
         };
       };
+      control = {
+        description = "North control timers — placement, pace, relay and ledger run ahead of the agent work they control";
+        sliceConfig = {
+          CPUWeight = 250;
+          IOWeight = 250;
+        };
+      };
       app.sliceConfig.MemoryLow = "12G";
       session.sliceConfig = {
         CPUWeight = 300;
