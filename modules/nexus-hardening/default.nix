@@ -64,7 +64,10 @@ in
 
         '';
       };
-      resolved.settings.Resolve.LLMNR = "false";
+      resolved.settings.Resolve = {
+        LLMNR = "false";
+        MulticastDNS = "false";
+      };
       earlyoom.enable = true;
     };
     systemd = {
@@ -94,7 +97,9 @@ in
         allowPing = true;
         allowedTCPPorts = lib.mkForce (lib.optional cfg.publicSsh 22);
         allowedTCPPortRanges = lib.mkForce [ ];
-        allowedUDPPorts = [ 51820 ];
+        allowedUDPPorts = lib.optional (
+          config.myConfig.modules.wg-nexus.enable && config.myConfig.modules.wg-nexus.role == "hub"
+        ) 51820;
         interfaces.${wgInterface}.allowedTCPPorts = [ 22 ];
       };
     };
