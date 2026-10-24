@@ -12,5 +12,6 @@ in
       percentageAction = 8;
       criticalPowerAction = "HybridSleep";
     };
+    systemd.services.upower.restartTriggers = [ config.environment.etc."UPower/UPower.conf".source ];
   };
 }
