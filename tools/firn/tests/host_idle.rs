@@ -63,7 +63,7 @@ fn busy_host_refuses_and_names_every_blocker() {
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     for blocker in [
         "farm runner job running in container farm-smashcraft-3",
-        "fleet session sc-218-taps (working) placed on gex45",
+        "fleet session sc-218-taps (working) on gex45",
         "container podman-scratch running",
         "LAN pool unit smashcraft-lan-pool-1.service active",
     ] {
@@ -98,4 +98,34 @@ fn unfinished_probe_or_unreadable_fleet_refuses() {
     assert!(!calls.contains("systemctl restart"));
     let (output, _) = run("idle", IDLE_PROBE, "not json");
     assert_eq!(output.status.code(), Some(1));
+}
+
+const HOST_FLEET_PROBE: &str = "@uid 1000\n@fleet\n[\n{\"name\":\"sc-46-c\",\"status\":\"working\",\"machine\":null,\"parent\":null},\n{\"name\":\"sc-96q-judge\",\"status\":\"parked\",\"machine\":null,\"parent\":\"sc-96n-clip\"},\n{\"name\":\"sc-218-taps\",\"status\":\"idle\",\"machine\":\"gex45\",\"parent\":null},\n{\"name\":\"elsewhere\",\"status\":\"working\",\"machine\":\"nexus\",\"parent\":null},\n{\"name\":\"done\",\"status\":\"exited\",\"machine\":null,\"parent\":null}\n]\n\n@fleet-end\n@end\n";
+
+#[test]
+fn sessions_launched_on_the_host_refuse_whatever_their_parent() {
+    let (output, calls) = run("restart-user-manager", HOST_FLEET_PROBE, FLEET);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    for blocker in [
+        "fleet session sc-46-c (working) on gex45",
+        "fleet session sc-96q-judge (parked) on gex45",
+        "fleet session sc-218-taps (working) on gex45",
+        "fleet session sc-218-taps (idle) on gex45",
+    ] {
+        assert!(stderr.contains(blocker), "{blocker} missing from {stderr}");
+    }
+    assert!(
+        !stderr.contains("elsewhere") && !stderr.contains("done"),
+        "{stderr}"
+    );
+    assert!(!calls.contains("systemctl restart"), "{calls}");
+    let (output, calls) = run(
+        "restart-user-manager",
+        "@uid 1000\n@fleet\nnot json\n@fleet-end\n@end\n",
+        "[]",
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("north fleet list --json on gex45"));
+    assert!(!calls.contains("systemctl restart"), "{calls}");
 }

@@ -6,6 +6,8 @@ const PROBE: &str = r#"set -euo pipefail
 printf '@uid %s\n' "$(id -u)"
 systemctl --user list-units --plain --no-legend --state=active 'smashcraft-lan-pool-*' | awk '{print "@pool", $1}'
 if command -v podman >/dev/null; then podman ps --no-trunc --format '@container {{.ID}} {{.Names}}'; fi
+north="$(command -v north || echo "$HOME/.local/bin/north")"
+if [ -x "$north" ]; then echo @fleet; "$north" fleet list --json; echo; echo @fleet-end; fi
 ps -eo cgroup=,args= | awk '/Runner[.]Worker/ && match($0, /libpod-[0-9a-f]+/) {print "@job", substr($0, RSTART + 7, RLENGTH - 7)}'
 echo @end
 "#;
@@ -17,6 +19,7 @@ struct Probe {
     pools: Vec<String>,
     containers: Vec<(String, String)>,
     jobs: Vec<String>,
+    fleet: Option<String>,
 }
 
 pub fn run() {
@@ -52,7 +55,7 @@ pub fn run() {
         std::process::exit(1);
     }
     println!(
-        "{host} is idle: no busy farm runner job, no fleet session placed there, no running containers, no LAN pool units"
+        "{host} is idle: no busy farm runner job, no fleet session on it, no running containers, no LAN pool units"
     );
     if restart {
         let unit = format!("user@{uid}.service");
@@ -90,8 +93,13 @@ fn inspect(host: &str) -> Result<(u32, Vec<String>), String> {
     .map_err(|error| format!("north fleet list --json: {error}"))?;
     let fleet: Value = serde_json::from_str(&fleet)
         .map_err(|error| format!("north fleet list --json: {error}"))?;
+    let host_fleet = match &probe.fleet {
+        Some(json) => serde_json::from_str(json)
+            .map_err(|error| format!("north fleet list --json on {host}: {error}"))?,
+        None => Value::Null,
+    };
     let uid = probe.uid.ok_or("the probe printed no uid")?;
-    Ok((uid, blockers(host, &probe, &fleet)))
+    Ok((uid, blockers(host, &probe, &fleet, &host_fleet)))
 }
 
 fn remote_probe(host: &str) -> Result<Probe, String> {
@@ -139,7 +147,21 @@ fn command_output(command: &mut Command, input: Option<&str>) -> Result<String, 
 fn parse(output: &str) -> Option<Probe> {
     let mut probe = Probe::default();
     let mut finished = false;
+    let mut fleet: Option<String> = None;
     for line in output.lines() {
+        if let Some(json) = fleet.as_mut() {
+            if line == "@fleet-end" {
+                probe.fleet = fleet.take();
+            } else {
+                json.push_str(line);
+                json.push('\n');
+            }
+            continue;
+        }
+        if line == "@fleet" {
+            fleet = Some(String::new());
+            continue;
+        }
         let mut words = line.split_whitespace();
         match (words.next(), words.next(), words.next()) {
             (Some("@uid"), Some(uid), None) => probe.uid = uid.parse().ok(),
@@ -155,7 +177,7 @@ fn parse(output: &str) -> Option<Probe> {
     finished.then_some(probe)
 }
 
-fn blockers(host: &str, probe: &Probe, fleet: &Value) -> Vec<String> {
+fn blockers(host: &str, probe: &Probe, fleet: &Value, host_fleet: &Value) -> Vec<String> {
     let container = |id: &str| {
         probe
             .containers
@@ -170,21 +192,22 @@ fn blockers(host: &str, probe: &Probe, fleet: &Value) -> Vec<String> {
             None => format!("farm runner job running in container {id}"),
         })
         .collect();
-    blockers.extend(
-        fleet
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|entry| entry["machine"].as_str() == Some(host))
-            .filter(|entry| !matches!(entry["status"].as_str(), Some("exited" | "forgotten")))
-            .map(|entry| {
-                format!(
-                    "fleet session {} ({}) placed on {host}",
-                    entry["name"].as_str().unwrap_or("?"),
-                    entry["status"].as_str().unwrap_or("?")
-                )
-            }),
-    );
+    let placed_here = fleet_sessions(fleet).filter(|entry| entry["machine"].as_str() == Some(host));
+    let launched_there = fleet_sessions(host_fleet).filter(|entry| {
+        entry["machine"]
+            .as_str()
+            .is_none_or(|machine| machine == host)
+    });
+    for entry in placed_here.chain(launched_there) {
+        let blocker = format!(
+            "fleet session {} ({}) on {host}",
+            entry["name"].as_str().unwrap_or("?"),
+            entry["status"].as_str().unwrap_or("?")
+        );
+        if !blockers.contains(&blocker) {
+            blockers.push(blocker);
+        }
+    }
     blockers.extend(
         probe
             .containers
@@ -199,4 +222,12 @@ fn blockers(host: &str, probe: &Probe, fleet: &Value) -> Vec<String> {
             .map(|unit| format!("LAN pool unit {unit} active")),
     );
     blockers
+}
+
+fn fleet_sessions(fleet: &Value) -> impl Iterator<Item = &Value> {
+    fleet
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|entry| !matches!(entry["status"].as_str(), Some("exited" | "forgotten")))
 }
