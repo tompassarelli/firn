@@ -71,6 +71,7 @@
           "fleet-relay.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
+          "denylist-attest.timer"
           "watch-alerts.timer"
           "outside-watch.timer"
           "lane-gc.timer"
