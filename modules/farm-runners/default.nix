@@ -26,6 +26,9 @@ let
     lib.mapAttrsToList (repo: count: map (i: "${repo}-${toString i}") (lib.range 1 count)) cfg.repos
   );
   credentials = ".runner .credentials .credentials_rsaparams";
+  network = lib.optionalString (
+    cfg.egressInterface != null
+  ) " --network pasta:--outbound-if4,${cfg.egressInterface}";
   buildImage = pkgs.writeShellScript "farm-runner-image" ''
     ${podman} image exists ${image} || ${podman} build --cgroup-parent ${slice} -t ${image} -f ${pkgs.writeText "farm-runner.Containerfile" containerfile} ${pkgs.emptyDirectory}
   '';
@@ -63,7 +66,7 @@ let
     Service = {
       Slice = slice;
       Environment = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
-      ExecStart = "${podman} run --rm --name farm-${name} --cgroup-parent ${slice} --cpus ${toString cfg.cpus} --memory ${cfg.memory} -v ${stateDir}/${name}:/state:ro ${image} bash -c 'sudo install -o runner -m 600 -t . ${
+      ExecStart = "${podman} run --rm --name farm-${name} --cgroup-parent ${slice}${network} --cpus ${toString cfg.cpus} --memory ${cfg.memory} -v ${stateDir}/${name}:/state:ro ${image} bash -c 'sudo install -o runner -m 600 -t . ${
         lib.concatMapStringsSep " " (f: "/state/${f}") (lib.splitString " " credentials)
       } && exec nice -n 19 ./run.sh'";
       ExecStop = "-${podman} stop -t 20 farm-${name}";
@@ -119,6 +122,12 @@ in
       type = lib.types.str;
       default = "8g";
       description = "memory limit per runner container";
+    };
+    egressInterface = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "enp5s0";
+      description = "host interface every runner container's IPv4 traffic leaves by, so jobs reach the internet but no tunnel or private network such as wg-nexus; null routes them like any host process";
     };
     memoryMax = lib.mkOption {
       type = lib.types.str;
