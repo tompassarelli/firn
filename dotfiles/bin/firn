@@ -9,8 +9,10 @@ if [[ "${1:-}" == rebuild && "${2:-}" == --landed ]]; then
   firn_source="$(dirname "$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")")"
   status=0
   /run/current-system/sw/bin/python3 "$firn_source/modules/landed-rebuild/landed-rebuild.py" client "$3" || status=$?
-  if [[ "$status" == 0 ]]; then
-    generation="$(basename "$(readlink "${FIRN_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}")")"
+  profile="${FIRN_SYSTEM_PROFILE:-/nix/var/nix/profiles/system}"
+  switched="$("$profile/sw/bin/nixos-version" --configuration-revision 2>/dev/null || true)"
+  if [[ "$status" == 0 || "$switched" == "$3" ]]; then
+    generation="$(basename "$(readlink "$profile")")"
     generation="${generation#system-}"
     git -C "${FIRN_REPO:-$firn_source}" tag -f "gen-${generation%-link}" "$3" >/dev/null
   fi
