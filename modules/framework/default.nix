@@ -13,7 +13,6 @@ let
     runtimeInputs = [
       pkgs.coreutils
       pkgs.util-linux
-      pkgs.openssh
       pkgs.systemd
     ];
     runtimeEnv.DRAIN_USER = username;
@@ -31,12 +30,16 @@ in
     services.udev.extraRules = ''
       ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"
     '';
-    networking.networkmanager.dispatcherScripts = [
-      {
-        type = "pre-down";
-        source = "${sleepDrain}/bin/sleep-drain";
-      }
-    ];
+    networking.networkmanager.dispatcherScripts =
+      map
+        (type: {
+          inherit type;
+          source = "${sleepDrain}/bin/sleep-drain";
+        })
+        [
+          "pre-down"
+          "basic"
+        ];
     systemd.sleep.settings.Sleep.HibernateDelaySec = "30min";
     services.logind.settings.Login = {
       HandleLidSwitch = "suspend-then-hibernate";
