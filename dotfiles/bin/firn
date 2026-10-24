@@ -20,7 +20,7 @@ fi
 firn_repo="${FIRN_REPO:-}"
 if [[ -z "$firn_repo" ]]; then
   checkout="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  if [[ -n "$checkout" && -f "$checkout/flake.nix" ]]; then
+  if [[ -n "$checkout" && -f "$checkout/flake.nix" && -f "$checkout/dotfiles/bin/firn" ]]; then
     firn_repo="$checkout"
   else
     firn_repo="$HOME/code/nixos-config/main" # hardcoded-repo-path:allow

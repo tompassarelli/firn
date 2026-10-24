@@ -14,11 +14,14 @@ printf '%s\n' "$FIRN_REPO"
 RUNNER
 chmod +x "$scratch/runtime/current/bin/bun"
 export HOME="$scratch/home"
-for checkout in migrated unmigrated explicit home/code/nixos-config/main; do
+for checkout in migrated unmigrated south explicit home/code/nixos-config/main; do
   mkdir -p "$scratch/$checkout/config"
   git init -q "$scratch/$checkout"
 done
 : >"$scratch/migrated/flake.nix"
+mkdir -p "$scratch/migrated/dotfiles/bin"
+: >"$scratch/migrated/dotfiles/bin/firn"
+: >"$scratch/south/flake.nix"
 : >"$scratch/unmigrated/flake.bnix"
 export FIRN_RUNTIME_ROOT="$scratch/runtime"
 unset FIRN_REPO FIRN_BUN
@@ -28,6 +31,8 @@ cd "$repo/modules/codex"
 cd "$scratch/migrated"
 [[ "$("$here/firn" repo diff all)" == "$scratch/migrated" ]]
 cd "$scratch/unmigrated"
+[[ "$("$here/firn" repo diff all)" == "$HOME/code/nixos-config/main" ]] # hardcoded-repo-path:allow
+cd "$scratch/south"
 [[ "$("$here/firn" repo diff all)" == "$HOME/code/nixos-config/main" ]] # hardcoded-repo-path:allow
 cd "$scratch/unrelated"
 [[ "$("$here/firn" repo diff all)" == "$HOME/code/nixos-config/main" ]] # hardcoded-repo-path:allow
