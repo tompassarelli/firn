@@ -29,7 +29,8 @@ metadata from the comparison; the base is cached by Git tree and Nix version.
 For a source-only rewrite, every host must be reported unchanged.
 
 After checks and committing, use `firn rebuild` for the laptop and
-`firn host deploy nexus` from the published checkout for Nexus. Rebuilds use
+`firn host deploy HOST` from the published checkout for a remote host with the
+upgrade unit. Rebuilds use
 an exact committed snapshot, build the host closure and activate that exact
 store path. Uncommitted work cannot enter a generation. Verify the printed
 snapshot and the requested installed result. Do not invoke `nixos-rebuild`

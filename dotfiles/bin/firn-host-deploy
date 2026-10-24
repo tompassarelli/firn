@@ -3,10 +3,11 @@ set -euo pipefail
 
 [[ "${1:-}" == host && "${2:-}" == deploy ]] && shift 2
 host="${1:?usage: firn host deploy <host>  (run from a checkout of the repo the host upgrades from, or set FIRN_DEPLOY_REPO)}"
-case "$host" in
-  nexus) unit=nexus-upgrade.service ;;
-  *) printf 'firn host deploy: no remote upgrade unit for host: %s\n' "$host" >&2; exit 2 ;;
-esac
+unit=nexus-upgrade.service
+if ! ssh "$host" systemctl cat "$unit" >/dev/null 2>&1; then
+  printf 'firn host deploy: no remote upgrade unit %s on host: %s\n' "$unit" "$host" >&2
+  exit 2
+fi
 
 # shellcheck disable=SC2016
 flake="$(ssh "$host" 'grep -ohE "github:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[A-Za-z0-9_.-]+" $(systemctl show -P ExecStart nixos-upgrade.service | grep -oE "/nix/store/[^ ;]+") | sort -u')"
