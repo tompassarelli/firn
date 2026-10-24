@@ -52,6 +52,11 @@ silent freeze into a captured PANIC, then auto-reboots:
   SER9 (HX 370) owners report the same pin stops their resets. BIOS 04.02 is the
   newest on LVFS. Costs a few watts while idle; remove it if WC3 still resets with it
   live, and next suspect RAM or power delivery.
+- **memtest86+ boot entry** (24 Oct 2026, `systemd-boot.memtest86.enable`) — the
+  capacity helper caps one job at 16 GiB, so an in-OS memtester covers a sixth of the
+  94 GB; boot it once with `systemctl reboot --boot-loader-entry=memtest86.conf`.
+  memtest86+ loops until a key or reboot and keeps no log, so read Pass and Errors on
+  the screen.
 - `kernel.panic=20` — auto-reboot 20s after a panic so the box recovers; by then the
   capture is archived. Keeps an unattended desktop from sitting dead.
 - `efi_pstore` (firmware default) — now the primary catch: freeze→panic dumps the
