@@ -11,9 +11,7 @@ let
   cfg = config.myConfig.modules.machine-update;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  inherit (cfg) writer;
-  command = if writer then "--write" else "--apply";
-  jobName = if writer then "machine-update" else "machine-update-apply";
+  run = jobName: mode: jobRun jobName "${homeDir}/.local/share/firn/bin/machine-update ${mode}";
 in
 {
   options.myConfig.modules.machine-update = {
@@ -23,6 +21,12 @@ in
       default = false;
       description = "Land nightly security inputs; other hosts only apply the landed inputs";
     };
+    apply = lib.mkOption {
+      type = lib.types.bool;
+      default = !cfg.writer;
+      defaultText = lib.literalExpression "!writer";
+      description = "Rebuild this host from the landed inputs, after landing them when it is also the writer";
+    };
   };
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
@@ -31,7 +35,7 @@ in
           Unit = {
             Description = "Nightly machine software update";
             OnFailure = [
-              (if writer then "nexus-notify@%n.service" else "update-notify@%n.service")
+              (if cfg.apply then "update-notify@%n.service" else "nexus-notify@%n.service")
             ];
             X-SwitchMethod = "keep-old";
           };
@@ -57,7 +61,9 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun jobName "${homeDir}/.local/share/firn/bin/machine-update ${command}";
+            ExecStart =
+              lib.optional cfg.writer (run "machine-update" "--write")
+              ++ lib.optional cfg.apply (run "machine-update-apply" "--apply");
           };
         };
         timers.machine-update = {
