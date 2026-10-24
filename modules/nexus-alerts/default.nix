@@ -27,6 +27,15 @@ let
     ''
     + builtins.readFile ./nexus-alert.sh;
   };
+  publisherAuth = lib.concatMapStrings (
+    name: ",${name}:${ph."ntfy-${name}-hash"}:user"
+  ) cfg.publishers;
+  publisherAccess = lib.concatMapStrings (
+    name: ",${name}:urgent:wo,${name}:normal:wo"
+  ) cfg.publishers;
+  publisherTokens = lib.concatMapStrings (
+    name: ",${name}:${ph."ntfy-${name}-token"}:${name}"
+  ) cfg.publishers;
   logBody = ''
     name=''${unit%.service}
     result=$(systemctl $scope show "$unit" -p Result --value)
@@ -45,77 +54,105 @@ in
     enable = lib.mkEnableOption "nexus push alerts through ntfy (urgent at priority 5, normal at priority 2) and the nexus-alert CLI";
     sopsFile = lib.mkOption {
       type = lib.types.path;
-      description = "sops file holding the ntfy publisher and phone tokens and hashes";
+      description = "sops file holding the ntfy publisher token; on the hub also the phone token and every hash";
+    };
+    role = lib.mkOption {
+      type = lib.types.enum [
+        "hub"
+        "publisher"
+      ];
+      default = "hub";
+      description = "hub runs the ntfy server on wg-nexus; publisher only installs nexus-alert, posting to the hub over wg-nexus";
+    };
+    publishers = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "hub: publisher hosts that may post to urgent and normal, each with ntfy-NAME-hash and ntfy-NAME-token in sopsFile";
     };
   };
-  config = lib.mkIf cfg.enable {
-    sops = {
-      secrets = {
-        ntfy-publisher-token = {
+  config = lib.mkIf cfg.enable (
+    lib.mkMerge [
+      {
+        sops.secrets.ntfy-publisher-token = {
           inherit sopsFile;
           owner = username;
           mode = "0400";
         };
-        ntfy-phone-hash.sopsFile = sopsFile;
-        ntfy-phone-token.sopsFile = sopsFile;
-        ntfy-publisher-hash.sopsFile = sopsFile;
-      };
-      templates."ntfy-auth.env" = {
-        restartUnits = [ "ntfy-sh.service" ];
-        content = ''
-          NTFY_AUTH_USERS='phone:${ph.ntfy-phone-hash}:user,nexus:${ph.ntfy-publisher-hash}:user'
-          NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw,phone:socrates-laptop:ro,nexus:socrates-laptop:wo'
-          NTFY_AUTH_TOKENS='phone:${ph.ntfy-phone-token}:phone,nexus:${ph.ntfy-publisher-token}:publisher'
+        environment.systemPackages = [ nexusAlert ];
+      }
+      (lib.mkIf (cfg.role == "hub") {
+        sops = {
+          secrets =
+            lib.genAttrs
+              (lib.concatMap (name: [
+                "ntfy-${name}-hash"
+                "ntfy-${name}-token"
+              ]) cfg.publishers)
+              (_: {
+                inherit sopsFile;
+              })
+            // {
+              ntfy-phone-hash.sopsFile = sopsFile;
+              ntfy-phone-token.sopsFile = sopsFile;
+              ntfy-publisher-hash.sopsFile = sopsFile;
+            };
+          templates."ntfy-auth.env" = {
+            restartUnits = [ "ntfy-sh.service" ];
+            content = ''
+              NTFY_AUTH_USERS='phone:${ph.ntfy-phone-hash}:user,nexus:${ph.ntfy-publisher-hash}:user${publisherAuth}'
+              NTFY_AUTH_ACCESS='phone:urgent:ro,phone:normal:ro,nexus:urgent:wo,nexus:normal:wo,nexus:socrates-test:rw,phone:socrates-laptop:ro,nexus:socrates-laptop:wo${publisherAccess}'
+              NTFY_AUTH_TOKENS='phone:${ph.ntfy-phone-token}:phone,nexus:${ph.ntfy-publisher-token}:publisher${publisherTokens}'
 
-        '';
-      };
-    };
-    services.ntfy-sh = {
-      enable = true;
-      environmentFile = envTemplate.path;
-      settings = {
-        base-url = baseUrl;
-        listen-http = listen;
-        upstream-base-url = "https://ntfy.sh";
-        auth-default-access = "deny-all";
-        enable-login = true;
-      };
-    };
-    networking.firewall.interfaces.wg-nexus.allowedTCPPorts = [ port ];
-    environment.systemPackages = [ nexusAlert ];
-    systemd.services = {
-      ntfy-sh.after = [ "wireguard-wg-nexus.service" ];
-      "nexus-notify@" = {
-        description = "Log a failed unit %i to the journal";
-        path = [
-          pkgs.systemd
-          pkgs.coreutils
-        ];
-        scriptArgs = "%i";
-        script = ''
-          unit=$1
-          scope=
-          ${logBody}
-        '';
-        serviceConfig.Type = "oneshot";
-      };
-    };
-    home-manager.users.${username} = _: {
-      systemd.user.services."nexus-notify@" = {
-        Unit.Description = "Log a failed user unit %i to the journal";
-        Service = {
-          Type = "oneshot";
-          Environment = [
-            "PATH=${
-              lib.makeBinPath [
-                pkgs.systemd
-                pkgs.coreutils
-              ]
-            }"
-          ];
-          ExecStart = "${userLog} %i";
+            '';
+          };
         };
-      };
-    };
-  };
+        services.ntfy-sh = {
+          enable = true;
+          environmentFile = envTemplate.path;
+          settings = {
+            base-url = baseUrl;
+            listen-http = listen;
+            upstream-base-url = "https://ntfy.sh";
+            auth-default-access = "deny-all";
+            enable-login = true;
+          };
+        };
+        networking.firewall.interfaces.wg-nexus.allowedTCPPorts = [ port ];
+        systemd.services = {
+          ntfy-sh.after = [ "wireguard-wg-nexus.service" ];
+          "nexus-notify@" = {
+            description = "Log a failed unit %i to the journal";
+            path = [
+              pkgs.systemd
+              pkgs.coreutils
+            ];
+            scriptArgs = "%i";
+            script = ''
+              unit=$1
+              scope=
+              ${logBody}
+            '';
+            serviceConfig.Type = "oneshot";
+          };
+        };
+        home-manager.users.${username} = _: {
+          systemd.user.services."nexus-notify@" = {
+            Unit.Description = "Log a failed user unit %i to the journal";
+            Service = {
+              Type = "oneshot";
+              Environment = [
+                "PATH=${
+                  lib.makeBinPath [
+                    pkgs.systemd
+                    pkgs.coreutils
+                  ]
+                }"
+              ];
+              ExecStart = "${userLog} %i";
+            };
+          };
+        };
+      })
+    ]
+  );
 }

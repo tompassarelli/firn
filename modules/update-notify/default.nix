@@ -16,7 +16,9 @@ let
     exec ${pkgs.systemd}/bin/systemctl --user start "nexus-notify@$unit.service"
   '';
   notify =
-    if config.myConfig.modules.nexus-alerts.enable then
+    if
+      config.myConfig.modules.nexus-alerts.enable && config.myConfig.modules.nexus-alerts.role == "hub"
+    then
       "${nexusNotify} %i"
     else
       "${homeDir}/.local/share/firn/bin/update-notify %i";

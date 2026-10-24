@@ -49,7 +49,7 @@ def run(state, report_file=None):
     new = sorted(findings - known)
     if new:
         body = "New high/critical CVSSv3 findings:\n" + "\n".join(f"{name} {version}: {cve}" for name, version, cve in new)
-        subprocess.run(["nexus-alert", "urgent", body, "Nexus: new high/critical vulnerabilities"], check=True)
+        subprocess.run(["nexus-alert", "urgent", body, f"{os.uname().nodename}: new high/critical vulnerabilities"], check=True)
     atomic_json(previous, sorted(findings))
     print(f"vulnix: {len(findings)} high/critical findings, {len(new)} new; report {state / 'report.json'}")
     return int(bool(findings))
@@ -64,7 +64,7 @@ def main():
         return run(args.state, args.report)
     except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"vulnix scan failed: {error}", file=sys.stderr)
-        subprocess.run(["nexus-alert", "normal", "Weekly vulnerability scan failed; inspect nexus-vulnix.service and its private report directory.", "Nexus: vulnerability scan failed"], check=True)
+        subprocess.run(["nexus-alert", "normal", "Weekly vulnerability scan failed; inspect nexus-vulnix.service and its private report directory.", f"{os.uname().nodename}: vulnerability scan failed"], check=True)
         return 2
 
 
