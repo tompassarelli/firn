@@ -111,3 +111,52 @@ journalctl -b -1 | grep -iE "thermal|throttl|mce|hardware error|critical temp"
 - **Still zero trace** (no panic, no pstore) → NMI couldn't fire: true SoC freeze or
   instant hardware power-cut. THEN do the `CONFIG_PSTORE_CONSOLE` rebuild or netconsole,
   and check `sensors` under load / fans / BIOS thermal limits / PSU.
+
+## Battery drain and the unresumable hibernate (25 Oct 2026)
+
+**What happened.** UPower's history (`/var/lib/upower/history-*-FRANGWA-60-02CB.dat`)
+shows the battery switching from charging to discharging at 00:39:41 local time at 56%, with
+no kernel or logind line naming why, then losing about 1.3% a minute at 25–40 W of agent
+load (native Warcraft clients were running). At 2% UPower's `CriticalPowerAction=HybridSleep`
+fired: logind logged `The system will hybrid sleep now!` at 01:36:04, the lid-drain hook
+spent its 5 s ssh timeout (`rc=124`), and the last line of the boot is
+`PM: hibernation: hibernation entry` at 01:36:10. The next boot's kernel started at
+01:36:38 with the AC adapter online.
+
+**Why the image was not resumable: the write never finished.**
+
+- The next boot's kernel said `PM: Image not found (code -22)`. `swsusp_check` returns
+  `-EINVAL` when the swap header at the resume offset does not carry the hibernation
+  signature, and the kernel writes that signature last, in `swap_writer_finish`, only after
+  every image page is on disk.
+- The resume offset is right. `btrfs inspect-internal map-swapfile -r /swap/swapfile`
+  prints `347227782`, the same value as `resume_offset=` on the kernel command line, and
+  the 4 KiB page at that offset on `/dev/mapper/cryptroot` ends in `SWAPSPACE2`, a plain
+  swap header. A finished image would have left `S1SUSPEND` there, and `swapon` of
+  `/swap/swapfile` succeeded at 01:36:53.
+- `Reported hibernation image: … offset=347227782` from systemd-hibernate-resume is not
+  evidence of an image. systemd-sleep writes the `HibernateLocation` EFI variable before
+  the kernel starts writing, so it is present whether or not the write completed.
+- No earlier boot in the journal (back to 6 Oct) has a `hibernation entry`, so this was the
+  first hibernate on this install and nothing shows one ever completing here.
+
+So the battery ran out during image creation or the write, about 20 s in. The 2% action
+level left about 1.1 Wh (2% of the 56.4 Wh full charge), and at the bottom of the gauge,
+under load, the remaining energy is less than the percentage claims.
+
+**How long a hibernate write takes here.** The image is capped by `/sys/power/image_size`
+(40 325 586 944 bytes, the kernel's default of 2/5 of RAM); the kernel reclaims down to
+that size before writing. A 4 GiB direct write to the btrfs root through dm-crypt
+measured 252 MB/s (`dd bs=16M count=256 oflag=direct conv=fsync`). A worst-case image then
+takes about 160 s to write uncompressed, less with the default `lzo` hibernate
+compressor, plus reclaim and amdgpu VRAM eviction. At 25–30 W that is 1.1–1.3 Wh, about
+2% of the battery, the whole 2% that was left.
+
+**Fix (in this repository).** `modules/upower` sets `PercentageLow=20`,
+`PercentageCritical=12` and `PercentageAction=8`: hybrid sleep now starts with about
+4.5 Wh left, roughly three times the worst-case write, which covers both the gauge error
+near empty and the suspend that follows the write. `resume_offset` and `image_size` need
+no change. Earlier warning comes from north: `laptop-auto` drains agent placement off the
+laptop (`laptop` state `draining`, reason `battery`) once the battery is discharging
+below 30%, sends one critical desktop notification for that discharge, and reopens
+placement to the window when AC returns.

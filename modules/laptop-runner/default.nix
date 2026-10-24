@@ -41,6 +41,7 @@ in
             TimeoutStartSec = "55s";
             Environment = "PATH=${
               lib.makeBinPath [
+                pkgs.libnotify
                 pkgs.python3
                 pkgs.systemd
                 pkgs.openssh
