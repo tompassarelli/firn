@@ -10,7 +10,6 @@ nixos-config/modules/theme-switcher/default.nix	1
 nixos-config/native/rebuild.ts	1
 north/bin/agents	2
 north/bin/lane-gc-classify.test.sh	17
-north/bin/north-runtime-update	2
 north/harness/hooks/spawn-capacity-guard.test.sh	4
 north/harness/lib/flow.test.py	3
 north/harness/scripts/agent-config-check.sh	1

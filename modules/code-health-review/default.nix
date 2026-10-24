@@ -2,6 +2,7 @@
   config,
   lib,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -26,10 +27,10 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin"
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
               "CODE_HEALTH_ACCOUNT=a"
             ];
-            ExecStart = jobRun "code-health-review" "${homeDir}/.local/share/north/bin/code-health-tick";
+            ExecStart = jobRun "code-health-review" "${northBin}/code-health-tick";
           };
         };
         timers.code-health-review = {

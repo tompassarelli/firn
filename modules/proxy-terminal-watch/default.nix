@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -11,7 +12,7 @@ let
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "proxy-terminal-watch: classify every agent terminal and push stopped leads every 5 minutes";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${
     lib.makeBinPath [
       pkgs.coreutils
       pkgs.procps

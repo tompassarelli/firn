@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
@@ -31,11 +32,11 @@ in
         services.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
           Unit = {
             Description = "Observe laptop gaming and seat activity for placement";
-            ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/laptop-auto";
+            ConditionPathIsExecutable = "${northBin}/laptop-auto";
           };
           Service = {
             Type = "oneshot";
-            ExecStart = "${homeDir}/.local/share/north/bin/laptop-auto";
+            ExecStart = "${northBin}/laptop-auto";
             TimeoutStartSec = "55s";
             Environment = "PATH=${
               lib.makeBinPath [
@@ -43,7 +44,7 @@ in
                 pkgs.systemd
                 pkgs.openssh
               ]
-            }:${homeDir}/.local/share/north/bin:/run/current-system/sw/bin";
+            }:${northBin}:/run/current-system/sw/bin";
           };
         };
         timers.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
@@ -61,7 +62,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [
-              "PATH=${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils
@@ -75,7 +76,7 @@ in
               }:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin"
               "LAPTOP_RUNNER_PLACEMENT=${cfg.placement}"
             ];
-            ExecStart = "${homeDir}/.local/share/north/bin/laptop-runner";
+            ExecStart = "${northBin}/laptop-runner";
           };
         };
         timers.laptop-runner = {

@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -28,7 +29,7 @@ in
               Nice = 10;
               TimeoutStartSec = "20min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                   lib.makeBinPath [
                     pkgs.bun
                     pkgs.git
@@ -40,7 +41,7 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc" "${homeDir}/.local/share/north/bin/lane-gc";
+              ExecStart = jobRun "lane-gc" "${northBin}/lane-gc";
             };
           };
           lane-gc-remote = {
@@ -53,7 +54,7 @@ in
               Nice = 10;
               TimeoutStartSec = "20min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                   lib.makeBinPath [
                     pkgs.bun
                     pkgs.git
@@ -65,7 +66,7 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc-remote" "${homeDir}/.local/share/north/bin/lane-gc --remote";
+              ExecStart = jobRun "lane-gc-remote" "${northBin}/lane-gc --remote";
             };
           };
         };

@@ -3,13 +3,13 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.job-watch;
   username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
 in
 {
   options.myConfig.modules.job-watch.enable =
@@ -29,7 +29,7 @@ in
           User = username;
           StateDirectory = "job-watch";
           TimeoutStartSec = "5min";
-          ExecStart = jobRun "job-watch" "${homeDir}/.local/share/north/bin/job-watch run";
+          ExecStart = jobRun "job-watch" "${northBin}/job-watch run";
         };
       };
       timers.job-watch = {

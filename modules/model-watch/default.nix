@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -29,11 +30,11 @@ in
               Nice = 10;
               TimeoutStartSec = "10min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                   lib.makeBinPath [ pkgs.python3 ]
                 }"
               ];
-              ExecStart = jobRun "model-watch" "${homeDir}/.local/share/north/bin/model-watch";
+              ExecStart = jobRun "model-watch" "${northBin}/model-watch";
             };
           };
           cross-project-scan = {
@@ -46,9 +47,9 @@ in
               Nice = 10;
               TimeoutStartSec = "20min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin"
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
               ];
-              ExecStart = jobRun "cross-project-scan" "${homeDir}/.local/share/north/bin/cross-project-scan";
+              ExecStart = jobRun "cross-project-scan" "${northBin}/cross-project-scan";
             };
           };
           skill-prune = {
@@ -61,11 +62,11 @@ in
               Nice = 10;
               TimeoutStartSec = "100min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${
                   lib.makeBinPath [ pkgs.python3 ]
                 }"
               ];
-              ExecStart = jobRun "skill-prune" "${homeDir}/.local/share/north/bin/skill-prune";
+              ExecStart = jobRun "skill-prune" "${northBin}/skill-prune";
             };
           };
         };

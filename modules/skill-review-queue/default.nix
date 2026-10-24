@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -35,7 +36,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [
-              "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=${homeDir}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils
@@ -45,7 +46,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "skill-review-queue" "${homeDir}/.local/share/north/bin/skill-review-queue";
+            ExecStart = jobRun "skill-review-queue" "${northBin}/skill-review-queue";
           };
         };
         timers.skill-review-queue = {

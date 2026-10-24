@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
@@ -9,7 +10,7 @@ let
   cfg = config.myConfig.modules.agents-flow-stall;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
     lib.makeBinPath [
       pkgs.bun
       pkgs.gh
@@ -36,7 +37,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [ path ];
-            ExecStart = "${homeDir}/.local/share/north/bin/agents flow --stall-alert";
+            ExecStart = "${northBin}/agents flow --stall-alert";
           };
         };
         timers.agents-flow-stall = {

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 let
@@ -25,8 +26,8 @@ in
         services.firn-delivery-liveness = {
           Service = {
             Environment = [
-              "NORTH_BIN=${hm.config.home.homeDirectory}/.local/share/north/bin/north"
-              "PATH=${hm.config.home.homeDirectory}/.local/share/firn/bin:${hm.config.home.homeDirectory}/.local/share/north/bin:${
+              "NORTH_BIN=${northBin}/north"
+              "PATH=${hm.config.home.homeDirectory}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils
@@ -38,7 +39,7 @@ in
                 ]
               }"
             ];
-            ExecStart = "${pkgs.bash}/bin/bash ${hm.config.home.homeDirectory}/.local/share/north/bin/job-run --path ${
+            ExecStart = "${pkgs.bash}/bin/bash ${northBin}/job-run --path ${
               lib.makeBinPath [
                 pkgs.python3
                 pkgs.openssh

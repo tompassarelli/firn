@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -22,7 +23,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [
-              "PATH=${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=${homeDir}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
@@ -10,12 +11,13 @@ let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   port = 2588;
-  base = "${homeDir}/.local/share/north/bin/laptop-ntfy";
-  toolPath = [
+  serve = "${homeDir}/.local/share/north/bin/laptop-ntfy";
+  notify = "${northBin}/laptop-ntfy";
+  toolPath = tool: [
     pkgs.python3
     pkgs.coreutils
     pkgs.gitleaks
-    "${homeDir}/.local/share/north"
+    (dirOf (dirOf tool))
     "/run/current-system/sw"
   ];
   env = {
@@ -48,27 +50,27 @@ in
           description = "Endpoint for the laptop Open and Close buttons in ntfy";
           wantedBy = [ "multi-user.target" ];
           after = [ "wireguard-wg-nexus.service" ];
-          path = toolPath;
+          path = toolPath serve;
           environment = env;
           serviceConfig = {
             User = username;
             Restart = "always";
             RestartSec = 5;
             TimeoutStartSec = "15min";
-            ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${base} ]; do sleep 5; done'";
-            ExecStart = "${base} serve";
+            ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${serve} ]; do sleep 5; done'";
+            ExecStart = "${serve} serve";
           };
         };
         nexus-laptop-ntfy-notify = {
           description = "Publish the daily laptop window reminder to ntfy";
-          unitConfig.ConditionPathIsExecutable = base;
-          path = toolPath;
+          unitConfig.ConditionPathIsExecutable = notify;
+          path = toolPath notify;
           environment = env;
           serviceConfig = {
             Type = "oneshot";
             User = username;
             TimeoutStartSec = "50s";
-            ExecStart = "${base} notify";
+            ExecStart = "${notify} notify";
           };
         };
       };

@@ -2,15 +2,15 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.supply-chain-scan;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
     lib.makeBinPath [
       pkgs.osv-scanner
       pkgs.git
@@ -39,7 +39,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [ path ];
-            ExecStart = "${homeDir}/.local/share/north/bin/supply-chain-scan";
+            ExecStart = "${northBin}/supply-chain-scan";
           };
         };
         timers.supply-chain-scan = {

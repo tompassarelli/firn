@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -25,7 +26,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.bun
                   pkgs.coreutils
@@ -35,7 +36,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "vast-reaper" "${homeDir}/.local/share/north/bin/vast-reaper";
+            ExecStart = jobRun "vast-reaper" "${northBin}/vast-reaper";
           };
         };
         timers.vast-reaper = {

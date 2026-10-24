@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -11,7 +12,7 @@ let
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "pace-enforcement: measure provider burn and control worker admission every minute";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${
     lib.makeBinPath [
       pkgs.python3
       pkgs.openssh
@@ -34,7 +35,7 @@ in
             Type = "oneshot";
             TimeoutStartSec = "110s";
             Environment = [ path ];
-            ExecStart = jobRun "pace-enforcement" "${homeDir}/.local/share/north/bin/pace-control";
+            ExecStart = jobRun "pace-enforcement" "${northBin}/pace-control";
           };
         };
         timers.pace-enforcement = {

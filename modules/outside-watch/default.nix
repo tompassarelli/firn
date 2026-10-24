@@ -3,12 +3,12 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.outside-watch;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "outside-watch: every 10 minutes minimize and block spam on Tom's GitHub repos, report real people to the proxy inbox and mark our own notifications read";
 in
@@ -25,7 +25,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.coreutils
                   pkgs.gh
@@ -33,7 +33,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "outside-watch" "${homeDir}/.local/share/north/bin/outside-watch run";
+            ExecStart = jobRun "outside-watch" "${northBin}/outside-watch run";
           };
         };
         timers.outside-watch = {

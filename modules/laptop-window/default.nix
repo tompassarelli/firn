@@ -2,13 +2,13 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.laptop-window;
   username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
 in
 {
   options.myConfig.modules.laptop-window = {
@@ -38,19 +38,19 @@ in
     systemd = {
       services.laptop-window = {
         description = "laptop tick: apply the laptop availability window and settle a finished drain";
-        unitConfig.ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/laptop";
+        unitConfig.ConditionPathIsExecutable = "${northBin}/laptop";
         path = [
           pkgs.python3
           pkgs.coreutils
           pkgs.gitleaks
-          "${homeDir}/.local/share/north"
+          (dirOf northBin)
           "/run/current-system/sw"
         ];
         serviceConfig = {
           Type = "oneshot";
           User = username;
           TimeoutStartSec = "50s";
-          ExecStart = "${homeDir}/.local/share/north/bin/laptop tick";
+          ExecStart = "${northBin}/laptop tick";
         };
       };
       timers.laptop-window = {

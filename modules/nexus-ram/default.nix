@@ -2,13 +2,13 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.nexus-ram;
   username = config.myConfig.modules.users.username;
-  homeDir = config.myConfig.modules.users.homeDir;
 in
 {
   options.myConfig.modules.nexus-ram.enable =
@@ -17,7 +17,7 @@ in
     systemd = {
       services.nexus-ram = {
         description = "Append one nexus-ram row: MemAvailable, swap, zram, memory PSI and resident agent CLI PSS";
-        unitConfig.ConditionPathIsExecutable = "${homeDir}/.local/share/north/bin/nexus-ram";
+        unitConfig.ConditionPathIsExecutable = "${northBin}/nexus-ram";
         path = [
           pkgs.python3
           pkgs.coreutils
@@ -27,7 +27,7 @@ in
           User = username;
           Nice = 10;
           TimeoutStartSec = "50s";
-          ExecStart = "${homeDir}/.local/share/north/bin/nexus-ram record";
+          ExecStart = "${northBin}/nexus-ram record";
         };
       };
       timers.nexus-ram = {

@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -27,7 +28,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.python3
                   pkgs.jq
@@ -38,8 +39,8 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "worker-ledger" "${homeDir}/.local/share/north/bin/worker-ledger";
-            ExecStartPost = "${homeDir}/.local/share/north/bin/agents usage --refresh";
+            ExecStart = jobRun "worker-ledger" "${northBin}/worker-ledger";
+            ExecStartPost = "${northBin}/agents usage --refresh";
           };
         };
         timers.worker-ledger = {

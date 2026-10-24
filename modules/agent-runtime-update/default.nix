@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -26,7 +27,7 @@ in
             Type = "oneshot";
             TimeoutStartSec = "4h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/north/bin:${
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.bun
@@ -45,7 +46,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "agent-runtime-update" "${homeDir}/.local/share/north/bin/agent-runtime-update";
+            ExecStart = jobRun "agent-runtime-update" "${northBin}/agent-runtime-update";
           };
         };
         timers.agent-runtime-update = {
