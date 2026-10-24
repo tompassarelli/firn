@@ -2,7 +2,6 @@ import json
 import os
 import pwd
 import re
-import shutil
 import socket
 import struct
 import subprocess
@@ -25,6 +24,13 @@ def rebuild(snapshot, bun, runtime, env):
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, umask=0o022)
     return result.returncode, result.stdout
+
+
+def prepare_system(checkout, destination, as_user):
+    command(as_user + ["git", "-C", str(checkout), "fetch", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main"])
+    tip = command(["git", "-c", "safe.directory=*", "-C", str(checkout), "rev-parse", "refs/remotes/origin/main"]).strip()
+    command(["git", "-c", "safe.directory=*", "-c", "core.hooksPath=/dev/null", "clone", "--no-hardlinks", "--no-checkout", str(checkout), str(destination)])
+    command(["git", "-C", str(destination), "checkout", "--detach", tip])
 
 
 class Service:
@@ -91,7 +97,7 @@ def client(sha):
         return 70
 
 
-def serve(username, home, bun, runtime, environment_switch, system_source):
+def serve(username, home, bun, runtime, environment_switch):
     user = pwd.getpwnam(username)
     env = {"HOME": str(STATE), "PATH": os.environ["PATH"],
            "GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -99,14 +105,8 @@ def serve(username, home, bun, runtime, environment_switch, system_source):
            "FIRN_LANDED_UID": str(user.pw_uid), "FIRN_LANDED_ENVIRONMENT_SWITCH": environment_switch}
 
     def activate(snapshot, sha):
-        if not (source := os.path.realpath(system_source)).startswith("/nix/store/") or not Path(source, "flake.nix").is_file():
-            return 78, "refused: immutable installed system flake is not configured"
         system = snapshot.parent / "system"
-        shutil.copytree(source, system, symlinks=True)
-        command(["git", "-C", str(system), "init"])
-        command(["git", "-C", str(system), "add", "."])
-        command(["git", "-C", str(system), "-c", "user.name=Firn service",
-                 "-c", "user.email=firn@example.invalid", "commit", "-m", "Installed system source"])
+        prepare_system(Path(home) / "code/south/main", system, ["runuser", "-u", username, "--", "env", "-u", "GIT_CONFIG_GLOBAL", "-u", "GIT_CONFIG_NOSYSTEM", f"HOME={home}"])
         for directory, dirs, files in os.walk(snapshot.parent):
             os.chmod(directory, 0o755)
             for name in files:
@@ -132,7 +132,7 @@ def serve(username, home, bun, runtime, environment_switch, system_source):
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "client":
         sys.exit(client(sys.argv[2]))
-    if len(sys.argv) == 8 and sys.argv[1] == "serve":
+    if len(sys.argv) == 7 and sys.argv[1] == "serve":
         serve(*sys.argv[2:])
     else:
         sys.exit("usage: landed-rebuild.py client SHA | serve USER HOME")

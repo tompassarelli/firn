@@ -1,8 +1,8 @@
 `firn rebuild --landed SHA` requests the current public Firn main tip through
 a root-owned Unix socket service. The service fetches the fixed public origin,
 authenticates the Linux socket peer, and builds root-owned committed snapshots.
-The installed private overlay must bind `myConfig.modules.landed-rebuild.systemFlake`
-to its immutable `self.outPath`; requests refuse activation when it is absent.
+Each request fetches `~/code/south/main` as the configured user and builds
+south as of its origin/main, the same source plain `firn rebuild` uses.
 
 The privileged runtime is a generated bundle of Firn's existing rebuild core.
 Regenerate it with `bash modules/landed-rebuild/build-runtime.sh` whenever its

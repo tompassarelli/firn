@@ -13,8 +13,6 @@ let
   environmentSwitch = pkgs.writeShellScript "firn-environment-switch" (
     builtins.readFile "${flakeRoot}/dotfiles/bin/firn-environment-switch"
   );
-  systemPointer = "/etc/firn-landed-rebuild/system-flake";
-  systemSource = if (cfg.systemFlake == null) then "none" else builtins.toString cfg.systemFlake;
 in
 {
   options.myConfig.modules.landed-rebuild = {
@@ -22,13 +20,10 @@ in
     systemFlake = lib.mkOption {
       type = lib.types.nullOr lib.types.path;
       default = null;
-      description = "Immutable installed private system flake to preserve during landed Firn activation";
+      description = "Unused: landed activation builds south origin/main fetched at request time";
     };
   };
   config = lib.mkIf cfg.enable {
-    environment.etc = lib.mkIf (cfg.systemFlake != null) {
-      "firn-landed-rebuild/system-flake".source = systemSource;
-    };
     systemd = {
       sockets.firn-landed-rebuild = {
         description = "Firn landed-commit rebuild requests";
@@ -55,7 +50,7 @@ in
           ]
         }";
         serviceConfig = {
-          ExecStart = "${pkgs.python3}/bin/python3 ${./landed-rebuild.py} serve ${username} ${homeDir} ${pkgs.bun}/bin/bun ${./runtime.mjs} ${environmentSwitch} ${systemPointer}";
+          ExecStart = "${pkgs.python3}/bin/python3 ${./landed-rebuild.py} serve ${username} ${homeDir} ${pkgs.bun}/bin/bun ${./runtime.mjs} ${environmentSwitch}";
           StateDirectory = "firn-landed-rebuild";
           StateDirectoryMode = "0700";
           UMask = "0077";
