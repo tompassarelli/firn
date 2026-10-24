@@ -12,7 +12,7 @@ let
   host = config.networking.hostName;
   podman = "${config.virtualisation.podman.package}/bin/podman";
   stateDir = "${homeDir}/.local/state/farm-runners";
-  slice = "farm-runners.slice";
+  slice = "agent-capacity-farm.slice";
   containerfile = ''
     FROM ghcr.io/actions/actions-runner:${cfg.runnerVersion}
     USER root
@@ -27,7 +27,7 @@ let
   );
   credentials = ".runner .credentials .credentials_rsaparams";
   buildImage = pkgs.writeShellScript "farm-runner-image" ''
-    ${podman} image exists ${image} || ${podman} build -t ${image} -f ${pkgs.writeText "farm-runner.Containerfile" containerfile} ${pkgs.emptyDirectory}
+    ${podman} image exists ${image} || ${podman} build --cgroup-parent ${slice} -t ${image} -f ${pkgs.writeText "farm-runner.Containerfile" containerfile} ${pkgs.emptyDirectory}
   '';
   register = pkgs.writeShellApplication {
     name = "farm-runner-register";
@@ -47,7 +47,7 @@ let
       systemctl --user start farm-runner-image.service
       dir=${stateDir}/$name
       mkdir -p "$dir" && chmod 700 "$dir"
-      ${podman} run --rm -i -v "$dir:/state" ${image} bash -c \
+      ${podman} run --rm -i --cgroup-parent ${slice} -v "$dir:/state" ${image} bash -c \
         'read -r t && ./config.sh --unattended --replace --disableupdate --url "$0" --token "$t" --name "$1" --labels "$2" --work _work >/dev/null && sudo cp ${credentials} /state/' \
         "https://github.com/${cfg.owner}/$repo" "${host}-$name" "${lib.concatStringsSep "," cfg.labels}" <<<"$token"
       systemctl --user restart "farm-runner-$name.service"
@@ -131,8 +131,8 @@ in
     environment.systemPackages = [ register ];
     home-manager.users.${username} = _: {
       systemd.user = {
-        slices.farm-runners = {
-          Unit.Description = "Farm runner containers at idle CPU and IO weight, so interactive work and game clients always win";
+        slices.agent-capacity-farm = {
+          Unit.Description = "Farm runner containers inside the agent capacity slice at idle CPU and IO weight, so interactive work and game clients always win";
           Slice = {
             CPUWeight = "idle";
             IOWeight = 1;
