@@ -160,3 +160,13 @@ no change. Earlier warning comes from north: `laptop-auto` drains agent placemen
 laptop (`laptop` state `draining`, reason `battery`) once the battery is discharging
 below 30%, sends one critical desktop notification for that discharge, and reopens
 placement to the window when AC returns.
+
+**Measured on the new levels (25 Oct 2026, 02:05).** AC dropped again at 01:58 while
+charging at 15%, the same unexplained source drop as at 00:39. At 8% logind started a
+hybrid sleep, and this time it completed. The kernel preallocated 40 GB (the
+`image_size` cap) in 12.1 s, wrote 37.4 GB in 38.8 s (965 MB/s; 12.7 GB after `lzo`),
+wrote the signature (`PM: S|`) and entered s2idle 102 s after `hibernation entry`. That
+included the 6 s lid-drain timeout and freezing. Every session survived. The real write
+is about four times faster than the `dd` estimate above, so the 8% action level leaves a
+wide margin. The source drops themselves (charging, then discharging with no kernel or
+logind line) still need a look at the charger and cable.
