@@ -48,6 +48,23 @@ in
         Restart = "always";
         RestartSec = 10;
         OOMScoreAdjust = -500;
+        CapabilityBoundingSet = "";
+        NoNewPrivileges = true;
+        ProtectSystem = "full";
+        PrivateDevices = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        ProtectClock = true;
+        LockPersonality = true;
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        SystemCallArchitectures = "native";
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+          "AF_NETLINK"
+        ];
       };
     };
   };

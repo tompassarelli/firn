@@ -28,6 +28,45 @@ let
     LAPTOP_NTFY_ACTION_URL = "http://10.77.0.1:${builtins.toString port}";
     LAPTOP_NTFY_LISTEN = "10.77.0.1:${builtins.toString port}";
   };
+  stateDirs = map (name: "${homeDir}/.local/state/${name}") [
+    "laptop-ntfy"
+    "placement"
+    "threads"
+  ];
+  sandbox = {
+    CapabilityBoundingSet = "";
+    NoNewPrivileges = true;
+    ProtectSystem = "strict";
+    ProtectHome = "read-only";
+    ReadWritePaths = stateDirs;
+    PrivateTmp = true;
+    PrivateDevices = true;
+    PrivateUsers = true;
+    ProtectKernelTunables = true;
+    ProtectKernelModules = true;
+    ProtectKernelLogs = true;
+    ProtectControlGroups = true;
+    ProtectClock = true;
+    ProtectHostname = true;
+    ProtectProc = "invisible";
+    ProcSubset = "pid";
+    LockPersonality = true;
+    MemoryDenyWriteExecute = true;
+    RestrictRealtime = true;
+    RestrictSUIDSGID = true;
+    RestrictNamespaces = true;
+    SystemCallArchitectures = "native";
+    SystemCallFilter = [
+      "@system-service"
+      "~@privileged @resources"
+    ];
+    RestrictAddressFamilies = [
+      "AF_UNIX"
+      "AF_INET"
+      "AF_INET6"
+    ];
+    UMask = "0077";
+  };
 in
 {
   options.myConfig.modules.nexus-laptop-ntfy = {
@@ -52,7 +91,7 @@ in
           after = [ "wireguard-wg-nexus.service" ];
           path = toolPath serve;
           environment = env;
-          serviceConfig = {
+          serviceConfig = sandbox // {
             User = username;
             Restart = "always";
             RestartSec = 5;
@@ -66,7 +105,7 @@ in
           unitConfig.ConditionPathIsExecutable = notify;
           path = toolPath notify;
           environment = env;
-          serviceConfig = {
+          serviceConfig = sandbox // {
             Type = "oneshot";
             User = username;
             TimeoutStartSec = "50s";
