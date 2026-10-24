@@ -71,7 +71,7 @@ export function readHostFacts(root) {
 
 export function buildGenerated(root) {
   const run = Bun.spawnSync(['nix', 'eval', '--raw', `path:${root}#nixosConfigurations`, '--apply', 'hosts: builtins.concatStringsSep "\\n" (map (name: hosts.${name}.config.system.build.toplevel.drvPath) (builtins.attrNames hosts))'], {
-    cwd: root, stdout: 'ignore', stderr: 'inherit', timeout: 120000,
+    cwd: root, stdout: 'ignore', stderr: 'inherit',
   });
   return run.exitCode ?? 1;
 }
