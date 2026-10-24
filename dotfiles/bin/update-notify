@@ -2,4 +2,12 @@
 set -euo pipefail
 [[ $# -eq 1 ]] || exit 64
 unit="${1%.service}.service"
-exec notify-send --print-id --urgency=critical --expire-time=0 'Automatic update failed' "$unit failed. Inspect: journalctl --user -u $unit -b"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/update-notify"
+mkdir -p "$state"
+stamp="$state/$unit"
+now=$(date +%s)
+last=0 id=0
+[[ -r $stamp ]] && read -r last id <"$stamp" || true
+(( now - last < 3600 )) && exit 0
+id=$(notify-send --print-id --replace-id="${id:-0}" --urgency=critical --expire-time=0 'Automatic update failed' "$unit failed. Inspect: journalctl --user -u $unit -b")
+printf '%s %s\n' "$now" "$id" >"$stamp"
