@@ -44,6 +44,14 @@ silent freeze into a captured PANIC, then auto-reboots:
   window — so softlockup_panic was rebooting the box before any trace reached disk.
   A soft lockup now prints every CPU's stack to the persistent journal and leaves
   `amdgpu.gpu_recovery` its chance; a hard lockup still panics.
+- **GPU pinned to `power_dpm_force_performance_level=high`** (24 Oct 2026, framework
+  module udev rule) — a fourth reset, 30 s after a Warcraft III launch, came with the
+  soft-lockup capture live and left nothing: no lockup, no amdgpu line, user units
+  finishing up to the last second, same `0x00800800` reason. The SoC cut power itself,
+  so this tests the 819→2900 MHz GPU clock jump at game load as the trigger; Beelink
+  SER9 (HX 370) owners report the same pin stops their resets. BIOS 04.02 is the
+  newest on LVFS. Costs a few watts while idle; remove it if WC3 still resets with it
+  live, and next suspect RAM or power delivery.
 - `kernel.panic=20` — auto-reboot 20s after a panic so the box recovers; by then the
   capture is archived. Keeps an unattended desktop from sitting dead.
 - `efi_pstore` (firmware default) — now the primary catch: freeze→panic dumps the

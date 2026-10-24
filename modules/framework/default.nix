@@ -56,6 +56,9 @@ in
       options mt7925e disable_aspm=1
 
     '';
+    services.udev.extraRules = ''
+      ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", DRIVERS=="amdgpu", ATTR{device/power_dpm_force_performance_level}="high"
+    '';
     environment.etc."systemd/system-sleep/lid-drain".source = "${lidDrain}/bin/lid-drain-hook";
     systemd.sleep.settings.Sleep.HibernateDelaySec = "30min";
     services.logind.settings.Login = {
