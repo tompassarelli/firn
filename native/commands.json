@@ -159,6 +159,34 @@
     },
     {
       "arguments": [
+        "host",
+        "idle"
+      ],
+      "edge": "idle",
+      "executable": "firn-tools",
+      "gap": "      ",
+      "node": "host",
+      "order": 12,
+      "required": true,
+      "summary": "check a host is idle: no busy farm runner job, fleet session, container or LAN pool unit",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
+        "host",
+        "restart-user-manager"
+      ],
+      "edge": "restart-user-manager",
+      "executable": "firn-tools",
+      "gap": "  ",
+      "node": "host",
+      "order": 13,
+      "required": true,
+      "summary": "restart a host's user manager only while it is idle, else name what blocks",
+      "usage": "<host>"
+    },
+    {
+      "arguments": [
         "module",
         "list",
         "all"
@@ -167,7 +195,7 @@
       "executable": "firn-inventory",
       "gap": "  ",
       "node": "module",
-      "order": 12,
+      "order": 14,
       "required": false,
       "summary": "list modules (all, used = enabled somewhere, unused = orphan)",
       "usage": "all|used|unused"
@@ -181,7 +209,7 @@
       "executable": "firn-inventory",
       "gap": "           ",
       "node": "module",
-      "order": 13,
+      "order": 15,
       "required": true,
       "summary": "show which hosts reference a module (direct + via tags)",
       "usage": "<name>"
@@ -196,7 +224,7 @@
       "executable": "firn-inventory",
       "gap": "            ",
       "node": "module",
-      "order": 14,
+      "order": 16,
       "required": false,
       "summary": "modules enabled by the default host",
       "usage": "all"
@@ -210,7 +238,7 @@
       "executable": "firn-authoring",
       "gap": "            ",
       "node": "module",
-      "order": 15,
+      "order": 17,
       "required": true,
       "summary": "scaffold and validate a NixOS module",
       "usage": "<name>"
@@ -224,7 +252,7 @@
       "executable": "firn-tag",
       "gap": "         ",
       "node": "module",
-      "order": 16,
+      "order": 18,
       "required": true,
       "summary": "remove <name> from :disabled (no module-level force-on)",
       "usage": "<name>"
@@ -238,7 +266,7 @@
       "executable": "firn-tag",
       "gap": "        ",
       "node": "module",
-      "order": 17,
+      "order": 19,
       "required": true,
       "summary": "disable a module in the host tags.json",
       "usage": "<name>"
@@ -253,7 +281,7 @@
       "executable": "firn-views",
       "gap": "  ",
       "node": "platform",
-      "order": 18,
+      "order": 20,
       "required": false,
       "summary": "platform compat overview (all = full matrix; others = filtered)",
       "usage": "all|darwin|linux"
@@ -267,7 +295,7 @@
       "executable": "firn-views",
       "gap": "            ",
       "node": "platform",
-      "order": 19,
+      "order": 21,
       "required": true,
       "summary": "compat report for one module",
       "usage": "<name>"
@@ -282,7 +310,7 @@
       "executable": "firn-views",
       "gap": "           ",
       "node": "platform",
-      "order": 20,
+      "order": 22,
       "required": false,
       "summary": "print the Darwin module support list",
       "usage": "all"
@@ -297,7 +325,7 @@
       "executable": "firn-repo-workflow",
       "gap": "                ",
       "node": "repo",
-      "order": 21,
+      "order": 23,
       "required": false,
       "summary": "validate whenever Nix sources change",
       "usage": "all"
@@ -312,7 +340,7 @@
       "executable": "firn-repo-build",
       "gap": "        ",
       "node": "repo",
-      "order": 22,
+      "order": 24,
       "required": false,
       "summary": "validate selected Nix sources without writing them",
       "usage": "<target>|all"
@@ -327,7 +355,7 @@
       "executable": "firn-repo-workflow",
       "gap": "               ",
       "node": "repo",
-      "order": 23,
+      "order": 25,
       "required": false,
       "summary": "repo health check (untracked, stale, schema, orphans, validator)",
       "usage": "all"
@@ -342,7 +370,7 @@
       "executable": "firn-repo-workflow",
       "gap": "         ",
       "node": "repo",
-      "order": 24,
+      "order": 26,
       "required": false,
       "summary": "check first-party input pins against local main ancestry",
       "usage": "all"
@@ -357,7 +385,7 @@
       "executable": "firn-repo-workflow",
       "gap": "      ",
       "node": "repo",
-      "order": 25,
+      "order": 27,
       "required": false,
       "summary": "flake update + schema diff + validate (use dry-run leaf to preview)",
       "usage": "now|dry-run"
@@ -372,7 +400,7 @@
       "executable": "firn-repo-build",
       "gap": "              ",
       "node": "repo",
-      "order": 26,
+      "order": 28,
       "required": false,
       "summary": "resolve tags and synchronize module flake inputs",
       "usage": "[all]"
@@ -387,7 +415,7 @@
       "executable": "firn-schema",
       "gap": "           ",
       "node": "repo",
-      "order": 27,
+      "order": 29,
       "required": false,
       "summary": "lint .nix syntax + validate option paths, types, packages",
       "usage": "[all]"
@@ -402,7 +430,7 @@
       "executable": "firn-repo-workflow",
       "gap": "               ",
       "node": "repo",
-      "order": 28,
+      "order": 30,
       "required": false,
       "summary": "syntax-check Nix sources",
       "usage": "[all]"
@@ -417,7 +445,7 @@
       "executable": "firn-repo-workflow",
       "gap": "  ",
       "node": "repo",
-      "order": 29,
+      "order": 31,
       "required": false,
       "summary": "render the tracked agent-configuration map; bundle prints the full read",
       "usage": "all|bundle"
@@ -431,7 +459,7 @@
       "executable": "firn-views",
       "gap": "    ",
       "node": "schema",
-      "order": 30,
+      "order": 32,
       "required": true,
       "summary": "show schema entry + repo references for an option",
       "usage": "<path>"
@@ -445,7 +473,7 @@
       "executable": "firn-schema",
       "gap": "  ",
       "node": "schema",
-      "order": 31,
+      "order": 33,
       "required": false,
       "summary": "regenerate options schema cache from nix eval",
       "usage": "[<host>]"
@@ -460,7 +488,7 @@
       "executable": "firn-authoring",
       "gap": "     ",
       "node": "secret",
-      "order": 32,
+      "order": 34,
       "required": false,
       "summary": "list secret names under secrets/",
       "usage": "all"
@@ -474,7 +502,7 @@
       "executable": "firn-authoring",
       "gap": "  ",
       "node": "secret",
-      "order": 33,
+      "order": 35,
       "required": true,
       "summary": "decrypt and print a secret to stdout",
       "usage": "<name>"
@@ -488,7 +516,7 @@
       "executable": "firn-authoring",
       "gap": "  ",
       "node": "secret",
-      "order": 34,
+      "order": 36,
       "required": true,
       "summary": "open an existing secret in $EDITOR via sops",
       "usage": "<name>"
@@ -503,7 +531,7 @@
       "executable": "firn-tag",
       "gap": "                    ",
       "node": "tag",
-      "order": 35,
+      "order": 37,
       "required": false,
       "summary": "tag universe (sourced from modules' :tags / :tags-opt-in)",
       "usage": "all"
@@ -517,7 +545,7 @@
       "executable": "firn-tag",
       "gap": "               ",
       "node": "tag",
-      "order": 36,
+      "order": 38,
       "required": true,
       "summary": "show a module's :tags and :tags-opt-in",
       "usage": "<module>"
@@ -531,7 +559,7 @@
       "executable": "firn-tag",
       "gap": "                ",
       "node": "tag",
-      "order": 37,
+      "order": 39,
       "required": true,
       "summary": "list modules carrying a tag",
       "usage": "<tag>"
@@ -546,7 +574,7 @@
       "executable": "firn-tag",
       "gap": "           ",
       "node": "tag",
-      "order": 38,
+      "order": 40,
       "required": false,
       "summary": "write .firn-cache/tags.jsonl (or 'stdout' to pipe)",
       "usage": "repo|stdout"
@@ -560,7 +588,7 @@
       "executable": "firn-tag",
       "gap": "  ",
       "node": "tag",
-      "order": 39,
+      "order": 41,
       "required": false,
       "summary": "resolve tag metadata; +emit validates Nix evaluation",
       "usage": "<host>|all [+emit]"
@@ -574,7 +602,7 @@
       "executable": "firn-tag",
       "gap": "                ",
       "node": "tag",
-      "order": 40,
+      "order": 42,
       "required": true,
       "summary": "add '<host> enables <tag>' to the current host's tags.json",
       "usage": "<tag>"
@@ -588,7 +616,7 @@
       "executable": "firn-tag",
       "gap": "               ",
       "node": "tag",
-      "order": 41,
+      "order": 43,
       "required": true,
       "summary": "remove a tag's enables, adds and drops facts from the current host's tags.json",
       "usage": "<tag>"
@@ -602,7 +630,7 @@
       "executable": "firn-tag",
       "gap": "       ",
       "node": "tag",
-      "order": 42,
+      "order": 44,
       "required": true,
       "summary": "add '<host> adds <module> to <tag>' to tags.json, enabling <tag>",
       "usage": "<tag>+<module>"
@@ -616,7 +644,7 @@
       "executable": "firn-tag",
       "gap": "      ",
       "node": "tag",
-      "order": 43,
+      "order": 45,
       "required": true,
       "summary": "add '<host> drops <module> from <tag>' to tags.json, enabling <tag>",
       "usage": "<tag>+<module>"
@@ -630,7 +658,7 @@
       "executable": "firn-tag",
       "gap": "               ",
       "node": "tag",
-      "order": 44,
+      "order": 46,
       "required": false,
       "summary": "show the host's tag facts in tags.json + resolved active modules",
       "usage": "<host>"
@@ -644,7 +672,7 @@
       "executable": "firn-authoring",
       "gap": "    ",
       "node": "template",
-      "order": 45,
+      "order": 47,
       "required": true,
       "summary": "scaffold a NixOS service-wrapping module from schema",
       "usage": "<name>"
@@ -658,7 +686,7 @@
       "executable": "firn-authoring",
       "gap": "  ",
       "node": "template",
-      "order": 46,
+      "order": 48,
       "required": true,
       "summary": "scaffold a module with an option-attrs submodule shape",
       "usage": "<name>"
@@ -672,7 +700,7 @@
       "executable": "firn-authoring",
       "gap": "       ",
       "node": "template",
-      "order": 47,
+      "order": 49,
       "required": true,
       "summary": "scaffold a home-manager-only module",
       "usage": "<name>"
@@ -686,7 +714,7 @@
       "executable": "firn-authoring",
       "gap": "       ",
       "node": "template",
-      "order": 48,
+      "order": 50,
       "required": true,
       "summary": "scaffold a NixOS host with tags.json",
       "usage": "<name>"
