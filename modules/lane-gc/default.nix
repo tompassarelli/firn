@@ -23,6 +23,7 @@ in
             Unit = {
               Description = description;
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";
@@ -48,6 +49,7 @@ in
             Unit = {
               Description = "lane-gc: daily archive stale origin branches with verified liveness";
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";
