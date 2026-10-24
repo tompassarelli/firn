@@ -99,10 +99,10 @@ def serve(username, home, bun, runtime, environment_switch, system_source):
            "FIRN_LANDED_UID": str(user.pw_uid), "FIRN_LANDED_ENVIRONMENT_SWITCH": environment_switch}
 
     def activate(snapshot, sha):
-        if not system_source.startswith("/nix/store/") or not Path(system_source, "flake.nix").is_file():
+        if not (source := os.path.realpath(system_source)).startswith("/nix/store/") or not Path(source, "flake.nix").is_file():
             return 78, "refused: immutable installed system flake is not configured"
         system = snapshot.parent / "system"
-        shutil.copytree(system_source, system, symlinks=True)
+        shutil.copytree(source, system, symlinks=True)
         command(["git", "-C", str(system), "init"])
         command(["git", "-C", str(system), "add", "."])
         command(["git", "-C", str(system), "-c", "user.name=Firn service",
