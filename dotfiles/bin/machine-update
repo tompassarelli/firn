@@ -54,7 +54,7 @@ main() {
     sudo -n -v
     git -C "$repo" merge --ff-only origin/main
     git -C "$south" merge --ff-only origin/main
-    cd "$repo"
+    cd "$repo" && firn-runtime-update
     firn rebuild
   else
     candidates="$state/flake-candidates"
@@ -82,7 +82,7 @@ main() {
       echo 'machine-update: selected nixpkgs is older than three days; refusing a missing security bump' >&2; return 1;
     }
     bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
-      --class moderate --owner automatic-machine-update-build --timeout-seconds 1800 -- firn repo build
+      --class moderate --owner automatic-machine-update-build --timeout-seconds 1800 -- bash -c 'firn-runtime-update && firn repo build'
     bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" run \
       --class moderate --owner automatic-machine-update-validate --timeout-seconds 1800 -- firn repo validate
     if [[ -n "$(git status --porcelain)" ]]; then
