@@ -3,6 +3,10 @@
 {
   myConfig.modules = {
     harness-health.enable = true;
+    fleet-relay.hosts = [
+      "nexus"
+      "tom@gex45"
+    ];
     system.stateVersion = "25.05";
 
     capacity-watchdog = {
@@ -64,6 +68,7 @@
           "pace-enforcement.timer"
           "harness-health.timer"
           "proxy-terminal-watch.timer"
+          "fleet-relay.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
           "watch-alerts.timer"
