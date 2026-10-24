@@ -17,11 +17,6 @@ in
 {
   options.myConfig.modules.landed-rebuild = {
     enable = lib.mkEnableOption "Activate only the freshly fetched landed main commit from sandboxed agents";
-    systemFlake = lib.mkOption {
-      type = lib.types.nullOr lib.types.path;
-      default = null;
-      description = "Unused: landed activation builds south origin/main fetched at request time";
-    };
   };
   config = lib.mkIf cfg.enable {
     systemd = {
