@@ -27,6 +27,7 @@ let
   );
   credentials = ".runner .credentials .credentials_rsaparams";
   confine = "--cap-drop all --security-opt no-new-privileges";
+  stateMount = dir: "--userns keep-id:uid=1001,gid=1001 -v ${dir}:/state";
   limits = "--cpus ${toString cfg.cpus} --memory ${cfg.memory}";
   jit = cfg.jitTokenFile != null;
   mintSocket = "/run/farm-runner-mint.sock";
@@ -80,6 +81,7 @@ let
       pkgs.util-linux
     ];
     text = ''
+      cd /
       usage() { echo "usage: farm-runner-register REPO-N < registration-token, as root (one of: ${lib.concatStringsSep " " names})" >&2; exit 2; }
       [ $# -eq 1 ] || usage
       [ "$(id -u)" -eq 0 ] || usage
@@ -94,7 +96,7 @@ let
       dir=${stateDir}/$name
       as_farm mkdir -p "$dir"
       as_farm chmod 700 "$dir"
-      as_farm ${podman} run --rm -i ${confine} -v "$dir:/state:U" ${image} bash -c \
+      as_farm ${podman} run --rm -i ${confine} ${stateMount "\"$dir\""} ${image} bash -c \
         'read -r t && ./config.sh --unattended --replace --disableupdate --url "$0" --token "$t" --name "$1" --labels "$2" --work _work >/dev/null && cp ${credentials} /state/' \
         "https://github.com/${cfg.owner}/$repo" "${host}-$name" "${lib.concatStringsSep "," cfg.labels}" <<<"$token"
       as_farm systemctl --user restart "farm-runner-$name.service"
@@ -113,7 +115,7 @@ let
         if jit then
           "${jitStart name}"
         else
-          "${podman} run --rm --name farm-${name} ${confine} ${limits} -v ${stateDir}/${name}:/state:ro,U ${image} bash -c 'cp ${
+          "${podman} run --rm --name farm-${name} ${confine} ${limits} ${stateMount "${stateDir}/${name}"}:ro ${image} bash -c 'cp ${
             lib.concatMapStringsSep " " (f: "/state/${f}") (lib.splitString " " credentials)
           } . && exec nice -n 19 ./run.sh --once'";
       ExecStop = "-${podman} stop -t 20 farm-${name}";
@@ -216,6 +218,16 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = config.networking.nftables.enable;
+        message = "farm-runners: the farm-egress table needs networking.nftables.enable, or runner egress is unfiltered";
+      }
+      {
+        assertion = config.services.resolved.enable;
+        message = "farm-runners: runner DNS is allowed only to systemd-resolved on 127.0.0.53/54";
+      }
+    ];
     virtualisation.podman.enable = true;
     environment.systemPackages = lib.optional (!jit) register;
     systemd = {
