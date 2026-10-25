@@ -75,6 +75,7 @@ let
   '';
   register = pkgs.writeShellApplication {
     name = "farm-runner-register";
+    excludeShellChecks = [ "SC2016" ];
     runtimeInputs = [
       pkgs.coreutils
       pkgs.systemd
