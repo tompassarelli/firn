@@ -32,7 +32,7 @@ in
         services.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
           Unit = {
             Description = "Observe laptop gaming and seat activity for placement";
-            ConditionPathIsExecutable = "${northBin}/laptop-auto";
+            ConditionFileIsExecutable = "${northBin}/laptop-auto";
           };
           Service = {
             Type = "oneshot";

@@ -17,7 +17,7 @@ in
     systemd = {
       services.nexus-ram = {
         description = "Append one nexus-ram row: MemAvailable, swap, zram, memory PSI and resident agent CLI PSS";
-        unitConfig.ConditionPathIsExecutable = "${northBin}/nexus-ram";
+        unitConfig.ConditionFileIsExecutable = "${northBin}/nexus-ram";
         path = [
           pkgs.python3
           pkgs.coreutils

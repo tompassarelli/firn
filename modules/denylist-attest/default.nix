@@ -25,7 +25,7 @@ in
     systemd = {
       services.denylist-attest = {
         description = "Attest claude/ branch tips against the private deny-list";
-        unitConfig.ConditionPathIsExecutable = "${northBin}/north";
+        unitConfig.ConditionFileIsExecutable = "${northBin}/north";
         path = [
           gh
           pkgs.git

@@ -102,7 +102,7 @@ in
         };
         nexus-laptop-ntfy-notify = {
           description = "Publish the daily laptop window reminder to ntfy";
-          unitConfig.ConditionPathIsExecutable = notify;
+          unitConfig.ConditionFileIsExecutable = notify;
           path = toolPath notify;
           environment = env;
           serviceConfig = sandbox // {

@@ -38,7 +38,7 @@ in
     systemd = {
       services.laptop-window = {
         description = "laptop tick: apply the laptop availability window and settle a finished drain";
-        unitConfig.ConditionPathIsExecutable = "${northBin}/laptop";
+        unitConfig.ConditionFileIsExecutable = "${northBin}/laptop";
         path = [
           pkgs.python3
           pkgs.coreutils
