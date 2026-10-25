@@ -71,7 +71,7 @@ main() {
     container="$(dirname "$(dirname "$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)")")"
     branch="nightly-$(date +%Y%m%d-%H%M%S)-$$"
     lane="$container/worktrees/$branch"
-    git -C "$repo" worktree add -b "$branch" "$lane" origin/main
+    git -C "$repo" worktree add -b "$branch" "$lane" origin/main && trap "[[ \$(git -C '$repo' rev-list --count origin/main..'$branch' 2>/dev/null) == 0 ]] && git -C '$repo' worktree remove --force '$lane' && git -C '$repo' branch -D '$branch'" EXIT
     cd "$lane"
     git show origin/main:flake.lock > "$state/running.lock"
     nix flake update
