@@ -35,7 +35,6 @@
           "init.scope"
           "session-*.scope"
           "logrotate.timer"
-          "denylist-attest.timer"
           "systemd-tmpfiles-clean.timer"
           "nixos-upgrade.timer"
           "nix-gc.timer"
