@@ -31,6 +31,11 @@ in
       default = false;
       description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
     };
+    publicTcpPorts = lib.mkOption {
+      type = lib.types.listOf lib.types.port;
+      default = [ ];
+      description = "TCP ports open on every address besides sshd's, for services the host exposes to the internet";
+    };
   };
   config = lib.mkIf cfg.enable {
     myConfig.modules = {
@@ -95,7 +100,7 @@ in
       firewall = {
         enable = true;
         allowPing = true;
-        allowedTCPPorts = lib.mkForce (lib.optional cfg.publicSsh 22);
+        allowedTCPPorts = lib.mkForce ((lib.optional cfg.publicSsh 22) ++ cfg.publicTcpPorts);
         allowedTCPPortRanges = lib.mkForce [ ];
         allowedUDPPorts = lib.optional (
           config.myConfig.modules.wg-nexus.enable && config.myConfig.modules.wg-nexus.role == "hub"
