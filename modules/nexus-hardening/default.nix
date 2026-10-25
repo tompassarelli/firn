@@ -141,7 +141,7 @@ in
         "--refresh"
         "--flake ${upgradeFlake}"
       ];
-      dates = lib.mkForce "19:30";
+      dates = lib.mkForce "20:00";
       allowReboot = lib.mkForce true;
       rebootWindow = {
         lower = "20:00";
