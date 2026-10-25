@@ -10,6 +10,7 @@ let
   username = config.myConfig.modules.users.username;
   northBin = "${homeDir}/.local/state/north/current/tree/bin";
   recordPath = lib.makeBinPath [
+    pkgs.bash
     pkgs.python3
     pkgs.openssh
     pkgs.coreutils
