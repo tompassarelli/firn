@@ -126,7 +126,7 @@ PanelWindow {
 
                 Process {
                     id: wifiProc
-                    command: ["nmcli", "-t", "-f", "SIGNAL,ACTIVE,SSID", "dev", "wifi"]
+                    command: ["nmcli", "-t", "-f", "SIGNAL,ACTIVE,SSID", "dev", "wifi", "list", "--rescan", "no"]
                     stdout: SplitParser {
                         onRead: data => {
                             const parts = data.split(":")
