@@ -48,11 +48,10 @@ main() {
   flock 9
   south="$HOME/code/south/main" # hardcoded-repo-path:allow
   [[ -e "$south/.git" ]] || { echo 'machine-update: required south checkout is missing; input bump cannot land' >&2; return 1; }
-  git -C "$repo" fetch origin main
+  git -C "$repo" fetch origin main && git -C "$repo" merge --ff-only origin/main
   git -C "$south" fetch origin main
   if [[ "$mode" == --apply ]]; then
     sudo -n -v
-    git -C "$repo" merge --ff-only origin/main
     git -C "$south" merge --ff-only origin/main
     cd "$repo" && firn-runtime-update
     firn rebuild
