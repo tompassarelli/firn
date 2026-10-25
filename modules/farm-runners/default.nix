@@ -27,6 +27,48 @@ let
   );
   credentials = ".runner .credentials .credentials_rsaparams";
   confine = "--cap-drop all --security-opt no-new-privileges";
+  limits = "--cpus ${toString cfg.cpus} --memory ${cfg.memory}";
+  jit = cfg.jitTokenFile != null;
+  mintSocket = "/run/farm-runner-mint.sock";
+  mint = pkgs.writeShellApplication {
+    name = "farm-runner-mint";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.curl
+      pkgs.jq
+    ];
+    text = ''
+      IFS= read -r -t 10 name || exit 2
+      runners=" ${lib.concatStringsSep " " names} "
+      case "$runners" in *" $name "*) ;; *) echo "farm-runner-mint: unknown runner $name" >&2; exit 2 ;; esac
+      repo=''${name%-*}
+      request=$(jq -nc --arg name "${host}-$name-$(date +%s)" --argjson labels '${
+        builtins.toJSON (
+          [
+            "self-hosted"
+            "Linux"
+            "X64"
+          ]
+          ++ cfg.labels
+        )
+      }' '{name: $name, runner_group_id: 1, labels: $labels, work_folder: "_work"}')
+      curl -fsS --max-time 20 -K <(printf 'header = "Authorization: Bearer %s"\n' "$(< "$CREDENTIALS_DIRECTORY/token")") \
+        -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" --data "$request" \
+        "https://api.github.com/repos/${cfg.owner}/$repo/actions/runners/generate-jitconfig" | jq -er .encoded_jit_config
+    '';
+  };
+  jitStart =
+    name:
+    pkgs.writeShellScript "farm-runner-${name}" ''
+      ACTIONS_RUNNER_INPUT_JITCONFIG=$(echo ${name} | ${lib.getExe pkgs.socat} -t 30 - UNIX-CONNECT:${mintSocket})
+      if [ -z "$ACTIONS_RUNNER_INPUT_JITCONFIG" ]; then
+        echo "farm-runner-${name}: no just-in-time registration from ${mintSocket}" >&2
+        sleep 60
+        exit 1
+      fi
+      export ACTIONS_RUNNER_INPUT_JITCONFIG
+      exec ${podman} run --rm --name farm-${name} ${confine} ${limits} --env ACTIONS_RUNNER_INPUT_JITCONFIG ${image} bash -c 'exec nice -n 19 ./run.sh'
+    '';
   buildImage = pkgs.writeShellScript "farm-runner-image" ''
     ${podman} image exists ${image} || ${podman} build -t ${image} -f ${pkgs.writeText "farm-runner.Containerfile" containerfile} ${pkgs.emptyDirectory}
   '';
@@ -63,13 +105,17 @@ let
       Description = "Farm GitHub runner ${host}-${name} (${lib.concatStringsSep "," cfg.labels}), one job per container";
       Requires = [ "farm-runner-image.service" ];
       After = [ "farm-runner-image.service" ];
-      ConditionPathExists = "${stateDir}/${name}/.runner";
-    };
+    }
+    // lib.optionalAttrs (!jit) { ConditionPathExists = "${stateDir}/${name}/.runner"; };
     Service = {
       Environment = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
-      ExecStart = "${podman} run --rm --name farm-${name} ${confine} --cpus ${toString cfg.cpus} --memory ${cfg.memory} -v ${stateDir}/${name}:/state:ro,U ${image} bash -c 'cp ${
-        lib.concatMapStringsSep " " (f: "/state/${f}") (lib.splitString " " credentials)
-      } . && exec nice -n 19 ./run.sh --once'";
+      ExecStart =
+        if jit then
+          "${jitStart name}"
+        else
+          "${podman} run --rm --name farm-${name} ${confine} ${limits} -v ${stateDir}/${name}:/state:ro,U ${image} bash -c 'cp ${
+            lib.concatMapStringsSep " " (f: "/state/${f}") (lib.splitString " " credentials)
+          } . && exec nice -n 19 ./run.sh --once'";
       ExecStop = "-${podman} stop -t 20 farm-${name}";
       Restart = "always";
       RestartSec = 5;
@@ -139,6 +185,12 @@ in
       default = "8g";
       description = "memory limit per runner container";
     };
+    jitTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/secrets/farm-runner-mint-token";
+      description = "root-only file holding a fine-grained GitHub token with Administration read and write on the runners' repositories; when set, each container gets a just-in-time registration for one job from a sandboxed mint service, so no runner keeps a reusable credential, and farm-runner-register is not installed";
+    };
     egressInterface = lib.mkOption {
       type = lib.types.str;
       example = "enp5s0";
@@ -165,7 +217,71 @@ in
   };
   config = lib.mkIf cfg.enable {
     virtualisation.podman.enable = true;
-    environment.systemPackages = [ register ];
+    environment.systemPackages = lib.optional (!jit) register;
+    systemd = {
+      slices."user-${uid}" = {
+        overrideStrategy = "asDropin";
+        sliceConfig = {
+          CPUWeight = "idle";
+          IOWeight = 1;
+          MemoryMax = cfg.memoryMax;
+        };
+      };
+      sockets.farm-runner-mint = lib.mkIf jit {
+        description = "Just-in-time farm runner registrations for the ${user} user";
+        wantedBy = [ "sockets.target" ];
+        socketConfig = {
+          ListenStream = mintSocket;
+          SocketUser = "root";
+          SocketGroup = user;
+          SocketMode = "0660";
+          Accept = true;
+          MaxConnections = 16;
+        };
+      };
+      services."farm-runner-mint@" = lib.mkIf jit {
+        description = "Mint one just-in-time farm runner registration";
+        serviceConfig = {
+          ExecStart = lib.getExe mint;
+          StandardInput = "socket";
+          StandardOutput = "socket";
+          StandardError = "journal";
+          LoadCredential = "token:${cfg.jitTokenFile}";
+          DynamicUser = true;
+          ProtectSystem = "strict";
+          ProtectHome = true;
+          PrivateTmp = true;
+          PrivateDevices = true;
+          ProtectProc = "invisible";
+          ProcSubset = "pid";
+          ProtectHostname = true;
+          ProtectClock = true;
+          ProtectKernelTunables = true;
+          ProtectKernelModules = true;
+          ProtectKernelLogs = true;
+          ProtectControlGroups = true;
+          NoNewPrivileges = true;
+          CapabilityBoundingSet = "";
+          RestrictAddressFamilies = [
+            "AF_UNIX"
+            "AF_INET"
+            "AF_INET6"
+          ];
+          RestrictNamespaces = true;
+          RestrictRealtime = true;
+          RestrictSUIDSGID = true;
+          LockPersonality = true;
+          MemoryDenyWriteExecute = true;
+          SystemCallArchitectures = "native";
+          SystemCallFilter = [
+            "@system-service"
+            "~@privileged @resources"
+          ];
+          UMask = "0077";
+          RuntimeMaxSec = 60;
+        };
+      };
+    };
     users.groups.${user}.gid = cfg.uid;
     users.users.${user} = {
       inherit (cfg) uid;
@@ -187,14 +303,6 @@ in
           count = 65536;
         }
       ];
-    };
-    systemd.slices."user-${uid}" = {
-      overrideStrategy = "asDropin";
-      sliceConfig = {
-        CPUWeight = "idle";
-        IOWeight = 1;
-        MemoryMax = cfg.memoryMax;
-      };
     };
     networking.nftables.tables.farm-egress = {
       family = "inet";
