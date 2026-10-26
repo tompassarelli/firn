@@ -94,17 +94,26 @@ function switchEnvironment(target: r.Target, host: string, platform: r.Platform,
   }
   return runAdvisory(target, platform, tracePath, traceId);
 }
-function tagGeneration(target: r.Target, host: string, platform: r.Platform, tracePath: string | null, traceId: string): number {
+function recordGeneration(target: r.Target, platform: r.Platform, tracePath: string | null, traceId: string): number {
   const queried = executeEffect(r.generationQueryEffect(platform), tracePath, traceId, targetRevision(target));
   if (queried.tag === 'failed') return failPhase(queried.status);
   const generation = r.currentGeneration(queried.stdout);
   if (generation === null) { stderrLine('firn rebuild: active generation was not reported'); return 65; }
   const tagged = executeEffects(r.generationTagEffects(target, generation), tracePath, traceId, targetRevision(target));
-  return tagged.tag === 'failed' ? failPhase(tagged.status) : switchEnvironment(target, host, platform, tracePath, traceId);
+  return tagged.tag === 'failed' ? failPhase(tagged.status) : 0;
+}
+function tagGeneration(target: r.Target, host: string, platform: r.Platform, tracePath: string | null, traceId: string): number {
+  const recorded = recordGeneration(target, platform, tracePath, traceId);
+  return recorded === 0 ? switchEnvironment(target, host, platform, tracePath, traceId) : recorded;
 }
 function activate(target: r.Target, host: string, platform: r.Platform, builtPath: string, tracePath: string | null, traceId: string): number {
-  const result = executeEffects(r.activationEffects(target, host, platform, builtPath), tracePath, traceId, targetRevision(target));
-  return result.tag === 'failed' ? failPhase(result.status) : tagGeneration(target, host, platform, tracePath, traceId);
+  const effects = r.activationEffects(target, host, platform, builtPath);
+  const selected = executeEffects(effects.slice(0, -1), tracePath, traceId, targetRevision(target));
+  if (selected.tag === 'failed') return failPhase(selected.status);
+  const switched = executeEffect(effects[effects.length - 1], tracePath, traceId, targetRevision(target));
+  if (switched.tag === 'succeeded') return tagGeneration(target, host, platform, tracePath, traceId);
+  if (r.linux(platform)) recordGeneration(target, platform, tracePath, traceId);
+  return failPhase(switched.status);
 }
 function switchExactPath(builtPath: string, tracePath: string | null, traceId: string): number {
   const result = executeEffect(r.activateVerifiedClosureEffect(builtPath), tracePath, traceId, builtPath);
