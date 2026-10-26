@@ -18,7 +18,10 @@ in
       services.nexus-ram = {
         description = "Append one nexus-ram row: MemAvailable, swap, zram, memory, CPU and IO PSI, CPU steal and resident agent CLI PSS";
         unitConfig.ConditionFileIsExecutable = "${northBin}/north";
-        path = [ pkgs.coreutils ];
+        path = [
+          pkgs.bash
+          pkgs.coreutils
+        ];
         serviceConfig = {
           Type = "oneshot";
           User = username;
