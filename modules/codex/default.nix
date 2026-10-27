@@ -70,7 +70,6 @@ in
       (providerAdapter "language-guard.sh")
       (providerAdapter "resource-safe-search-guard.sh")
       (providerAdapter "modern-search-guard.sh")
-      (providerAdapter "worker-tier-guard.sh")
       (providerAdapter "session-kill-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
       (providerAdapter "codex-behavior-guard.sh")
