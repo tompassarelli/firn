@@ -75,6 +75,7 @@
           "outside-watch.timer"
           "lane-gc.timer"
           "lane-gc-remote.timer"
+          "verify-north.timer"
           "nexus-pull.timer"
           "nexus-restore-test.timer"
           "machine-update.timer"
