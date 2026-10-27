@@ -115,6 +115,7 @@
       "socat",
       "supply-chain-scan",
       "update-notify",
+      "verify-north",
       "watch-alerts"
     ],
     "browsers": [
