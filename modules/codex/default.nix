@@ -73,7 +73,6 @@ in
       (providerAdapter "worker-tier-guard.sh")
       (providerAdapter "session-kill-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
-      (providerAdapter "code-health-edit.sh")
       (providerAdapter "codex-behavior-guard.sh")
       (providerAdapter "lib/codex_behavior.py")
       (providerAdapter "lib/spawn_capacity.py")
