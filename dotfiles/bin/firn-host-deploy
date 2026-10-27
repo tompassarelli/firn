@@ -35,24 +35,33 @@ if [[ "$head" != "$main" ]]; then
   exit 1
 fi
 
-reached() {
-  [[ "$revision" == "$main" ]] && return 0
+revision_of() {
+  ssh "$host" "$1/sw/bin/nixos-version" --json | jq -r ".configurationRevision // \"unset\""
+}
+
+contains_main() {
+  [[ "$1" == "$main" ]] && return 0
   git -C "$repo" fetch --quiet origin main
-  git -C "$repo" cat-file -e "$revision^{commit}" 2>/dev/null \
-    && git -C "$repo" merge-base --is-ancestor "$main" "$revision"
+  git -C "$repo" cat-file -e "$1^{commit}" 2>/dev/null \
+    && git -C "$repo" merge-base --is-ancestor "$main" "$1"
 }
 
 for attempt in 1 2; do
   printf 'starting %s on %s for %s %s (attempt %s)\n' "$unit" "$host" "$flake" "$main" "$attempt"
   ssh "$host" systemctl start "$unit"
-  revision="$(ssh "$host" nixos-version --json | jq -r '.configurationRevision // "unset"')"
-  reached && break
+  revision="$(revision_of /run/current-system)"
+  staged="$(revision_of /nix/var/nix/profiles/system)"
+  { contains_main "$revision" || contains_main "$staged"; } && break
   [[ $attempt == 1 ]] && { printf 'GitHub may still serve the previous main; retrying in 30 s\n'; sleep 30; }
 done
 printf '%s configurationRevision: %s\nstarted from:                %s\n' "$host" "$revision" "$main"
 [[ "$revision" == "$main" ]] && exit 0
-if reached; then
+if contains_main "$revision"; then
   printf '%s is on a newer main that contains %s\n' "$host" "$main"
+  exit 0
+fi
+if contains_main "$staged"; then
+  printf '%s staged %s for its next boot, because the kernel, initrd or modules changed; a reboot applies it (a module reload applies a module option)\n' "$host" "$staged"
   exit 0
 fi
 printf 'firn host deploy: %s did not reach %s\n' "$host" "$main" >&2
