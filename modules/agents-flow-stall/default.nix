@@ -37,7 +37,7 @@ in
           Service = {
             Type = "oneshot";
             Environment = [ path ];
-            ExecStart = "${northBin}/agents flow --stall-alert";
+            ExecStart = "${northBin}/agents flow --stall-alarm";
           };
         };
         timers.agents-flow-stall = {
