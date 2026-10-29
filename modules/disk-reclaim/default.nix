@@ -12,11 +12,11 @@ let
 in
 {
   options.myConfig.modules.disk-reclaim.enable =
-    lib.mkEnableOption "disk-reclaim: hourly remove /tmp scratch and Wisp LAN pair copies idle 24 h and held by no process or pool";
+    lib.mkEnableOption "disk-reclaim: hourly north reclaim of idle /tmp scratch, Wisp LAN pair copies and cargo targets, and of build and test caches past their size cap";
   config = lib.mkIf cfg.enable {
     systemd = {
       services.disk-reclaim = {
-        description = "Remove /tmp scratch and Wisp LAN pair copies idle 24 h and held by no process or pool";
+        description = "Remove idle /tmp scratch, Wisp LAN pair copies and cargo targets, and the oldest files of build and test caches past their size cap";
         unitConfig.ConditionFileIsExecutable = "${northBin}/north";
         path = [
           pkgs.bash
