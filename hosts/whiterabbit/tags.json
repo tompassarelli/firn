@@ -115,7 +115,8 @@
       "socat",
       "supply-chain-scan",
       "update-notify",
-      "watch-alerts"
+      "watch-alerts",
+      "watch-review"
     ],
     "browsers": [
       "chrome",
