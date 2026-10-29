@@ -32,7 +32,6 @@ in
               Environment = [
                 "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                   lib.makeBinPath [
-                    pkgs.bun
                     pkgs.git
                     pkgs.openssh
                     pkgs.gh
@@ -42,7 +41,7 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc" "${northBin}/lane-gc";
+              ExecStart = jobRun "lane-gc" "${northBin}/north lane-gc";
             };
           };
           lane-gc-remote = {
@@ -58,7 +57,6 @@ in
               Environment = [
                 "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
                   lib.makeBinPath [
-                    pkgs.bun
                     pkgs.git
                     pkgs.openssh
                     pkgs.gh
@@ -68,7 +66,7 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc-remote" "${northBin}/lane-gc --remote";
+              ExecStart = jobRun "lane-gc-remote" "${northBin}/north lane-gc --remote";
             };
           };
         };
