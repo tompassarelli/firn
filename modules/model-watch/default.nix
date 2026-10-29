@@ -30,7 +30,7 @@ in
               Nice = 10;
               TimeoutStartSec = "10min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${homeDir}/.local/bin:${
                   lib.makeBinPath [ pkgs.python3 ]
                 }"
               ];
