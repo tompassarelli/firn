@@ -8,15 +8,3 @@ nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/landed-rebuild/runtime.mjs	1
 nixos-config/modules/theme-switcher/default.nix	1
 nixos-config/native/rebuild.ts	1
-north/bin/lane-gc-classify.test.sh	17
-north/bin/safe-push	1
-north/harness/hooks/spawn-capacity-guard.test.sh	4
-north/harness/scripts/agent-config-check.sh	1
-north/src/catalog/sync_gate_tests.rs	2
-north/src/dep_gate_tests.rs	1
-north/src/fixtures/events/row.json	1
-north/src/guard/fixtures/search_guards.json	1
-north/src/guard/handoff_record.rs	2
-north/src/ops/flow/readings_tests.rs	1
-north/src/ops/flow/tests.rs	2
-north/src/shell/tests.rs	19
