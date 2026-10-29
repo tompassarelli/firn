@@ -32,12 +32,12 @@ in
         services.laptop-auto = lib.mkIf (cfg.placement == "laptop") {
           Unit = {
             Description = "Observe laptop gaming and seat activity for placement";
-            ConditionFileIsExecutable = "${northBin}/laptop-auto";
+            ConditionFileIsExecutable = "${northBin}/north";
           };
           Service = {
             Type = "oneshot";
             Slice = "control.slice";
-            ExecStart = "${northBin}/laptop-auto";
+            ExecStart = "${northBin}/north capacity laptop-auto";
             TimeoutStartSec = "55s";
             Environment = "PATH=${
               lib.makeBinPath [
@@ -78,7 +78,7 @@ in
               }:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin"
               "LAPTOP_RUNNER_PLACEMENT=${cfg.placement}"
             ];
-            ExecStart = "${northBin}/laptop-runner";
+            ExecStart = "${northBin}/north laptop-runner";
           };
         };
         timers.laptop-runner = {

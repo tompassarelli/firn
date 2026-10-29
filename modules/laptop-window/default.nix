@@ -38,7 +38,7 @@ in
     systemd = {
       services.laptop-window = {
         description = "laptop tick: apply the laptop availability window and settle a finished drain";
-        unitConfig.ConditionFileIsExecutable = "${northBin}/laptop";
+        unitConfig.ConditionFileIsExecutable = "${northBin}/north";
         path = [
           pkgs.python3
           pkgs.coreutils
@@ -50,7 +50,7 @@ in
           Type = "oneshot";
           User = username;
           TimeoutStartSec = "50s";
-          ExecStart = "${northBin}/laptop tick";
+          ExecStart = "${northBin}/north laptop tick";
         };
       };
       timers.laptop-window = {

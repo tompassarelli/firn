@@ -30,7 +30,7 @@ in
           User = username;
           StateDirectory = "job-watch";
           TimeoutStartSec = "5min";
-          ExecStart = jobRun "job-watch" "${northBin}/job-watch run";
+          ExecStart = jobRun "job-watch" "${northBin}/north job-watch run";
         };
       };
       timers.job-watch = {

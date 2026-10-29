@@ -91,7 +91,7 @@ in
               Nice = 10;
               TimeoutStartSec = "4h";
               Environment = [ (path northBin) ];
-              ExecStart = jobRun "git-maintenance-nightly" "${northBin}/git-maintenance-nightly";
+              ExecStart = jobRun "git-maintenance-nightly" "${northBin}/north git-maintenance-nightly";
             };
           };
         };

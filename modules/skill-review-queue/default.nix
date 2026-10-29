@@ -46,7 +46,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "skill-review-queue" "${northBin}/skill-review-queue";
+            ExecStart = jobRun "skill-review-queue" "${northBin}/north skill-review-queue";
           };
         };
         timers.skill-review-queue = {

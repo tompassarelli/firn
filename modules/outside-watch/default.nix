@@ -33,7 +33,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "outside-watch" "${northBin}/outside-watch run";
+            ExecStart = jobRun "outside-watch" "${northBin}/north outside-watch run";
           };
         };
         timers.outside-watch = {

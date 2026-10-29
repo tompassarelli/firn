@@ -34,7 +34,7 @@ in
                   lib.makeBinPath [ pkgs.python3 ]
                 }"
               ];
-              ExecStart = jobRun "model-watch" "${northBin}/model-watch";
+              ExecStart = jobRun "model-watch" "${northBin}/north model-watch";
             };
           };
           cross-project-scan = {
@@ -49,7 +49,7 @@ in
               Environment = [
                 "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
               ];
-              ExecStart = jobRun "cross-project-scan" "${northBin}/cross-project-scan";
+              ExecStart = jobRun "cross-project-scan" "${northBin}/north cross-project-scan";
             };
           };
           skill-prune = {
@@ -62,11 +62,9 @@ in
               Nice = 10;
               TimeoutStartSec = "100min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${
-                  lib.makeBinPath [ pkgs.python3 ]
-                }"
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
               ];
-              ExecStart = jobRun "skill-prune" "${northBin}/skill-prune";
+              ExecStart = jobRun "skill-prune" "${northBin}/north skill-prune";
             };
           };
         };

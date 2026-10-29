@@ -39,7 +39,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [ path ];
-            ExecStart = "${northBin}/supply-chain-scan";
+            ExecStart = "${northBin}/north supply-chain-scan";
           };
         };
         timers.supply-chain-scan = {

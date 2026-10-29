@@ -11,8 +11,8 @@ let
   username = config.myConfig.modules.users.username;
   homeDir = config.myConfig.modules.users.homeDir;
   port = 2588;
-  serve = "${homeDir}/.local/share/north/bin/laptop-ntfy";
-  notify = "${northBin}/laptop-ntfy";
+  serve = "${homeDir}/.local/share/north/bin/north";
+  notify = "${northBin}/north";
   toolPath = tool: [
     pkgs.python3
     pkgs.coreutils
@@ -97,7 +97,7 @@ in
             RestartSec = 5;
             TimeoutStartSec = "15min";
             ExecStartPre = "${pkgs.coreutils}/bin/timeout 800 ${pkgs.bash}/bin/bash -c 'until [ -x ${serve} ]; do sleep 5; done'";
-            ExecStart = "${serve} serve";
+            ExecStart = "${serve} laptop-ntfy serve";
           };
         };
         nexus-laptop-ntfy-notify = {
@@ -109,7 +109,7 @@ in
             Type = "oneshot";
             User = username;
             TimeoutStartSec = "50s";
-            ExecStart = "${notify} notify";
+            ExecStart = "${notify} laptop-ntfy notify";
           };
         };
       };
