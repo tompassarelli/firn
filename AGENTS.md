@@ -5,7 +5,7 @@
 - Write NixOS modules in `.nix`, with typed options and guarded configuration.
 - Use `firn schema explain` and the selected host's NixOS options for uncertain option types or declarations.
 - Compose one package/service per module through `myConfig.modules.*` and declared tags; let dynamic imports discover modules.
-- Verify `whiterabbit` and `nexus`; use `firn rebuild` for exact committed snapshots on the laptop and `firn host deploy HOST` (from a checkout at origin/main of the repo the host upgrades from) for a remote host with the upgrade unit.
+- Verify `whiterabbit` and each remote host; use `firn rebuild` for exact committed snapshots on the laptop and `firn host deploy HOST` (from a checkout at origin/main of the repo the host upgrades from) for a remote host with the upgrade unit.
 - Keep general commands under `dotfiles/bin/` and repository commands in entity-first `firn`.
 - Route agent tools, hooks and skills to north; route secrets, host identity, Tom's policy and account skills to south.
 - Public and reusable goes to north or firn; Tom-specific or secret goes to south.
@@ -20,5 +20,5 @@ Read `modules/north-profile/firn/docs/nixos-config-rules.md` for source/module/t
 
 Tests follow `north:agent-machinery/skills/verification/SKILL.md`; see `docs/verification.md`.
 After source edits, run `firn check`. After composition metadata edits, run `firn repo build` first.
-For agent policy, run `~/code/north/main/harness/scripts/agent-config-check.sh`.
-For activation, run `~/code/north/main/harness/scripts/agent-config-check.sh --local`.
+For agent policy, run `north agent-config-check`.
+For activation, run `north agent-config-check --local`.

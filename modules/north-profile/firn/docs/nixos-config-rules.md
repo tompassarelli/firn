@@ -94,9 +94,9 @@ Tests follow `north:agent-machinery/skills/verification/SKILL.md`; Firn's local 
 are in `nixos-config:docs/verification.md`.
 
 **The agent config check lives in North** —
-`north:harness/scripts/agent-config-check.sh` checks the shared instructions, skills,
+`north agent-config-check` (north:src/agent_config_check) checks the shared instructions, skills,
 and hooks plus the Codex adapter. Run
-`~/code/north/main/harness/scripts/agent-config-check.sh --local` to additionally verify live symlinks,
+`north agent-config-check --local` to additionally verify live symlinks,
 the MCP registration, North's SubagentStop provider adapter, and installed
 North's OpenAI provider readiness. Normal output is a grouped summary;
 `--verbose` prints every assertion. This is the anti-rot gate; keep it green.
