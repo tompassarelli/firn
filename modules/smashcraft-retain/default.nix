@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.smashcraft-retain;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "smashcraft-retain: hourly move gex45's expired Smashcraft evidence, capture batches and unpinned build inputs to ~/archive/gex45, verified by sha256";
+  description = "smashcraft-retain: hourly archive gex45 Smashcraft evidence and capture batches past their age to ~/archive/smashcraft-gex45, sha256 verified, then delete the gex45 copy";
 in
 {
   options.myConfig.modules.smashcraft-retain.enable = lib.mkEnableOption description;
@@ -37,7 +37,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "smashcraft-retain" "${northBin}/north retain pull tom@gex45";
+            ExecStart = jobRun "smashcraft-retain" "${northBin}/north retain";
           };
         };
         timers.smashcraft-retain = {
