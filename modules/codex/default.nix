@@ -61,7 +61,6 @@ in
       (providerAdapter "north-hook.sh")
       (providerAdapter "lib/north-agent-activation.sh")
       (providerAdapter "firn-system-policy")
-      (providerAdapter "lib/launch_critical_decide.py")
       (providerAdapter "language-guard.sh")
       (providerAdapter "lib/authoring-killswitch.sh")
       (providerAdapter "codex-behavior-guard.sh")
