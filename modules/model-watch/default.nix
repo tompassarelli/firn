@@ -47,7 +47,7 @@ in
               Nice = 10;
               TimeoutStartSec = "20min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
+                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
               ];
               ExecStart = jobRun "cross-project-scan" "${northBin}/cross-project-scan";
             };

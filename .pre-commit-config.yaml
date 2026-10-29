@@ -11,7 +11,7 @@ repos:
         always_run: true
       - id: hardcoded-repo-path-check
         name: hard-coded repository path check
-        entry: env -u HARDCODED_REPO_PATH_CHECK_ROOTS hardcoded-repo-path-check
+        entry: env -u HARDCODED_REPO_PATH_CHECK_ROOTS north hardcoded-repo-path-check
         language: system
         pass_filenames: false
         always_run: true

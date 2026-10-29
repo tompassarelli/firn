@@ -24,6 +24,7 @@ in
           pkgs.coreutils
           "/run/current-system/sw"
         ];
+        environment.NORTH_BIN = "${northBin}/north";
         serviceConfig = {
           Type = "oneshot";
           User = username;
