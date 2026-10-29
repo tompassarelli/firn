@@ -20,31 +20,11 @@ matcher = "^(Edit|Write|MultiEdit|apply_patch)$"
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/concrete-model-identity-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/generated-policy-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
 command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/north-hook.sh"
 timeout = 10
 
 [[hooks.PreToolUse]]
 matcher = "^Bash$"
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/concrete-model-identity-guard.sh"
-timeout = 10
-
-[[hooks.PreToolUse.hooks]]
-type = "command"
-command = "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /etc/codex/hooks/generated-policy-guard.sh"
-timeout = 10
 
 [[hooks.PreToolUse.hooks]]
 type = "command"
