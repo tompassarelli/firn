@@ -40,7 +40,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "worker-ledger" "${northBin}/worker-ledger";
+            ExecStart = jobRun "worker-ledger" "${northBin}/north worker-ledger";
             ExecStartPost = "${northBin}/agents usage --refresh";
           };
         };
