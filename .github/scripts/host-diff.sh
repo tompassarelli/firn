@@ -9,6 +9,7 @@ if [ -z "$reaching" ]; then
   printf 'host check: skipped; no changed path outside docs/ and tests reaches a host\n'
   exit 0
 fi
+build_host=${FIRN_BUILD_HOST:-$(hostname -s)}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/firn/host-drvs
 mkdir -p "$cache"
 scratch=$(mktemp -d)
@@ -66,7 +67,11 @@ while IFS=$'\t' read -r kind host drv status; do
   else
     changed=$((changed + 1))
     if [ "$action" = build ]; then
-      nix build --no-link "${drv}^*"
+      if [ "$kind" = nixosConfigurations ] && [ "$host" = "$build_host" ]; then
+        nix build --no-link "${drv}^*"
+      else
+        printf 'host check: evaluated only %s.%s; its closure is built when landing from %s\n' "$kind" "$host" "$host"
+      fi
     fi
   fi
 done < "$scratch/hosts.tsv"

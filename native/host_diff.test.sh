@@ -43,7 +43,7 @@ git add -- alpha
 git commit -qm 'one host change'
 SAFE_PUSH_LAND_HEAD=$(git rev-parse HEAD)
 start=$SECONDS
-bash "$repo/.github/scripts/host-diff.sh" build | tee changed.log
+FIRN_BUILD_HOST=alpha bash "$repo/.github/scripts/host-diff.sh" build | tee changed.log
 printf 'one-host wall seconds: %s\n' "$((SECONDS-start))"
 rg -q 'evaluated 3 base and 3 head hosts; 1 changed, 2 reused' changed.log
 drv=$(awk '/host check: changed / {print $NF}' changed.log)
@@ -58,6 +58,13 @@ start=$SECONDS
 bash "$repo/.github/scripts/host-diff.sh" build | tee docs.log
 printf 'docs-only wall seconds: %s\n' "$((SECONDS-start))"
 rg -q 'host check: skipped; no changed path' docs.log
+export SAFE_PUSH_LAND_BASE=$SAFE_PUSH_LAND_HEAD
+printf 'third %s\n' "${scratch##*/}" > alpha; git commit -qam 'other host change'
+SAFE_PUSH_LAND_HEAD=$(git rev-parse HEAD)
+FIRN_BUILD_HOST=beta bash "$repo/.github/scripts/host-diff.sh" build | tee other.log
+rg -q 'host check: evaluated only nixosConfigurations.alpha; its closure is built when landing from alpha' other.log
+drv=$(awk '/host check: changed / {print $NF}' other.log)
+nix-store --check-validity "$(nix-store --query --outputs "$drv")" 2>/dev/null && exit 1
 printf '{ outputs = _: throw "injected evaluation fault"; }\n' > flake.nix
 git add -- flake.nix
 git commit -qm 'injected evaluation fault'
