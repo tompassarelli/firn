@@ -9,5 +9,8 @@ now=$(date +%s)
 last=0 id=0
 [[ -r $stamp ]] && read -r last id <"$stamp" || true
 (( now - last < 3600 )) && exit 0
-id=$(notify-send --print-id --replace-id="${id:-0}" --urgency=critical --expire-time=0 'Automatic update failed' "$unit failed. Inspect: journalctl --user -u $unit -b")
+if ! id=$(notify-send --print-id --replace-id="${id:-0}" --urgency=critical --expire-time=0 'Automatic update failed' "$unit failed. Inspect: journalctl --user -u $unit -b" 2>&1); then
+  printf 'update-notify: no notification daemon; %s failed (%s)\n' "$unit" "$id" >&2
+  exit 0
+fi
 printf '%s %s\n' "$now" "$id" >"$stamp"
