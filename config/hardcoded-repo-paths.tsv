@@ -2,7 +2,7 @@
 # An entry is live only while the path still carries exactly that many
 # references. A stale entry and a changed count are both hard failures, so
 # this file is the entire inventory — there is no separate total to drift.
-# `hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
+# `north hardcoded-repo-path-check --write-allow` re-counts and prunes listed paths.
 # It never adds a path: a brand-new coupling is declared by hand, on purpose.
 nixos-config/dotfiles/niri/config.kdl	7
 nixos-config/modules/landed-rebuild/runtime.mjs	1
