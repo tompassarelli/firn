@@ -385,6 +385,17 @@ window-rule {
     default-floating-position x=0 y=0 relative-to="bottom-right"
 }
 
+// Wisp windows an agent opens on the real display (the 120 Hz panel probe)
+// carry app-id "wisp-agent" (AI_AGENT set) and open on a dedicated workspace
+// without taking focus; Tom's own Wisp windows keep their own app-id.
+workspace "agents-display"
+
+window-rule {
+    match app-id=r#"^wisp-agent$"#
+    open-on-workspace "agents-display"
+    open-focused false
+}
+
 // Global Transparency (see-through / frosted glass)
 window-rule {
   opacity 0.99
