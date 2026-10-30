@@ -10,7 +10,6 @@
 (defalias apostrophenum (tap-hold-order 0 0 ' (layer-while-held numbers)))
 (defalias m4shift (tap-hold-order 0 0 mbck lsft))
 (defalias m5ctrl (tap-hold-order 0 0 mfwd lctl))
-(defalias semicolonsym (tap-hold-order 200 50 ; (layer-while-held symbols)))
 (defalias bracketpair (macro [ ] left))
 
 ;; Touchpad contact virtual key (for glide daemon)
@@ -30,7 +29,7 @@
 (deflayer base
   grv  1    2    3    4    5    6    7    8    9    0    -    =    bspc
   tab  q    w    e    r    t    [    y    u    i    o    p    \
-  lctl a    s    d    f    g    ]    h    j    k    l    @semicolonsym '    ret
+  lctl a    s    d    f    g    ]    h    j    k    l    ;             '    ret
   @lshiftcaps @slashshift z x    c    v    b    /    n    m    ,    .    rsft
   lctl lalt lmet      spc                 @enteralt ralt cmp  rctl
   @m4shift @m5ctrl f10
