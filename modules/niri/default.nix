@@ -136,6 +136,7 @@ in
     ./xwayland-satellite.nix
     ./swaybg.nix
     ./swayidle.nix
+    ./seat-idle-hint.nix
   ];
   config = lib.mkIf cfg.enable {
     programs.niri = {

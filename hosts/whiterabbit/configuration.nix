@@ -45,6 +45,7 @@
           "quickshell.service"
           "swaybg.service"
           "swayidle.service"
+          "seat-idle-hint.service"
           "wl-clip-persist.service"
           "wl-gammarelay.service"
           "emacs.service"

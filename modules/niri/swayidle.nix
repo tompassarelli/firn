@@ -23,7 +23,7 @@ in
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "${pkgs.swayidle}/bin/swayidle -w idlehint 300 timeout 60 '${idleState} idle' resume '${idleState} active' timeout 601 '${busy} || niri msg action power-off-monitors' timeout 600 '${busy} || swaylock -f' timeout 600 '${capacity} away >/dev/null' resume '${capacity} present >/dev/null' before-sleep 'swaylock -f'";
+          ExecStart = "${pkgs.swayidle}/bin/swayidle -w timeout 60 '${idleState} idle' resume '${idleState} active' timeout 601 '${busy} || niri msg action power-off-monitors' timeout 600 '${busy} || swaylock -f' timeout 600 '${capacity} away >/dev/null' resume '${capacity} present >/dev/null' before-sleep 'swaylock -f'";
           Restart = "on-failure";
         };
         Install.WantedBy = [ "niri.service" ];
