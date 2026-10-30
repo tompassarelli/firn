@@ -10,11 +10,11 @@ if ! command -v statix >/dev/null || ! command -v deadnix >/dev/null || ! comman
     --command env FIRN_REPO="$root" bash "$script"
 fi
 
-printf 'firn check: flake evaluation and assertions\n'
-nix flake check --no-build "path:$root"
 printf 'firn check: every NixOS host derivation\n'
 nix eval --json "path:$root#nixosConfigurations" \
   --apply 'hosts: builtins.mapAttrs (_: host: host.config.system.build.toplevel.drvPath) hosts'
+printf 'firn check: flake evaluation and assertions\n'
+nix flake check --no-build "path:$root"
 printf '\nfirn check: statix\n'
 statix check .
 printf 'firn check: deadnix\n'
