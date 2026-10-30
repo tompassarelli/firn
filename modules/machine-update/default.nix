@@ -106,7 +106,7 @@ in
             ++ pushEnvironment;
             ExecStart =
               lib.optional cfg.writer (run "machine-update" "--write")
-              ++ lib.optional cfg.apply (run "machine-update-apply" "--apply");
+              ++ lib.optional cfg.apply (run "machine-update" "--apply");
           };
         };
         timers.machine-update = {
