@@ -217,6 +217,12 @@ in
       default = "50%";
       description = "memory limit of the runner user's slice, so jobs never take the host's working memory";
     };
+    cpuWeight = lib.mkOption {
+      type = lib.types.either (lib.types.ints.between 1 10000) (lib.types.enum [ "idle" ]);
+      default = "idle";
+      example = 200;
+      description = "CPU weight of the runner user's slice: idle keeps jobs behind every interactive app on a desktop, a number above the agent slice's 100 lets landing CI outrank agent builds on a host with no interactive user";
+    };
   };
   config = lib.mkIf cfg.enable {
     assertions = [
@@ -235,7 +241,7 @@ in
       slices."user-${uid}" = {
         overrideStrategy = "asDropin";
         sliceConfig = {
-          CPUWeight = "idle";
+          CPUWeight = cfg.cpuWeight;
           IOWeight = 1;
           MemoryMax = cfg.memoryMax;
         };
