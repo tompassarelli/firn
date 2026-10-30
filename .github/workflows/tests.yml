@@ -36,8 +36,9 @@ jobs:
         id: setup
         run: |
           nix flake metadata ./firn --json > "$RUNNER_TEMP/test-tools-lock.json"
-          echo "tools-url=$(jq -r '.locks.nodes.nixpkgs.locked | "github:" + .owner + "/" + .repo + "/" + .rev' "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
-          tools_key=$(jq -r .locks.nodes.nixpkgs.locked.narHash "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
+          pin='.locks.nodes[.locks.nodes.root.inputs.nixpkgs].locked'
+          echo "tools-url=$(jq -r "$pin"' | "github:" + .owner + "/" + .repo + "/" + .rev' "$RUNNER_TEMP/test-tools-lock.json")" >> "$GITHUB_OUTPUT"
+          tools_key=$(jq -r "$pin.narHash" "$RUNNER_TEMP/test-tools-lock.json" | sha256sum | cut -d' ' -f1)
           echo "tools-key=$tools_key" >> "$GITHUB_OUTPUT"
 
       - name: Cache test tools

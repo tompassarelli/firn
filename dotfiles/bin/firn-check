@@ -15,7 +15,7 @@ nix eval --json "path:$root#nixosConfigurations" \
   --apply 'hosts: builtins.mapAttrs (_: host: host.config.system.build.toplevel.drvPath) hosts'
 printf 'firn check: flake evaluation and assertions\n'
 nix flake check --no-build "path:$root"
-printf '\nfirn check: statix\n'
+printf '\nfirn check: statix %s\n' "$(basename "$(dirname "$(dirname "$(readlink -f "$(command -v statix)")")")")"
 statix check .
 printf 'firn check: deadnix\n'
 deadnix --fail .
