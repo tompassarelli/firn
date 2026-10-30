@@ -8,8 +8,8 @@ context_file="$repo/modules/north-profile/context.json"
 if [ -n "${CODEX_CONFIG_SOURCE:-}" ]; then
   config_source=$CODEX_CONFIG_SOURCE
 else
-  config_source=$( 
-    nix eval --raw \
+  config_source=$(
+    nix build --no-link --print-out-paths \
       "$repo#nixosConfigurations.whiterabbit.config.home-manager.users.tom.home.file.\".codex/config.toml\".source"
   )
 fi

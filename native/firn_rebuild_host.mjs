@@ -124,7 +124,12 @@ if (args[0] === 'host' && args[1] === 'rebuild') {
     process.stderr.write('Usage: firn rebuild [host] [--dry-run]\n');
     process.exitCode = 64;
   } else {
-    const { run } = dryRun ? {} : await import(modulePath);
+    const { run, foreignRebuild } = dryRun ? {} : await import(modulePath);
+    const refusal = foreignRebuild?.(rebuildArgs) ?? null;
+    if (refusal !== null) {
+      process.stderr.write(refusal);
+      process.exit(64);
+    }
     const status = review(previous, () => dryRun ? 0 : run(rebuildArgs));
     const switched = !dryRun && (status === 0 || systemGeneration() !== previous);
     const missing = switched ? missingCoreTools() : [];

@@ -17,7 +17,7 @@ select_lock "$work/fresh.lock" "$work/running.lock" "$work/selected.lock" >/dev/
 jq -e '.nodes[.nodes[.root].inputs.nixpkgs].locked.rev == "fresh" and .nodes.other.locked.rev == "aged"' "$work/selected.lock" >/dev/null
 printf 'ok: selected lock reference journey keeps unrelated hold and follows, adopts aged candidate, refreshes direct-root nixpkgs\n'
 
-capacity=$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs
+command -v agents >/dev/null || { printf 'skip: capacity journey needs the agents CLI, which this runner does not install\n'; exit 0; }; capacity=$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs
 mkdir -p "$work/bin" "$work/capacity/scripts"
 cat > "$work/bin/agents" <<'SH'
 #!/usr/bin/env bash
@@ -58,7 +58,7 @@ process.stderr.write('external admission receipt; child stopped before execution
 process.exit(76);
 JS
 chmod +x "$work/bin/agents" "$work/bin/git"
-export CAPACITY_CANONICAL="$capacity" CAPACITY_JOURNEY="$work" CAPACITY_SOURCE_DIR="$here"
+export CAPACITY_CANONICAL="$capacity" CAPACITY_JOURNEY="$work" CAPACITY_SOURCE_DIR="$here" GAME_RESERVE_STATE="$work/game-reserve.json" XDG_RUNTIME_DIR="$work"
 journey_path="$work/bin:$PATH"
 status=0
 PATH="$journey_path" "$here/machine-update" --write >"$work/write.log" 2>&1 || status=$?

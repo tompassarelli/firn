@@ -34,8 +34,14 @@ function usageError(): number {
   globalThis.firn_host_err('Usage:\n  firn host impact [<host>]\n  firn host prepare [<host>]\n  firn host activate <exact-store-path>\n  firn host rebuild [<host>]\n  firn host rollback <generation>\n');
   return 64;
 }
+export function foreignRebuild(args: string[]): string | null {
+  if (args[0] !== 'host' || args[1] !== 'rebuild' || args.length !== 3 || args[2] === currentHost()) return null;
+  return `firn rebuild: ${args[2]} is not this machine (${currentHost()}); run: firn host deploy ${args[2]}\n`;
+}
 export function run(args: string[]): number {
   if ((args.length !== 2 && args.length !== 3) || args[0] !== 'host') return usageError();
+  const refusal = foreignRebuild(args);
+  if (refusal !== null) { globalThis.firn_host_err(refusal); return 64; }
   const edge = args[1], leaf = args.length === 3 ? args[2] : currentHost();
   if (edge === 'impact') return runImpact(leaf);
   if (edge === 'prepare' || edge === 'rebuild') return runCommand(['host', edge, leaf]);

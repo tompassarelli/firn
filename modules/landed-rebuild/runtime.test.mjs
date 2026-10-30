@@ -51,7 +51,7 @@ try {
   assert.deepEqual(validation.slice(0, 6), user.slice(0, 6));
   const validationRoot = validation.findLast(word => word.startsWith('FIRN_REPO=')).slice('FIRN_REPO='.length);
   assert(validation.includes(`FIRN_VALIDATE_FLAKE=path:${validationRoot}`));
-  const lookup = nativeSpawnSync({ cmd: ['bash', '-c', 'firn-schema'],
+  const lookup = nativeSpawnSync({ cmd: [Bun.which('bash'), '-c', 'firn-schema'],
     env: { PATH: validation.find(word => word.startsWith('PATH=')).slice(5) },
     stdout: 'pipe', stderr: 'pipe' });
   assert.equal(lookup.exitCode, 0);

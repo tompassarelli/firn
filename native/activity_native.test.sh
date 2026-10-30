@@ -23,18 +23,17 @@ stop_pid() {
   wait "$pid" 2>/dev/null || true
 }
 
+stop_event_children() {
+  while read -r verb _ pid; do [[ "$verb" == start ]] && kill "$pid" 2>/dev/null; done 2>/dev/null <"$scratch/event-children.log" || true
+  sleep 0.2
+}
+
 cleanup() {
   local status=$?
   trap - EXIT
   stop_pid "$daemon_two"
   stop_pid "$daemon_one"
-  if [[ -f "$scratch/event-children.log" ]]; then
-    while read -r verb invocation pid; do
-      if [[ "$verb" == start ]] && kill -0 "$pid" 2>/dev/null; then
-        kill "$pid" 2>/dev/null || true
-      fi
-    done <"$scratch/event-children.log"
-  fi
+  stop_event_children
   if ((status == 0)); then
     rm -rf "${scratch:?}"
   else
@@ -271,6 +270,7 @@ wait_for 'assignment reload' persisted_state_loaded
 printf 'activity-native: bounded unreachable-daemon timeout\n' >&2
 stop_pid "$daemon_two"
 daemon_two=""
+stop_event_children
 set +e
 timeout --foreground 3 "$executable" goto home \
   >"$scratch/unreachable.out" 2>"$scratch/unreachable.err"
