@@ -23,3 +23,9 @@ snapshots, builds the host closure and activates the exact resulting path.
 
 North is promoted independently through `~/.local/share/north/bin/north`.
 Firn owns its stable launcher, guard wiring and delivery-liveness entry.
+
+Activation never restarts the audio stack: Wine and Proton games do not
+reconnect after PipeWire, WirePlumber or pipewire-pulse restart, so a rebuild
+must not cut a running game's sound. `modules/pipewire` sets
+`restartIfChanged = false` on those three user units; a changed audio stack
+takes effect at the next login or an explicit restart between games.

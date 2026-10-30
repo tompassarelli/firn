@@ -47,12 +47,6 @@ store-managed copy requires a named invariant: runtime immutability is
 load-bearing for boot or security code, root-owned enforcement, atomic version
 publication, or rollback that must restore those exact bytes.
 
-Audio units never restart on activation: Wine and Proton games do not reconnect after
-PipeWire, WirePlumber or pipewire-pulse restarts, so a rebuild must not cut a
-running game's sound. `modules/pipewire` sets `restartIfChanged = false` on those
-three user units; a changed audio stack takes effect at the next login or an
-explicit restart between games.
-
 ## Symlinks
 
 Agent discovery pointers are `mkOutOfStoreSymlink`s into North's one current
