@@ -68,7 +68,6 @@ in
       (providerAdapter "lib/spawn_capacity.py")
       (providerAdapter "lib/shellcmd.py")
       (providerAdapter "lib/defaults.toml")
-      (providerAdapter "lib/laptop_line.py")
       (providerAdapter "lib/defaults.py")
       (providerAdapter "defaults.toml")
     ];
