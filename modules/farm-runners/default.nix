@@ -25,6 +25,9 @@ let
   names = lib.concatLists (
     lib.mapAttrsToList (repo: count: map (i: "${repo}-${toString i}") (lib.range 1 count)) cfg.repos
   );
+  githubName = "case \"$repo\" in ${
+    lib.concatStrings (lib.mapAttrsToList (repo: github: "${repo}) repo=${github} ;; ") cfg.githubNames)
+  }*) ;; esac";
   credentials = ".runner .credentials .credentials_rsaparams";
   confine = "--cap-drop all --security-opt no-new-privileges";
   stateMount = dir: "--userns keep-id:uid=1001,gid=1001 -v ${dir}:/state";
@@ -47,6 +50,7 @@ let
       runners=" ${lib.concatStringsSep " " names} "
       case "$runners" in *" $name "*) ;; *) echo "farm-runner-mint: unknown runner $name" >&2; exit 2 ;; esac
       repo=''${name%-*}
+      ${githubName}
       request=$(jq -nc --arg name "${host}-$name-$(date +%s)" --argjson labels '${
         builtins.toJSON (
           [
@@ -144,6 +148,7 @@ let
       runners=" ${lib.concatStringsSep " " names} "
       case "$runners" in *" $name "*) ;; *) usage ;; esac
       repo=''${name%-*}
+      ${githubName}
       IFS= read -r token
       [ -n "$token" ] || { echo "farm-runner-register: no registration token on stdin" >&2; exit 2; }
       as_farm() { runuser -u ${user} -- env HOME=${homeDir} XDG_RUNTIME_DIR=/run/user/${uid} DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${uid}/bus "$@"; }
@@ -194,6 +199,14 @@ in
       type = lib.types.attrsOf lib.types.ints.positive;
       default = { };
       description = "runner count per repository name under owner";
+    };
+    githubNames = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      example = {
+        smashcraft = "makgora";
+      };
+      description = "GitHub repository name for a repos entry whose repository was renamed, so units and containers keep their name while registrations reach the repository; the API answers a POST to an old name with a redirect the minting request does not follow";
     };
     user = lib.mkOption {
       type = lib.types.str;
