@@ -70,6 +70,7 @@
           "harness-health.timer"
           "proxy-terminal-watch.timer"
           "fleet-relay.timer"
+          "fleet-tick.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
           "watch-alerts.timer"
