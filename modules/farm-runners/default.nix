@@ -168,8 +168,10 @@ in
       default = [
         "build-essential"
         "imagemagick"
+        "gh"
         "libstorm-dev"
         "ripgrep"
+        "rsync"
         "unzip"
         "curl"
         "jq"
