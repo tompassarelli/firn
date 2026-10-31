@@ -290,10 +290,10 @@ in
       description = "memory limit of the runner user's slice, so jobs never take the host's working memory";
     };
     cpuWeight = lib.mkOption {
-      type = lib.types.either (lib.types.ints.between 1 99) (lib.types.enum [ "idle" ]);
+      type = lib.types.either (lib.types.ints.between 1 100) (lib.types.enum [ "idle" ]);
       default = "idle";
-      example = 10;
-      description = "CPU weight of the runner user's slice, held below the 100 of every login user's slice so the kernel runs that user's leased builds, native clients and desktop ahead of any runner job while the runners keep every core those leave idle: idle keeps jobs behind every interactive app on a desktop, a number from 1 to 99 still gives landing CI a small share under full contention on a shared host";
+      example = 100;
+      description = "CPU weight of the runner user's slice, at most the 100 of every login user's slice so runner jobs never outrank that user's leased builds, native clients and desktop, while the runners keep every core those leave idle: idle keeps jobs behind every interactive app on a desktop, and 100 splits a contended shared host evenly with the login user for runners that serve only landing checks; send batch work to hosted runners rather than to these";
     };
     gameGate.user = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
