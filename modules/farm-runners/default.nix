@@ -30,6 +30,10 @@ let
   stateMount = dir: "--userns keep-id:uid=1001,gid=1001 -v ${dir}:/state";
   limits = "--cpus ${toString cfg.cpus} --memory ${cfg.memory}";
   jit = cfg.jitTokenFile != null;
+  nft = config.networking.nftables.enable;
+  pauseMarker = "/run/farm-runners-paused";
+  gate = cfg.gameGate.user;
+  gateUser = if gate == null then null else config.users.users.${gate};
   mintSocket = "/run/farm-runner-mint.sock";
   mint = pkgs.writeShellApplication {
     name = "farm-runner-mint";
@@ -70,6 +74,55 @@ let
       export ACTIONS_RUNNER_INPUT_JITCONFIG
       exec ${podman} run --rm --name farm-${name} ${confine} ${limits} --env ACTIONS_RUNNER_INPUT_JITCONFIG ${image} bash -c 'exec nice -n 19 ./run.sh'
     '';
+  egressRules = ''
+    for t in iptables ip6tables; do
+      $t -D OUTPUT -m owner --uid-owner ${uid} -j farm-egress 2>/dev/null || true
+      $t -F farm-egress 2>/dev/null || $t -N farm-egress
+      $t -A farm-egress -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+      $t -A farm-egress -o lo -d 127.0.0.53/32 -p udp --dport 53 -j ACCEPT 2>/dev/null || true
+      $t -A farm-egress -o lo -d 127.0.0.53/32 -p tcp --dport 53 -j ACCEPT 2>/dev/null || true
+      $t -A farm-egress -o lo -d 127.0.0.54/32 -p udp --dport 53 -j ACCEPT 2>/dev/null || true
+      $t -A farm-egress -o lo -d 127.0.0.54/32 -p tcp --dport 53 -j ACCEPT 2>/dev/null || true
+      $t -A farm-egress -o ${cfg.egressInterface} -p tcp -m multiport --dports ${
+        lib.concatMapStringsSep "," toString cfg.egressPorts
+      } -m conntrack --ctstate NEW -m limit --limit 200/second --limit-burst 2000 -j ACCEPT
+      $t -A farm-egress -j REJECT
+      $t -I OUTPUT 1 -m owner --uid-owner ${uid} -j farm-egress
+    done
+  '';
+  gateScript = pkgs.writeShellApplication {
+    name = "farm-runner-gate";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gnugrep
+      pkgs.jq
+      pkgs.procps
+      pkgs.systemd
+      pkgs.util-linux
+    ];
+    text = ''
+      state=${gateUser.home}/.local/state/game-reserve/state.json
+      gaming=/run/user/$(id -u ${gate})/agent-capacity-v1/gaming.json
+      games() {
+        local pid
+        for pid in $(pgrep -f 'Warcraft III.exe' || true); do
+          grep -qE 'libpod|/native.slice/|/agent.slice/' "/proc/$pid/cgroup" 2>/dev/null || return 0
+        done
+        return 1
+      }
+      busy() { runuser -u ${user} -- env XDG_RUNTIME_DIR=/run/user/${uid} ${podman} top "farm-$1" -eo args 2>/dev/null | grep -q Runner.Worker; }
+      farm() { systemctl --user -M ${user}@ "$@"; }
+      if jq -e .on "$state" >/dev/null 2>&1 || jq -e .gaming "$gaming" >/dev/null 2>&1 || games; then
+        touch ${pauseMarker}
+        for name in ${lib.concatStringsSep " " names}; do
+          busy "$name" || farm stop "farm-runner-$name.service" 2>/dev/null || true
+        done
+      elif [ -e ${pauseMarker} ]; then
+        rm -f ${pauseMarker}
+        farm start ${lib.concatMapStringsSep " " (n: "farm-runner-${n}.service") names}
+      fi
+    '';
+  };
   buildImage = pkgs.writeShellScript "farm-runner-image" ''
     ${podman} image exists ${image} || ${podman} build -t ${image} -f ${pkgs.writeText "farm-runner.Containerfile" containerfile} ${pkgs.emptyDirectory}
   '';
@@ -109,7 +162,10 @@ let
       Requires = [ "farm-runner-image.service" ];
       After = [ "farm-runner-image.service" ];
     }
-    // lib.optionalAttrs (!jit) { ConditionPathExists = "${stateDir}/${name}/.runner"; };
+    // lib.optionalAttrs (!jit || gate != null) {
+      ConditionPathExists =
+        lib.optional (!jit) "${stateDir}/${name}/.runner" ++ lib.optional (gate != null) "!${pauseMarker}";
+    };
     Service = {
       Environment = "PATH=/run/wrappers/bin:/run/current-system/sw/bin";
       ExecStart =
@@ -225,6 +281,12 @@ in
       example = 200;
       description = "CPU weight of the runner user's slice: idle keeps jobs behind every interactive app on a desktop, a number above the agent slice's 100 lets landing CI outrank agent builds on a host with no interactive user";
     };
+    gameGate.user = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "tom";
+      description = "login user whose game signals pause the farm: while their game reserve is on, their capacity gaming hold is set or their Warcraft III client runs outside the agent and native slices, idle runners stop and no runner restarts, and a job already running finishes first; everything resumes when the signals clear, checked every 10 seconds. Null runs the runners at all times";
+    };
     cpuQuota = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
@@ -235,8 +297,12 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = config.networking.nftables.enable;
-        message = "farm-runners: the farm-egress table needs networking.nftables.enable, or runner egress is unfiltered";
+        assertion = nft || config.networking.firewall.enable;
+        message = "farm-runners: runner egress is filtered by nftables or the iptables firewall; enable one, or it is unfiltered";
+      }
+      {
+        assertion = gate == null || config.users.users ? ${gate};
+        message = "farm-runners: gameGate.user must name a declared user";
       }
       {
         assertion = config.services.resolved.enable;
@@ -332,7 +398,17 @@ in
         }
       ];
     };
-    networking.nftables.tables.farm-egress = {
+    networking.firewall = lib.mkIf (!nft) {
+      extraCommands = egressRules;
+      extraStopCommands = ''
+        for t in iptables ip6tables; do
+          $t -D OUTPUT -m owner --uid-owner ${uid} -j farm-egress 2>/dev/null || true
+          $t -F farm-egress 2>/dev/null || true
+          $t -X farm-egress 2>/dev/null || true
+        done
+      '';
+    };
+    networking.nftables.tables.farm-egress = lib.mkIf nft {
       family = "inet";
       content = ''
         chain output {
@@ -348,6 +424,21 @@ in
           counter reject
         }
       '';
+    };
+    systemd.services.farm-runner-gate = lib.mkIf (gate != null) {
+      description = "Pause the farm runners while ${gate}'s game is running";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = lib.getExe gateScript;
+      };
+    };
+    systemd.timers.farm-runner-gate = lib.mkIf (gate != null) {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnBootSec = "30s";
+        OnUnitActiveSec = "10s";
+        AccuracySec = "1s";
+      };
     };
     home-manager.users.${user} = _: {
       home.stateVersion = config.system.stateVersion;
