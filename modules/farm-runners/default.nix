@@ -223,6 +223,12 @@ in
       example = 200;
       description = "CPU weight of the runner user's slice: idle keeps jobs behind every interactive app on a desktop, a number above the agent slice's 100 lets landing CI outrank agent builds on a host with no interactive user";
     };
+    cpuQuota = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "1200%";
+      description = "CPU quota of the runner user's slice, a ceiling on the cores all runner jobs together may use, leaving the rest of a shared host to its other work; null leaves it unlimited";
+    };
   };
   config = lib.mkIf cfg.enable {
     assertions = [
@@ -242,6 +248,7 @@ in
         overrideStrategy = "asDropin";
         sliceConfig = {
           CPUWeight = cfg.cpuWeight;
+          CPUQuota = lib.mkIf (cfg.cpuQuota != null) cfg.cpuQuota;
           IOWeight = 1;
           MemoryMax = cfg.memoryMax;
         };
