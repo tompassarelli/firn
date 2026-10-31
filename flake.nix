@@ -431,6 +431,13 @@
       modules = firnModules;
       checks.x86_64-linux = {
         host-whiterabbit = self.nixosConfigurations.whiterabbit.config.system.build.toplevel;
+        farm-runner-busy =
+          nixpkgs.legacyPackages.x86_64-linux.runCommand "firn-farm-runner-busy"
+            { nativeBuildInputs = [ nixpkgs.legacyPackages.x86_64-linux.bash ]; }
+            ''
+              bash ${./modules/farm-runners}/busy.test.sh
+              touch $out
+            '';
         nix-syntax =
           let
             pkgs = nixpkgs.legacyPackages.x86_64-linux;

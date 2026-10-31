@@ -110,7 +110,8 @@ let
         done
         return 1
       }
-      busy() { runuser -u ${user} -- env XDG_RUNTIME_DIR=/run/user/${uid} ${podman} top "farm-$1" -eo args 2>/dev/null | grep -q Runner.Worker; }
+      farm_podman() { runuser -u ${user} -- env XDG_RUNTIME_DIR=/run/user/${uid} ${podman} "$@"; }
+      ${builtins.readFile ./busy.sh}
       farm() { systemctl --user -M ${user}@ "$@"; }
       if jq -e .on "$state" >/dev/null 2>&1 || jq -e .gaming "$gaming" >/dev/null 2>&1 || games; then
         touch ${pauseMarker}
