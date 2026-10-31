@@ -31,7 +31,7 @@ let
   credentials = ".runner .credentials .credentials_rsaparams";
   confine = "--cap-drop all --security-opt no-new-privileges";
   stateMount = dir: "--userns keep-id:uid=1001,gid=1001 -v ${dir}:/state";
-  limits = "--cpus ${toString cfg.cpus} --memory ${cfg.memory}";
+  limits = "--cpus ${toString cfg.cpus} --memory ${cfg.memory} --env OMP_NUM_THREADS=${toString cfg.cpus}";
   jit = cfg.jitTokenFile != null;
   nft = config.networking.nftables.enable;
   pauseMarker = "/run/farm-runners-paused";
@@ -253,7 +253,7 @@ in
     cpus = lib.mkOption {
       type = lib.types.ints.positive;
       default = 4;
-      description = "CPU limit per runner container";
+      description = "CPU limit per runner container, which nproc inside it also reports through OMP_NUM_THREADS, so a job sizing its parallelism by nproc starts one process a core of its limit rather than one a host core";
     };
     memory = lib.mkOption {
       type = lib.types.str;
@@ -290,10 +290,10 @@ in
       description = "memory limit of the runner user's slice, so jobs never take the host's working memory";
     };
     cpuWeight = lib.mkOption {
-      type = lib.types.either (lib.types.ints.between 1 10000) (lib.types.enum [ "idle" ]);
+      type = lib.types.either (lib.types.ints.between 1 99) (lib.types.enum [ "idle" ]);
       default = "idle";
-      example = 200;
-      description = "CPU weight of the runner user's slice: idle keeps jobs behind every interactive app on a desktop, a number above the agent slice's 100 lets landing CI outrank agent builds on a host with no interactive user";
+      example = 10;
+      description = "CPU weight of the runner user's slice, held below the 100 of every login user's slice so the kernel runs that user's leased builds, native clients and desktop ahead of any runner job while the runners keep every core those leave idle: idle keeps jobs behind every interactive app on a desktop, a number from 1 to 99 still gives landing CI a small share under full contention on a shared host";
     };
     gameGate.user = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
