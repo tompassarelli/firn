@@ -13,12 +13,14 @@ in
         battery = {
           energy_performance_preference = "power";
           governor = "powersave";
+          platform_profile = "balanced";
           turbo = "never";
         };
         charger = {
-          energy_performance_preference = "balance_performance";
+          energy_performance_preference = "performance";
           governor = "performance";
-          turbo = "never";
+          platform_profile = "performance";
+          turbo = "always";
         };
       };
     };
