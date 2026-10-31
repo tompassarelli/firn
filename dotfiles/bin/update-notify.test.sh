@@ -29,16 +29,16 @@ check() { # check <description> <expected> <actual>
 count() { grep -c " $1 failed" "$NOTIFIED" || true; }
 
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-  "$REPO/dotfiles/bin/update-notify" fleet-relay.service
+  "$REPO/dotfiles/bin/update-notify" fleet-tick.service
 done
-check "ten consecutive failures of one timer notify once" 1 "$(count fleet-relay.service)"
+check "ten consecutive failures of one timer notify once" 1 "$(count fleet-tick.service)"
 
 "$REPO/dotfiles/bin/update-notify" pace-enforcement
 check "another timer's failure inside that hour still notifies" 1 "$(count pace-enforcement.service)"
 
-printf '%s 1\n' "$(($(date +%s) - 3601))" >"$XDG_STATE_HOME/update-notify/fleet-relay.service"
-"$REPO/dotfiles/bin/update-notify" fleet-relay.service
-check "a failure an hour after the last notification notifies again" 2 "$(count fleet-relay.service)"
+printf '%s 1\n' "$(($(date +%s) - 3601))" >"$XDG_STATE_HOME/update-notify/fleet-tick.service"
+"$REPO/dotfiles/bin/update-notify" fleet-tick.service
+check "a failure an hour after the last notification notifies again" 2 "$(count fleet-tick.service)"
 check "the later notification replaces the unit's earlier one" 1 "$(tail -n 1 "$NOTIFIED" | grep -c -- '--replace-id=1 ')"
 
 printf '#!/usr/bin/env bash\necho "no D-Bus" >&2\nexit 1\n' >"$scratch/bin/notify-send"

@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.fleet-tick;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "fleet-tick: flush this host's north fleet spool, publish its sessions and deliver the rows addressed to them";
+  description = "fleet-tick: flush this host's north fleet spool, publish its sessions and deliver the rows addressed to them, and run again the sessions a reboot stranded";
   path = "PATH=${northBin}:/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${
     lib.makeBinPath [
       pkgs.coreutils
@@ -34,7 +34,7 @@ in
           Service = {
             Type = "oneshot";
             Slice = "control.slice";
-            TimeoutStartSec = "25s";
+            TimeoutStartSec = "50s";
             Environment = [ path ];
             ExecStart = jobRun "fleet-tick" "${northBin}/north fleet tick";
           };

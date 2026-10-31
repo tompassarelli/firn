@@ -104,7 +104,6 @@
       "alsa-lib",
       "claude",
       "code-health-review",
-      "fleet-relay",
       "fleet-tick",
       "laptop-runner",
       "machine-update",
