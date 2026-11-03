@@ -3,6 +3,7 @@
   lib,
   pkgs,
   jobRun,
+  northBin,
   ...
 }:
 
@@ -10,8 +11,12 @@ let
   cfg = config.myConfig.modules.nexus-checks;
   username = config.myConfig.modules.users.username;
   stateDir = "/var/lib/nexus-checks";
+  remoteServe = config.myConfig.modules.north-remote-serve;
+  remotePeers = lib.optionalAttrs remoteServe.enable remoteServe.peers;
   authorizedKeys = pkgs.writeText "nexus-authorized-keys" (
-    lib.concatStringsSep "\n" config.myConfig.modules.users.authorizedKeys
+    lib.concatStringsSep "\n" (
+      config.myConfig.modules.users.authorizedKeys ++ lib.mapAttrsToList (_: p: p.publicKey) remotePeers
+    )
   );
   checks = pkgs.writeShellApplication {
     name = "nexus-checks";
@@ -27,11 +32,19 @@ let
       "/run/current-system/sw"
     ];
     runtimeEnv = {
-      WG_PEERS = "10.77.0.2=laptop 10.77.0.3=phone 10.77.0.4=gex45";
+      WG_PEERS = lib.concatStringsSep " " (
+        [
+          "10.77.0.2=laptop"
+          "10.77.0.3=phone"
+        ]
+        ++ lib.mapAttrsToList (name: p: "${p.address}=${name}") remotePeers
+      );
       AUTHORIZED_KEYS = authorizedKeys;
       USER_NAME = username;
       BACKUP_MARKER = "/var/lib/nexus-backup/last-ok";
       SECURITY_LOCK = "${config.myConfig.modules.users.homeDir}/code/nixos-config/main/flake.lock";
+      REMOTE_SERVE_PEERS = lib.concatStringsSep " " (lib.attrNames remotePeers);
+      NORTH = "${northBin}/north";
     };
     text = builtins.readFile ./nexus-checks.sh;
   };

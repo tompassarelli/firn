@@ -104,41 +104,60 @@ in
       description = "gh that injects the per-repository PAT";
     };
     nixAccessToken = lib.mkEnableOption "the read-only nexus-apply token as nix's github.com access token, so root nix can fetch private flakes";
-  };
-  config = lib.mkIf cfg.enable {
-    sops = {
-      secrets = {
-        nexus-apply = {
-          inherit (cfg) sopsFile;
-          owner = username;
-          mode = "0400";
-        };
-        nexus-work = {
-          inherit (cfg) sopsFile;
-          owner = username;
-          mode = "0400";
-        };
-      };
-      templates.nix-access-tokens = lib.mkIf cfg.nixAccessToken {
-        content = ''
-          access-tokens = github.com=${config.sops.placeholder.nexus-apply}
-        '';
-        owner = "root";
-        mode = "0400";
-      };
-    };
-    nix.extraOptions = lib.mkIf cfg.nixAccessToken ''
-      !include ${config.sops.templates.nix-access-tokens.path}
-    '';
-    environment.systemPackages = [
-      selector
-      ghWrapper
-    ];
-    home-manager.users.${username} = _: {
-      programs.git.settings.credential."https://github.com" = {
-        helper = "!${selector}/bin/github-pat credential";
-        useHttpPath = true;
-      };
+    nixAccessTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/secrets/nix-access-tokens";
+      description = "runtime path of a root-readable file holding an `access-tokens = github.com=...` line that nix includes; works with this module disabled";
     };
   };
+  config = lib.mkMerge [
+    (lib.mkIf (cfg.nixAccessTokenFile != null) {
+      assertions = [
+        {
+          assertion = !(cfg.enable && cfg.nixAccessToken);
+          message = "github-pat: set nixAccessToken or nixAccessTokenFile, not both";
+        }
+      ];
+      nix.extraOptions = ''
+        !include ${cfg.nixAccessTokenFile}
+      '';
+    })
+    (lib.mkIf cfg.enable {
+      sops = {
+        secrets = {
+          nexus-apply = {
+            inherit (cfg) sopsFile;
+            owner = username;
+            mode = "0400";
+          };
+          nexus-work = {
+            inherit (cfg) sopsFile;
+            owner = username;
+            mode = "0400";
+          };
+        };
+        templates.nix-access-tokens = lib.mkIf cfg.nixAccessToken {
+          content = ''
+            access-tokens = github.com=${config.sops.placeholder.nexus-apply}
+          '';
+          owner = "root";
+          mode = "0400";
+        };
+      };
+      nix.extraOptions = lib.mkIf cfg.nixAccessToken ''
+        !include ${config.sops.templates.nix-access-tokens.path}
+      '';
+      environment.systemPackages = [
+        selector
+        ghWrapper
+      ];
+      home-manager.users.${username} = _: {
+        programs.git.settings.credential."https://github.com" = {
+          helper = "!${selector}/bin/github-pat credential";
+          useHttpPath = true;
+        };
+      };
+    })
+  ];
 }

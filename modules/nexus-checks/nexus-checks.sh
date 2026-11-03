@@ -1,4 +1,4 @@
-CHECKS="logins units updates lock release disk backup"
+CHECKS="logins units updates lock release disk backup${REMOTE_SERVE_PEERS:+ remote-serve}"
 
 urgency_of() {
   case "$1" in logins*|lynis|units|disk|backup) echo urgent ;; *) echo normal ;; esac
@@ -170,8 +170,8 @@ gather() {
       check_lock "$SECURITY_LOCK" "$now" ;;
     release)
       check_release "$(cat /run/booted-system/nixos-version)" "$now" ;;
-    disk)
-      check_disk "$(df --output=pcent / | tail -n 1)" ;;
+    disk) check_disk "$(df --output=pcent / | tail -n 1)" ;;
+    remote-serve) for peer in $REMOTE_SERVE_PEERS; do out=$(runuser -u "$USER_NAME" -- "$NORTH" remote-serve audit --peer "$peer" 2>&1) || { echo "fail: remote-serve $peer: ${out//$'\n'/; }"; return; }; done; echo ok ;;
     backup)
       check_backup "$(stat -c %Y "$BACKUP_MARKER" 2>/dev/null || true)" "$now" ;;
   esac

@@ -15,6 +15,7 @@ in
       package = if pkgs.stdenv.hostPlatform.isDarwin then builtins.null else pkgs.unstable.ghostty;
       settings = {
         app-notifications = "no-clipboard-copy";
+        clipboard-write = "ask";
         async-backend = "epoll";
         command = "/run/current-system/sw/bin/bash";
         keybind = [ "ctrl+z=text:\\x1f" ];
