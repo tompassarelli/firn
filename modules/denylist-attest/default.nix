@@ -13,7 +13,7 @@ let
   username = config.myConfig.modules.users.username;
   south = "${homeDir}/code/south";
   repos = [
-    "smashcraft"
+    "makgora"
     "wisp"
   ];
   secret = name: config.sops.secrets."denylist-attest-${name}".path;
