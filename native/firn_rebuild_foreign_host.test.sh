@@ -22,7 +22,7 @@ fi
 SH
 chmod +x "$scratch/bin/readlink"
 rebuild() {
-  env PATH="$scratch/bin:$PATH" TMPDIR="$scratch/tmp" FIRN_REPO="$scratch/repo" FIRN_HOST=whiterabbit \
+  env PATH="$scratch/bin:$PATH" TMPDIR="$scratch/tmp" FIRN_REPO="$scratch/repo" FIRN_HOST=whiterabbit FIRN_SYSTEM_PROFILE="$scratch/no-profile" FIRN_SYSTEM_FLAKE="$scratch/no-system" \
     bun "$here/firn_rebuild_host.mjs" host rebuild "$1" >"$scratch/out" 2>&1
 }
 status=0

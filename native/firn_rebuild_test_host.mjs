@@ -30,4 +30,4 @@ Object.assign(globalThis, {
   firn_host_inherit: argv => { calls.push(argv.join(' ')); return argv.at(-1) === 'switch' ? 4 : 0; },
 });
 const native = await import(new URL('./rebuild_native.ts', `file://${process.env.FIRN_REBUILD_TEST_MODULE}`));
-if (native.runCommand(['host', 'rebuild', 'box']) !== 4 || !calls.includes('git -C /repo tag -f gen-42 abc')) process.exitCode = 1;
+if (native.runCommand(['host', 'rebuild', 'box']) !== 4 || !calls.includes('git -C /repo tag -f gen-box-42 abc')) process.exitCode = 1;

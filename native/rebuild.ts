@@ -43,10 +43,11 @@ export const generationQueryEffect = (platform: Platform): ArgvEffect => capture
 export const generationResolveEffect = (generation: string): ArgvEffect => captureEffect('resolve rollback generation', ['readlink', '-e', `/nix/var/nix/profiles/system-${generation}-link`]);
 export const generationClosureCheckEffect = (builtPath: string): ArgvEffect => captureEffect('validate rollback closure', ['test', '-x', `${builtPath}/bin/switch-to-configuration`]);
 export const rollbackActivationEffects = (generation: string, builtPath: string): ArgvEffect[] => [inheritEffect('activation preflight', ['sudo', '-v']), inheritEffect('select rollback generation', ['sudo', 'nix-env', '--profile', '/nix/var/nix/profiles/system', '--switch-generation', generation]), activateVerifiedClosureEffect(builtPath)];
-const tagEffect = (phase: string, snapshot: Snapshot, generation: string): ArgvEffect => captureEffect(phase, ['git', '-C', snapshot.root, 'tag', '-f', `gen-${generation}`, snapshot.revision]);
-export function generationTagEffects(target: Target, generation: string): ArgvEffect[] {
-  const firnTag = tagEffect('tag active generation', target.firn, generation);
-  return target.overridden ? [firnTag, tagEffect('tag active generation in system flake', target.system, generation)] : [firnTag];
+export const generationTag = (host: string, generation: string): string => `gen-${host}-${generation}`;
+const tagEffect = (phase: string, snapshot: Snapshot, tag: string): ArgvEffect => captureEffect(phase, ['git', '-C', snapshot.root, 'tag', '-f', tag, snapshot.revision]);
+export function generationTagEffects(target: Target, host: string, generation: string): ArgvEffect[] {
+  const tag = generationTag(host, generation), firnTag = tagEffect('tag active generation', target.firn, tag);
+  return target.overridden ? [firnTag, tagEffect('tag active generation in system flake', target.system, tag)] : [firnTag];
 }
 export const environmentQueryEffect = (target: Target, host: string): ArgvEffect => captureEffect('query user environment', ['nix', 'eval', '--json', `${target.firn.uri}#packages`, '--apply', `packages: builtins.any (system: (builtins.getAttr system packages) ? "${host}-environment") (builtins.attrNames packages)`]);
 export const environmentPresent = (text: string): boolean => text.trim() === 'true';

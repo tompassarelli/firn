@@ -8,7 +8,7 @@ function plan(platform: r.Platform, overridden: boolean, mode: number): r.ArgvEf
   const value = target(overridden), path = '/nix/store/system';
   if (mode === 1) return [...r.exactPathProfileEffects(path), r.systemProfileResolveEffect(), r.activateVerifiedClosureEffect(path)];
   if (mode === 2) return [r.generationResolveEffect('40'), r.generationClosureCheckEffect(path), ...r.rollbackActivationEffects('40', path)];
-  return [...r.preparationEffects(value, 'fixture', platform, '/snapshot'), ...r.activationEffects(value, 'fixture', platform, path), r.generationQueryEffect(platform), ...r.generationTagEffects(value, '42')];
+  return [...r.preparationEffects(value, 'fixture', platform, '/snapshot'), ...r.activationEffects(value, 'fixture', platform, path), r.generationQueryEffect(platform), ...r.generationTagEffects(value, 'fixture', '42')];
 }
 const tokenCount = (values: string[], value: string): number => values.filter(token => token === value).length;
 const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);

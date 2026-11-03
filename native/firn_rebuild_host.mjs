@@ -72,28 +72,61 @@ const missingCoreTools = () => {
   return missing.length > 0 || check.exitCode === 0 ? missing : ['(login shell check failed)'];
 };
 
+const gitIn = root => words => Bun.spawnSync({ cmd: ['git', '-C', root, ...words], stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+
+const hostName = () => process.env.FIRN_HOST
+  ?? decoder.decode(Bun.spawnSync({ cmd: ['hostname'], stdin: 'ignore', stderr: 'ignore' }).stdout).trim();
+
+const switchedRevision = () => {
+  const profile = process.env.FIRN_SYSTEM_PROFILE ?? '/nix/var/nix/profiles/system';
+  try {
+    const shown = Bun.spawnSync({ cmd: [`${profile}/sw/bin/nixos-version`, '--configuration-revision'], stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+    const revision = decoder.decode(shown.stdout).trim();
+    return shown.exitCode === 0 && /^[0-9a-f]{40}$/.test(revision) ? revision : null;
+  } catch {
+    return null;
+  }
+};
+
+function switchedBase(previous, root) {
+  if (previous === null) return null;
+  const git = gitIn(root);
+  const tagged = git(['rev-parse', '--verify', '-q', `gen-${hostName()}-${previous}^{commit}`]);
+  if (tagged.exitCode === 0) return { label: '', git, start: decoder.decode(tagged.stdout).trim() };
+  const revision = switchedRevision();
+  if (revision === null) return null;
+  if (git(['cat-file', '-e', `${revision}^{commit}`]).exitCode === 0) return { label: '', git, start: revision };
+  const systemRoot = process.env.FIRN_SYSTEM_FLAKE ?? `${process.env.HOME}/code/south/main`;
+  const systemGit = gitIn(systemRoot);
+  if (systemGit(['cat-file', '-e', `${revision}^{commit}`]).exitCode === 0) return { label: 'system flake ', git: systemGit, start: revision };
+  return null;
+}
+
 function review(previous, approved) {
   const root = process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config/main`;
-  const git = words => Bun.spawnSync({ cmd: ['git', '-C', root, ...words], stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-  const base = previous === null ? null : git(['rev-parse', '--verify', `gen-${previous}^{commit}`]);
-  if (!base || base.exitCode !== 0) {
+  const git = gitIn(root);
+  const base = switchedBase(previous, root);
+  if (base === null) {
     process.stderr.write('firn rebuild: last switched revision is unavailable; review cannot approve\n');
     return 65;
   }
   const revision = git(['rev-parse', 'HEAD']);
   if (revision.exitCode !== 0) return revision.exitCode;
-  const start = decoder.decode(base.stdout).trim();
-  const end = decoder.decode(revision.stdout).trim();
+  const reviewed = base.git(['rev-parse', 'HEAD']);
+  if (reviewed.exitCode !== 0) return reviewed.exitCode;
+  const { start } = base;
+  const snapshotRevision = decoder.decode(revision.stdout).trim();
+  const end = decoder.decode(reviewed.stdout).trim();
   const directory = mkdtempSync(join(tmpdir(), 'firn-review-'));
   const snapshot = join(directory, 'snapshot');
   try {
-    const added = git(['worktree', 'add', '--detach', snapshot, end]);
+    const added = git(['worktree', 'add', '--detach', snapshot, snapshotRevision]);
     if (added.exitCode !== 0) {
       process.stderr.write(added.stderr);
       return added.exitCode;
     }
-    process.stdout.write(`reviewing ${start}..${end} with Nix evaluation\n`);
-    const diff = git(['diff', '--stat', start, end]);
+    process.stdout.write(`reviewing ${base.label}${start}..${end} with Nix evaluation\n`);
+    const diff = base.git(['diff', '--stat', start, end]);
     if (diff.exitCode !== 0) return diff.exitCode;
     process.stdout.write(diff.stdout);
     const checked = Bun.spawnSync({ cmd: ['bash', join(root, 'dotfiles/bin/firn-check')], cwd: snapshot,

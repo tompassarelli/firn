@@ -14,7 +14,7 @@ if [[ "${1:-}" == rebuild && "${2:-}" == --landed ]]; then
   if [[ "$status" == 0 || "$switched" == "$3" ]]; then
     generation="$(basename "$(readlink "$profile")")"
     generation="${generation#system-}"
-    git -C "${FIRN_REPO:-$firn_source}" tag -f "gen-${generation%-link}" "$3" >/dev/null
+    git -C "${FIRN_REPO:-$firn_source}" tag -f "gen-${FIRN_HOST:-$(hostname)}-${generation%-link}" "$3" >/dev/null
   fi
   exit "$status"
 fi
