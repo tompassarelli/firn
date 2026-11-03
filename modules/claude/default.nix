@@ -14,7 +14,7 @@ in
         ".claude/agents".source =
           config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/code/north/main/harness/claude/agents";
         ".local/bin/claude".source =
-          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/lib/claude/current/bin/claude";
+          config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.local/share/firn/bin/claude";
       };
     };
   };

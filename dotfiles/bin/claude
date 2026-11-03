@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Interactive multi-account launcher and bootstrapper for Claude Code.
+set -euo pipefail
+runtime="${CLAUDE_RUNTIME:-$HOME/.local/lib/claude/current/bin/claude}"
+[[ -x "$runtime" ]] || { printf 'claude: run claude-runtime-update latest\n' >&2; exit 127; }
+[[ -z "${CLAUDE_CONFIG_DIR:-}${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] || exec "$runtime" "$@"
+case "${1:-}" in -v|--version|-h|--help|doctor|install|update|upgrade) exec "$runtime" "$@" ;; esac
+state="${NORTH_STATE_DIR:-$HOME/.local/state/north}"
+gate="${NORTH_USAGE_GATE:-$HOME/.local/state/agents/usage-gate.json}"
+map_file="$state/claude-accounts.json"
+mkdir -p -m 700 "$state/profiles" "$state/claude-tokens"
+[[ -s "$map_file" ]] || printf '{}\n' >"$map_file"
+shopt -s nullglob
+cfgs=("$state"/profiles/claude-*/.claude.json)
+((${#cfgs[@]} == 0)) || { jq -s 'reduce .[1:][] as $c (.[0]; ($c | input_filename | capture("claude-(?<l>[^/]+)/\\.claude\\.json$").l) as $l | .[$l] = ((.[$l] // {}) + (if $c.oauthAccount.emailAddress then {email: $c.oauthAccount.emailAddress, uuid: $c.oauthAccount.accountUuid} else {} end) + (if $c.cachedUsageUtilization.utilization then {cached: $c.cachedUsageUtilization.utilization} else {} end)))' "$map_file" "${cfgs[@]}" >"$map_file.tmp.$$" && mv -f "$map_file.tmp.$$" "$map_file"; }
+authed=""
+for d in "$state"/profiles/claude-* "$state"/claude-tokens/claude-*; do
+  l="${d##*/claude-}"; [[ "$l" =~ ^[a-z0-9_-]+$ ]] && [[ -s "$state/claude-tokens/claude-$l" || -s "$state/profiles/claude-$l/.credentials.json" ]] && [[ ",$authed," != *",$l,"* ]] && authed="${authed:+$authed,}$l" || true
+done
+name="${0##*/}"; mode="run"; target=""
+if [[ "$name" == claude-as ]]; then target="${1:?usage: claude-as <account|email> [claude args...]}"; shift
+elif [[ "$name" == claude-* ]]; then target="${name#claude-}"
+elif [[ "${1:-}" == accounts || "${1:-}" == --accounts ]]; then mode="list"; shift
+elif [[ "${1:-}" == --as || "${1:-}" == --account ]]; then target="${2:?usage: claude --as <email|label> [claude args...]}"; shift 2
+elif [[ "${1:-}" == *@* || "${1:-}" =~ ^claude-[a-z0-9]+$ ]]; then target="$1"; shift
+elif [[ "${1:-}" =~ ^[a-zA-Z0-9._+-]+\.[a-zA-Z]{2,}$ && ! -e "${1:-}" ]] && jq -e --arg q "${1,,}" 'any(.[]; ((.email // "") | ascii_downcase | contains($q)))' "$map_file" >/dev/null 2>&1; then target="$1"; shift; fi
+query_accounts() {
+  local g="{}"; [[ ! -s "$gate" ]] || g="$(<"$gate")"
+  jq -rn --slurpfile map "$map_file" --argjson gate "$g" --arg authed "$authed" --arg target "$1" --arg mode "$2" '
+    ($map[0] // {}) as $m | ($gate.claude.controls // {}) as $c | ($authed | split(",") | map(select(length>0))) as $ok | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now |
+    (($m | keys) + $ok + ($c | keys | map(ltrimstr("claude:"))) | unique) as $labels |
+    ($labels | map(. as $l | ($c["claude:"+$l].windows // []) as $w | (($w[] | select(.window=="5h")) // {}) as $s | (($w[] | select(.window=="week")) // {}) as $wk | ($m[$l].cached.five_hour // {}) as $cs | ($m[$l].cached.seven_day // {}) as $cwk |
+      (if ($s.resets_at // "") > $now then ($s.used_pct // 0) elif ($cs.resets_at // "") > $now then ($cs.utilization // 0) else 0 end) as $su |
+      (if ($wk.resets_at // "") > $now then ($wk.used_pct // 0) elif ($cwk.resets_at // "") > $now then ($cwk.utilization // 0) else 0 end) as $wu |
+      (if ($wk.resets_at // "") > $now then ($wk.reset_h // 999) else 0 end) as $rh | ($ok | index($l) != null) as $au |
+      {label: $l, email: ($m[$l].email // ""), authed: $au, s_used: ($su|round), w_used: ($wu|round), reset_h: ($rh * 10 | round / 10), tier: (if ($au|not) then 3 elif ($wu < 98 and $su < 95) then 0 elif ($wu < 100 and $su < 100) then 1 else 2 end)})) as $rows |
+    ($rows | map(select(.authed)) | sort_by([.tier, (if .tier==2 then .reset_h else .s_used end), .w_used, .label]) | first) as $best |
+    if $mode == "list" then ($rows[] | "\(if .label == ($best.label // "") and .tier < 2 then "*" else " " end) claude-\(.label)\t\(if .email=="" then "(no email)" else .email end)\t5h: \(.s_used)%\tweek: \(.w_used)%\t\(if .reset_h > 0 then "resets in \(.reset_h)h" else "ready" end)\t\(if .authed then "ready" else "needs-login" end)")
+    elif $target == "" then (if $best == null then "NONE\t\t0\t0\t3" else "\($best.label)\t\($best.email)\t\($best.s_used)\t\($best.w_used)\t\($best.tier)" end)
+    else ($target | ascii_downcase | ltrimstr("claude-")) as $q |
+      (if ($rows | any(.label == $q)) then ($rows | map(select(.label == $q))) elif ($rows | any((.email | ascii_downcase) == ($target | ascii_downcase))) then ($rows | map(select((.email | ascii_downcase) == ($target | ascii_downcase)))) else ($rows | map(select(.email != "" and ((.email | ascii_downcase) | contains($q))))) end) as $mr |
+      if ($mr | length) == 1 then ($mr[0] | "\(.label)\t\(.email)\t\(.s_used)\t\(.w_used)\t\(.tier)")
+      elif ($mr | length) > 1 then "AMBIGUOUS\t\($mr | map("\(.label)=\(.email)") | join(", "))\t0\t0\t3"
+      elif ($target | contains("@")) then "\((["a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z"] - $labels) | first)\t\($target)\t0\t0\t3"
+      else "\($q)\t\t0\t0\t3" end end'
+}
+[[ "$mode" != list ]] || { query_accounts "" list | column -t -s $'\t'; exit 0; }
+IFS=$'\t' read -r label email s_used w_used tier < <(query_accounts "$target" resolve)
+[[ "$label" != AMBIGUOUS ]] || { printf 'claude: ambiguous account %s (%s)\n' "$target" "$email" >&2; exit 1; }
+if [[ -z "$target" && ("$label" == NONE || "$tier" -ge 2) && -t 0 && -t 2 && "${1:-}" != auth && "${1:-}" != -p && "${1:-}" != --print ]]; then
+  query_accounts "" list | column -t -s $'\t' >&2
+  printf '\n[claude] All accounts at 100%% quota. Enter email to activate/switch (or Enter for claude-%s): ' "$label" >&2
+  read -r pick || true; [[ -z "${pick:-}" ]] || IFS=$'\t' read -r label email s_used w_used tier < <(query_accounts "$pick" resolve)
+fi
+[[ "$label" != NONE && -n "$label" ]] || { printf 'claude: no configured accounts; run: claude <email>\n' >&2; exit 1; }
+profile="$state/profiles/claude-$label"; token="$state/claude-tokens/claude-$label"; mkdir -p -m 700 "$profile"
+for item in agents CLAUDE.md settings.json skills; do [[ -e "$profile/$item" || -L "$profile/$item" || ! -e "$HOME/.claude/$item" ]] || ln -s "$HOME/.claude/$item" "$profile/$item"; done
+[[ -z "$email" ]] || { jq --arg l "$label" --arg e "$email" '.[$l] = ((.[$l] // {}) + {email: $e})' "$map_file" >"$map_file.tmp.$$" && mv -f "$map_file.tmp.$$" "$map_file"; }
+[[ "${1:-}" != auth ]] || { export CLAUDE_CONFIG_DIR="$profile"; unset CLAUDE_CODE_OAUTH_TOKEN; exec "$runtime" "$@"; }
+if [[ "${1:-}" == setup-token || ( ! -s "$token" && ! -s "$profile/.credentials.json" ) ]]; then
+  only_token=0; if [[ "${1:-}" == setup-token ]]; then choice="t"; only_token=1; shift; else
+    [[ ! -t 2 ]] || printf '[claude] Activate claude-%s (%s):\n  [Enter] Browser sign-in (claude auth login)\n  [t]     Mint 1-year setup-token\n  [sk-..] Paste setup-token directly\n> ' "$label" "${email:-new}" >&2
+    read -r choice || { [[ -t 0 ]] || { printf 'claude: claude-%s (%s) is not signed in; run: claude %s\n' "$label" "${email:-unconfigured}" "${email:-$label}" >&2; exit 1; }; }
+  fi
+  case "${choice:-}" in
+    sk-ant-*) printf '%s\n' "$choice" >"$token" && chmod 600 "$token" ;;
+    t|T|token)
+      CLAUDE_CONFIG_DIR="$profile" "$runtime" setup-token
+      printf '[claude] Paste the minted sk-ant-... token to save for claude-%s (or Enter to skip): ' "$label" >&2
+      read -r pasted || true; [[ -z "${pasted:-}" ]] || { printf '%s\n' "$pasted" >"$token" && chmod 600 "$token"; } ;;
+    *) CLAUDE_CONFIG_DIR="$profile" "$runtime" auth login ${email:+--email "$email"} ;;
+  esac
+  [[ ! -s "$profile/.claude.json" ]] || { jq -s '.[0][$l] = ((.[0][$l] // {}) + (if .[1].oauthAccount.emailAddress then {email: .[1].oauthAccount.emailAddress, uuid: .[1].oauthAccount.accountUuid} else {} end)) | .[0]' --arg l "$label" "$map_file" "$profile/.claude.json" >"$map_file.tmp.$$" && mv -f "$map_file.tmp.$$" "$map_file"; }
+  [[ -s "$token" || -s "$profile/.credentials.json" ]] || { printf 'claude: sign-in incomplete for claude-%s\n' "$label" >&2; exit 1; }
+  ((only_token == 0)) || exit 0
+fi
+export CLAUDE_CONFIG_DIR="$profile"
+[[ ! -s "$token" ]] || { CLAUDE_CODE_OAUTH_TOKEN="$(<"$token")"; export CLAUDE_CODE_OAUTH_TOKEN; }
+[[ ! -t 1 || ! -t 2 || "${1:-}" == -p || "${1:-}" == --print ]] || printf '[claude] claude-%s (%s) — 5h: %s%%, week: %s%%\n' "$label" "${email:-no-email}" "$s_used" "$w_used" >&2
+exec "$runtime" "$@"
