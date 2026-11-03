@@ -72,7 +72,7 @@
           "outside-watch.timer"
           "lane-gc.timer"
           "lane-gc-remote.timer"
-          "smashcraft-retain.timer"
+          "makgora-retain.timer"
           "verify-north.timer"
           "nexus-pull.timer"
           "nexus-restore-test.timer"

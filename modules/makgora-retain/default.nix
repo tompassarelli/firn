@@ -8,17 +8,17 @@
 }:
 
 let
-  cfg = config.myConfig.modules.smashcraft-retain;
+  cfg = config.myConfig.modules.makgora-retain;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "smashcraft-retain: hourly archive gex45 Smashcraft evidence and capture batches past their age to ~/archive/smashcraft-gex45, sha256 verified, then delete the gex45 copy";
+  description = "makgora-retain: hourly archive gex45 Mak'gora evidence and capture batches past their age to ~/archive/makgora-gex45, sha256 verified, then delete the gex45 copy";
 in
 {
-  options.myConfig.modules.smashcraft-retain.enable = lib.mkEnableOption description;
+  options.myConfig.modules.makgora-retain.enable = lib.mkEnableOption description;
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
       systemd.user = {
-        services.smashcraft-retain = {
+        services.makgora-retain = {
           Unit = {
             Description = description;
             OnFailure = [ "update-notify@%n.service" ];
@@ -37,10 +37,10 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "smashcraft-retain" "${northBin}/north retain";
+            ExecStart = jobRun "makgora-retain" "${northBin}/north retain";
           };
         };
-        timers.smashcraft-retain = {
+        timers.makgora-retain = {
           Unit.Description = description;
           Timer = {
             OnBootSec = "15min";
