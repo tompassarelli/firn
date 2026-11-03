@@ -9,8 +9,8 @@ echo old >"$work/south/flake.nix"
 git -C "$work/south" add flake.nix
 git -C "$work/south" commit -qm old
 git clone -q "$work/south" "$work/checkout"
-echo module >"$work/south/smashcraft-store-sync.nix"
-git -C "$work/south" add smashcraft-store-sync.nix
+echo module >"$work/south/makgora-store-sync.nix"
+git -C "$work/south" add makgora-store-sync.nix
 git -C "$work/south" commit -qm module
 python3 -I -c '
 import importlib.util, sys
@@ -20,6 +20,6 @@ landed = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(landed)
 landed.prepare_system(Path(sys.argv[2]), Path(sys.argv[3]), [])
 ' "$here/landed-rebuild.py" "$work/checkout" "$work/system"
-test "$(cat "$work/system/smashcraft-store-sync.nix")" = module
+test "$(cat "$work/system/makgora-store-sync.nix")" = module
 test "$(git -C "$work/system" rev-parse HEAD)" = "$(git -C "$work/south" rev-parse HEAD)"
 echo "ok: a landed rebuild builds south as of origin/main at request time, including modules landed after the checkout last fetched"

@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 
 const PROBE: &str = r#"set -euo pipefail
 printf '@uid %s\n' "$(id -u)"
-systemctl --user list-units --plain --no-legend --state=active 'smashcraft-lan-pool-*' | awk '{print "@pool", $1}'
+systemctl --user list-units --plain --no-legend --state=active '*-lan-pool-*' | awk '{print "@pool", $1}'
 if command -v podman >/dev/null; then podman ps --no-trunc --format '@container {{.ID}} {{.Names}}'; fi
 north="$(command -v north || echo "$HOME/.local/bin/north")"
 if [ -x "$north" ]; then echo @fleet; "$north" fleet list --json; echo; echo @fleet-end; fi

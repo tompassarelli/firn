@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 static NEXT: AtomicUsize = AtomicUsize::new(0);
 
-const BUSY_PROBE: &str = "@uid 1000\n@pool smashcraft-lan-pool-1.service\n@container a63b400ecb7f farm-smashcraft-3\n@container 77aa podman-scratch\n@job a63b400ecb7f\n@end\n";
-const IDLE_PROBE: &str = "@uid 1000\n@container a63b400ecb7f farm-smashcraft-3\n@end\n";
+const BUSY_PROBE: &str = "@uid 1000\n@pool makgora-lan-pool-1.service\n@container a63b400ecb7f farm-makgora-3\n@container 77aa podman-scratch\n@job a63b400ecb7f\n@end\n";
+const IDLE_PROBE: &str = "@uid 1000\n@container a63b400ecb7f farm-makgora-3\n@end\n";
 const FLEET: &str = r#"[{"name":"sc-218-taps","status":"working","machine":"gex45"},{"name":"old","status":"exited","machine":"gex45"},{"name":"proxy","status":"idle","machine":null}]"#;
 
 fn tool(dir: &Path, name: &str, body: &str) {
@@ -62,10 +62,10 @@ fn busy_host_refuses_and_names_every_blocker() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     for blocker in [
-        "farm runner job running in container farm-smashcraft-3",
+        "farm runner job running in container farm-makgora-3",
         "fleet session sc-218-taps (working) on gex45",
         "container podman-scratch running",
-        "LAN pool unit smashcraft-lan-pool-1.service active",
+        "LAN pool unit makgora-lan-pool-1.service active",
     ] {
         assert!(stderr.contains(blocker), "{blocker} missing from {stderr}");
     }
