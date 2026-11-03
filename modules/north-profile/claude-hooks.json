@@ -19,11 +19,6 @@
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /home/tom/.local/lib/firn/cli/current/bin/firn-system-policy",
             "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
-            "timeout": 10
           }
         ]
       },
@@ -77,36 +72,6 @@
             "timeout": 10
           }
         ]
-      },
-      {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "RemoteTrigger",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
-            "timeout": 10
-          }
-        ]
       }
     ],
     "PermissionRequest": [
@@ -127,22 +92,6 @@
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/prompt-grounding.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV NORTH_AGENT_PYTHON=/etc/codex/hooks/runtime/python3 PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin /etc/codex/hooks/runtime/bash /home/tom/.agents/hooks/north-hook.sh",
             "timeout": 10
           }
         ]
