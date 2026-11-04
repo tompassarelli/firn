@@ -102,6 +102,26 @@ function switchedBase(previous, root) {
   return null;
 }
 
+const staleRefusal = root => {
+  const git = gitIn(root);
+  const fetched = Bun.spawnSync({
+    cmd: ['git', '-C', root, 'fetch', '--quiet', 'origin', 'main'],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    stdin: 'ignore',
+    stdout: 'ignore',
+    stderr: 'ignore',
+    timeout: 10000,
+  });
+  const origin = git(['rev-parse', '--verify', '-q', 'origin/main^{commit}']);
+  if (origin.exitCode !== 0) return null;
+  const tip = decoder.decode(origin.stdout).trim();
+  const head = git(['rev-parse', 'HEAD']);
+  if (head.exitCode !== 0 || decoder.decode(head.stdout).trim() === tip) return null;
+  if (git(['merge-base', '--is-ancestor', 'HEAD', tip]).exitCode !== 0) return null;
+  const source = fetched.exitCode === 0 ? 'origin/main' : 'the last fetched origin/main (fetch failed)';
+  return `firn rebuild: this checkout is behind ${source} ${tip}; run: firn rebuild --landed ${tip}\n`;
+};
+
 function review(previous, approved) {
   const root = process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config/main`;
   const git = gitIn(root);
@@ -157,6 +177,11 @@ if (args[0] === 'host' && args[1] === 'rebuild') {
     process.stderr.write('Usage: firn rebuild [host] [--dry-run]\n');
     process.exitCode = 64;
   } else {
+    const stale = staleRefusal(process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config/main`);
+    if (stale !== null) {
+      process.stderr.write(stale);
+      process.exit(64);
+    }
     const { run, foreignRebuild } = dryRun ? {} : await import(modulePath);
     const refusal = foreignRebuild?.(rebuildArgs) ?? null;
     if (refusal !== null) {
