@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.watch-review;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "Monthly watch-review: launch one fleet session per followed source whose repo moved past its last reviewed commit";
+  description = "Daily watch-review: launch one fleet session per due followed source (30 days since its last review with new commits, or 10 new commits) and tell the proxy when a launch fails or is held";
 in
 {
   options.myConfig.modules.watch-review.enable = lib.mkEnableOption description;
@@ -21,7 +21,6 @@ in
         services.watch-review = {
           Unit = {
             Description = description;
-            OnFailure = [ "update-notify@%n.service" ];
           };
           Service = {
             Type = "oneshot";
@@ -30,13 +29,13 @@ in
             Environment = [
               "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
             ];
-            ExecStart = jobRun "watch-review" "${northBin}/watch-review";
+            ExecStart = jobRun "watch-review" "${northBin}/north watch-review";
           };
         };
         timers.watch-review = {
           Unit.Description = description;
           Timer = {
-            OnCalendar = "*-*-01 09:00:00";
+            OnCalendar = "*-*-* 09:00:00";
             Persistent = true;
           };
           Install.WantedBy = [ "timers.target" ];
