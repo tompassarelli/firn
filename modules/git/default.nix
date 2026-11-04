@@ -22,6 +22,10 @@ in
               autoDetach = false;
             };
             init.defaultBranch = "main";
+            landing = {
+              lander-host = "whiterabbit";
+              remote-hosts = "gex45";
+            };
             maintenance = {
               auto = false;
               autoDetach = false;

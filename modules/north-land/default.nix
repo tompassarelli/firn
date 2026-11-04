@@ -10,7 +10,7 @@ let
   cfg = config.myConfig.modules.north-land;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "north-land: the lander, which checks the queued lane tickets as one candidate and lands them on north main";
+  description = "north-land: the lander, which checks each repository's queued lane tickets as one candidate and lands them on that repository's main";
 in
 {
   options.myConfig.modules.north-land.enable = lib.mkEnableOption description;
@@ -40,7 +40,7 @@ in
             }"
             "SAFE_PUSH_LAND_RUNNER=gex45"
           ];
-          ExecStart = "${northBin}/north land serve --repo ${homeDir}/code/north/main";
+          ExecStart = "${northBin}/north land serve --all --repo ${homeDir}/code/north/main";
         };
         Install.WantedBy = [ "default.target" ];
       };
