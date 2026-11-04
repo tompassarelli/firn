@@ -3,6 +3,7 @@
 {
   myConfig.modules = {
     harness-health.enable = true;
+    north-land.enable = true;
     system.stateVersion = "25.05";
 
     capacity-watchdog = {
@@ -80,6 +81,7 @@
           "git-maintenance-nightly.timer"
           "agent-runtime-update.timer"
           "north-runtime-follow.timer"
+          "north-land.service"
           "north-watch.timer"
           "firn-delivery-liveness.timer"
           "model-watch.timer"
