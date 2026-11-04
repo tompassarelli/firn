@@ -89,6 +89,7 @@
           "code-health-review.timer"
           "supply-chain-scan.timer"
           "incident-retro.timer"
+          "eta-calibration.timer"
           "watch-review.timer"
           "cross-project-scan.timer"
           "proton-log-watchdog.timer"

@@ -104,6 +104,7 @@
       "alsa-lib",
       "claude",
       "code-health-review",
+      "eta-calibration",
       "fleet-tick",
       "incident-retro",
       "laptop-runner",
