@@ -194,10 +194,10 @@ reached 8%, `CriticalPowerAction=HybridSleep` blanked the screen with no warning
   cache instead of saving it and the image is only what cannot be dropped (about 12 GB of
   anonymous and zram memory when this was written, against 40 GB). The value is a target:
   the kernel uses the smallest image it can reach.
-- North `laptop-auto` (lane battery-alerts, 4 Nov) alerts the moment the battery starts discharging at any level
+- North `laptop-auto` (north bbf41b005) alerts the moment the battery starts discharging at any level
   ("charger stopped"), and at UPower's Low, Critical and Action levels says the screen will
   go dark for about two minutes while memory is saved and not to press the power button.
-- While discharging, north (lane battery-shed, 4 Nov) holds new agent placement off the laptop and freezes heavy batch
+- While discharging, north (north 346a7f193) holds new agent placement off the laptop and freezes heavy batch
   as play mode does, so the drain rate falls from about 36 W.
 - BIOS 04.02 (09 Jun 2026) is current and fwupd offers no firmware for the USB-C source
   drop, so the next drop is a test of the charger and cable: if it recurs on another
