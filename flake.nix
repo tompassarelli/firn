@@ -71,6 +71,15 @@
       );
       moduleInputs = nixpkgs.lib.filterAttrs (name: _: builtins.elem name moduleInputNames) inputs;
       darwinModuleNames = builtins.fromJSON (builtins.readFile ./config/darwin-modules.json);
+      bunRelease =
+        pkgs:
+        pkgs.bun.overrideAttrs (_old: {
+          version = "1.4.4";
+          src = pkgs.fetchurl {
+            url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.4/bun-linux-x64-baseline.zip";
+            hash = "sha256-4ERutVmVdy65iUvrrppr42jZhai5Jx7hJEhvmUbu3XY=";
+          };
+        });
       environmentPkgs = import nixpkgs {
         system = "x86_64-linux";
         config.allowUnfree = true;
@@ -78,7 +87,7 @@
       whiterabbitEnvironmentApps = [
         environmentPkgs.blender
         environmentPkgs.obsidian
-        (import nixpkgs-unstable { system = "x86_64-linux"; }).bun
+        (bunRelease (import nixpkgs-unstable { system = "x86_64-linux"; }))
       ];
       validateDomainDependency =
         dependency:
@@ -215,7 +224,7 @@
                     inherit system;
                     config.allowUnfree = true;
                   };
-                  bun = final.unstable.bun;
+                  bun = if system == "x86_64-linux" then bunRelease final.unstable else final.unstable.bun;
                   kanata-git = final.unstable.kanata.overrideAttrs (_old: {
                     src = kanata-git;
                     version = "git";
