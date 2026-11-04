@@ -245,10 +245,13 @@ error. Every attempt since the 2 Nov input bump to 6.18.60 failed: 12:22 rolled 
 13:01 was cut off and 21:31 wedged the GPU. The 6.18.56 to 6.18.60 change (kernel or the
 linux-firmware MES blobs that moved with it) is the suspect.
 
-**Fix until hibernate is proven again.** `modules/upower` sets `CriticalPowerAction=PowerOff`,
-so at 8% the laptop shuts down cleanly (open windows are lost, nothing corrupts, the fleet
-and lander restart at boot), and `modules/framework` sets `HandleLidSwitch=suspend` with no
-`HibernateDelaySec`, so a closed lid on battery only suspends to RAM, which still works on
-6.18.60. `image_size` 0 stays, so a restored hibernate is small. Restore HybridSleep and
-suspend-then-hibernate only after a kernel where a test hibernate logs no amdgpu thaw error
-and a desktop session survives it; test only with nothing unsaved open.
+**Hibernate is dropped for good (Tom, 4 Nov 2026).** `modules/upower` sets
+`CriticalPowerAction=PowerOff`, so at 8% the laptop shuts down cleanly (open windows are lost,
+nothing corrupts, the fleet and lander restart at boot), and `modules/framework` sets
+`HandleLidSwitch=suspend` with no `HibernateDelaySec`, so a closed lid on battery only
+suspends to RAM, which woke cleanly on every sleep since 1 Oct except the one right after the
+12:22 hibernate attempt. Sleep keeps the session for a two-second wake; hibernate added only
+survival of a battery that dies while asleep, which takes more than a day from 60%.
+`modules/swap` no longer sets `resume_offset`, `resumeDevice` or `image_size`, and declares
+the swap file at 32 GiB (it was 128 GiB, sized for a hibernate image); with 47 GiB of zram in
+front of it that is still ample swap for agent load.

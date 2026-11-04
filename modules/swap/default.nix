@@ -12,16 +12,14 @@ in
         "vm.watermark_boost_factor" = 0;
         "vm.watermark_scale_factor" = 125;
       };
-      kernelParams = [ "resume_offset=347227782" ];
-      resumeDevice = "/dev/mapper/cryptroot";
     };
     swapDevices = [
       {
         device = "/swap/swapfile";
         priority = 0;
+        size = 32 * 1024;
       }
     ];
-    systemd.tmpfiles.rules = [ "w /sys/power/image_size - - - - 0" ];
     zramSwap = {
       algorithm = "zstd";
       enable = true;
