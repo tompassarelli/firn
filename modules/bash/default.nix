@@ -39,7 +39,7 @@ in
           ".local/share/firn/bin".source =
             hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/nixos-config/main/dotfiles/bin";
           ".local/share/north/bin".source =
-            hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/north/main/bin";
+            hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/.local/state/north/current/tree/bin";
           ".local/share/south/bin".source =
             hm.config.lib.file.mkOutOfStoreSymlink "${hm.config.home.homeDirectory}/code/south/main/bin";
         };

@@ -21,7 +21,7 @@ needs no separate compiler. `firn repo build` resolves composition;
 `firn check` evaluates and lints before a build. `firn rebuild` uses committed
 snapshots, builds the host closure and activates the exact resulting path.
 
-North is promoted independently through `~/.local/share/north/bin/north`.
+North is promoted independently: `~/.local/share/north/bin` links to `~/.local/state/north/current/tree/bin`, so each runtime promotion reaches every north shell tool, including `north`.
 Firn owns its stable launcher, guard wiring and delivery-liveness entry.
 
 Activation never restarts the audio stack: Wine and Proton games do not
