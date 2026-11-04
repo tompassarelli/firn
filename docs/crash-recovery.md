@@ -155,8 +155,8 @@ compressor, plus reclaim and amdgpu VRAM eviction. At 25–30 W that is 1.1–1.
 **Fix (in this repository).** `modules/upower` sets `PercentageLow=20`,
 `PercentageCritical=12` and `PercentageAction=8`: hybrid sleep now starts with about
 4.5 Wh left, roughly three times the worst-case write, which covers both the gauge error
-near empty and the suspend that follows the write. `resume_offset` and `image_size` need
-no change. Earlier warning comes from north: `laptop-auto` drains agent placement off the
+near empty and the suspend that follows the write. `resume_offset` needs no change; `image_size` was
+later set to 0 (4 Nov 2026, below). Earlier warning comes from north: `laptop-auto` drains agent placement off the
 laptop (`laptop` state `draining`, reason `battery`) once the battery is discharging
 below 30%, sends one critical desktop notification for that discharge, and reopens
 placement to the window when AC returns.
@@ -170,3 +170,53 @@ included the 6 s lid-drain timeout and freezing. Every session survived. The rea
 is about four times faster than the `dd` estimate above, so the 8% action level leaves a
 wide margin. The source drops themselves (charging, then discharging with no kernel or
 logind line) still need a look at the charger and cable.
+
+## Dark screen, a charger that stops and a save cut off (4 Nov 2026)
+
+**What happened.** UPower's history shows discharging from 11:40 at 57% (unplugged for a
+storm), charging again at 12:23 at 6%, then discharging at 12:54 at 15% with the charger
+still plugged in; the kernel logged `ucsi_acpi USBC000:00: unknown error 256` at 12:53:31
+and the USB-C source stayed down until the next boot, when the same charger charged again.
+That is the third unexplained source drop after the two on 25 Oct. Each time the battery
+reached 8%, `CriticalPowerAction=HybridSleep` blanked the screen with no warning on screen:
+
+- 12:22: the kernel spent 43.85 s preallocating 41.7 GB for the image (the 40 GB
+  `image_size` cap; 35 GB of it was page cache), logged no image write, and returned at
+  12:23:18 when the charger was plugged back in.
+- 13:01:23: `hibernation entry` is the last line of the boot. The next boot found
+  `PM: Image not found (code -22)` with the battery still at 8–9% and an empty pstore, so
+  power was cut from outside during the write, about 90 s in, not by the battery or a panic.
+  A dark, unresponsive screen invites holding the power button, which does exactly that.
+
+**Fix.**
+
+- `modules/swap` writes `0` to `/sys/power/image_size` at boot, so the kernel drops page
+  cache instead of saving it and the image is only what cannot be dropped (about 12 GB of
+  anonymous and zram memory when this was written, against 40 GB). The value is a target:
+  the kernel uses the smallest image it can reach.
+- North `laptop-auto` (lane battery-alerts, 4 Nov) alerts the moment the battery starts discharging at any level
+  ("charger stopped"), and at UPower's Low, Critical and Action levels says the screen will
+  go dark for about two minutes while memory is saved and not to press the power button.
+- While discharging, north (lane battery-shed, 4 Nov) holds new agent placement off the laptop and freezes heavy batch
+  as play mode does, so the drain rate falls from about 36 W.
+- BIOS 04.02 (09 Jun 2026) is current and fwupd offers no firmware for the USB-C source
+  drop, so the next drop is a test of the charger and cable: if it recurs on another
+  charger and cable, it is the laptop's USB-C controller.
+
+## Login keyring locked after boot (4 Nov 2026)
+
+At boot a root process connects to `tom@`'s user manager (`systemctl --user -M tom@`),
+which systemd runs as a `systemd-stdio-bridge` unit with a PAM `login` session and no
+terminal. `pam_gnome_keyring auto_start` in that session started
+`gnome-keyring-daemon --daemonize --login` with no password, and that daemon never loaded
+its PKCS#11 module (`module_instances: assertion 'funcs != NULL' failed`). When Tom logged
+in on tty1 a few seconds later, `login` sent his correct password to that daemon, the unlock
+failed (`couldn't create login credential`) and gkr-pam reported "the password for the login
+keyring was invalid", so the first program to ask for a secret raised the unlock prompt. It
+is a race: on 2 Nov 23:18 the login started its own daemon and unlocked. The keyring
+password matches the login password.
+
+`modules/gnome-keyring` puts `pam_succeed_if quiet tty =~ *tty*` right before
+`pam_gnome_keyring` in the `login` session stack with `[success=ok default=1]`, so only a
+session with a terminal starts or unlocks the keyring. Check: `sudo systemctl --user -M
+tom@ is-system-running` must open a `login` session with no `gkr-pam` line in the journal.

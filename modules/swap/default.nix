@@ -21,6 +21,7 @@ in
         priority = 0;
       }
     ];
+    systemd.tmpfiles.rules = [ "w /sys/power/image_size - - - - 0" ];
     zramSwap = {
       algorithm = "zstd";
       enable = true;
