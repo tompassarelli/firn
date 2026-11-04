@@ -220,3 +220,30 @@ password matches the login password.
 `pam_gnome_keyring` in the `login` session stack with `[success=ok default=1]`, so only a
 session with a terminal starts or unlocks the keyring. Check: `sudo systemctl --user -M
 tom@ is-system-running` must open a `login` session with no `gkr-pam` line in the journal.
+
+## Hibernate wedges the GPU on kernel 6.18.60 (4 Nov 2026)
+
+**Test.** At 21:31 a hybrid sleep with `image_size` 0 preallocated 7.9 GB in 29.9 s, wrote
+7.2 GB in 2.5 s (2.3 GB after `lzo`), finished the image (`PM: S|`) and was dark about
+54 s. While thawing devices to write the image, amdgpu failed: `ring mes_kiq_3.1.0 test
+failed (-110)`, `resume of IP block <gfx_v11_0> failed -110`, `failed to thaw async: error
+-110`. The suspend after the write then failed (`Some devices failed to suspend, or early
+wake event detected`, `rolling back`), so the laptop came back instead of sleeping. The GPU
+stayed wedged: `ring sdma0 timeout`, a GPU reset whose `Ring sdma0 reset failed`, `Fence
+fallback timer expired on ring sdma0` twice a second, compute and gfx ring resets every
+10 s; two Ghostty windows aborted at 21:34 and niri aborted at 21:35:38 with `The CS has
+cancelled because the context is lost`, dropping Tom to the console and losing his session.
+Only the reboot at 21:44 cleared it.
+
+**Kernel evidence.** The hybrid sleep that completed on 25 Oct ran 6.18.56 with no thaw
+error. Every attempt since the 2 Nov input bump to 6.18.60 failed: 12:22 rolled back,
+13:01 was cut off and 21:31 wedged the GPU. The 6.18.56 to 6.18.60 change (kernel or the
+linux-firmware MES blobs that moved with it) is the suspect.
+
+**Fix until hibernate is proven again.** `modules/upower` sets `CriticalPowerAction=PowerOff`,
+so at 8% the laptop shuts down cleanly (open windows are lost, nothing corrupts, the fleet
+and lander restart at boot), and `modules/framework` sets `HandleLidSwitch=suspend` with no
+`HibernateDelaySec`, so a closed lid on battery only suspends to RAM, which still works on
+6.18.60. `image_size` 0 stays, so a restored hibernate is small. Restore HybridSleep and
+suspend-then-hibernate only after a kernel where a test hibernate logs no amdgpu thaw error
+and a desktop session survives it; test only with nothing unsaved open.

@@ -40,9 +40,8 @@ in
           "pre-down"
           "basic"
         ];
-    systemd.sleep.settings.Sleep.HibernateDelaySec = "30min";
     services.logind.settings.Login = {
-      HandleLidSwitch = "suspend-then-hibernate";
+      HandleLidSwitch = "suspend";
       HandleLidSwitchExternalPower = "ignore";
     };
   };
