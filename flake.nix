@@ -78,6 +78,7 @@
       whiterabbitEnvironmentApps = [
         environmentPkgs.blender
         environmentPkgs.obsidian
+        (import nixpkgs-unstable { system = "x86_64-linux"; }).bun
       ];
       validateDomainDependency =
         dependency:
