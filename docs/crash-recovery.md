@@ -199,6 +199,11 @@ reached 8%, `CriticalPowerAction=HybridSleep` blanked the screen with no warning
   go dark for about two minutes while memory is saved and not to press the power button.
 - While discharging, north (north 346a7f193) holds new agent placement off the laptop and freezes heavy batch
   as play mode does, so the drain rate falls from about 36 W.
+- Both count the laptop as on battery only when every line supply reads offline, or when
+  discharging lasts 120 s with a charger still online (north ffcaea488), because under the
+  60% charge limit the controller flickers to Discharging for 2-5 s while plugged in; at
+  20:31 a single flicker froze a heavy build and raised a false "charger stopped" alert.
+  The 60% limit stays (Tom, 4 Nov 2026).
 - BIOS 04.02 (09 Jun 2026) is current and fwupd offers no firmware for the USB-C source
   drop, so the next drop is a test of the charger and cable: if it recurs on another
   charger and cable, it is the laptop's USB-C controller.
