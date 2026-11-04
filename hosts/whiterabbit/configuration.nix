@@ -80,6 +80,7 @@
           "git-maintenance-nightly.timer"
           "agent-runtime-update.timer"
           "north-runtime-follow.timer"
+          "north-watch.timer"
           "firn-delivery-liveness.timer"
           "model-watch.timer"
           "skill-prune.timer"
