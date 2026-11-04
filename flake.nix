@@ -214,6 +214,7 @@
                     inherit system;
                     config.allowUnfree = true;
                   };
+                  bun = final.unstable.bun;
                   kanata-git = final.unstable.kanata.overrideAttrs (_old: {
                     src = kanata-git;
                     version = "git";
