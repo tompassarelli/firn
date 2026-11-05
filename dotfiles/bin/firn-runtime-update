@@ -140,7 +140,7 @@ rebuild_sources=(
   "$firn_repo/native/impact.ts"
   "$firn_repo/native/rebuild.ts"
   "$firn_repo/native/rebuild_native.ts"
-  "$firn_repo/native/firn_rebuild_family.ts"
+  "$firn_repo/native/firn_rebuild_family.ts" "$firn_repo/native/firn_snapshot_retire.mjs"
 )
 rebuild_bridge="$firn_repo/native/firn_rebuild_host.mjs"
 prewarm_source="$firn_repo/native/prewarm.ts"
