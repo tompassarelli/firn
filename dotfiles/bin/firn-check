@@ -5,8 +5,8 @@ root="${FIRN_REPO:-$(git rev-parse --show-toplevel)}"
 script="$(readlink -f "${BASH_SOURCE[0]}")"
 cd "$root"
 
-if ! command -v statix >/dev/null || ! command -v deadnix >/dev/null || ! command -v nixfmt >/dev/null; then
-  exec nix shell --inputs-from "path:$root" nixpkgs#statix nixpkgs#deadnix nixpkgs#nixfmt \
+if ! command -v statix >/dev/null || ! command -v deadnix >/dev/null; then
+  exec nix shell --inputs-from "path:$root" nixpkgs#statix nixpkgs#deadnix \
     --command env FIRN_REPO="$root" bash "$script"
 fi
 
@@ -26,6 +26,5 @@ statix check .
 printf 'firn check: deadnix\n'
 deadnix --fail .
 printf 'firn check: nixfmt\n'
-mapfile -d '' -t sources < <(rg --files --null -g '*.nix')
-nixfmt --check "${sources[@]}"
+nix fmt -- --ci
 printf 'firn check: passed\n'
