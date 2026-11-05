@@ -14,7 +14,7 @@ let
     lib.concatLists [
       [ "laptop:${laptopPublicKey}" ]
       (lib.optional (cfg.phonePublicKey != null) "phone:${cfg.phonePublicKey}")
-      (lib.optional (cfg.gex45PublicKey != null) "gex45:${cfg.gex45PublicKey}")
+      (lib.mapAttrsToList (name: host: "${name}:${host.publicKey}") cfg.hosts)
     ]
   );
   peersHelper = pkgs.writeShellApplication {
@@ -40,7 +40,7 @@ let
 in
 {
   options.myConfig.modules.wg-nexus = {
-    enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3, gex45 .4";
+    enable = lib.mkEnableOption "private WireGuard network wg-nexus (10.77.0.0/24): nexus hub .1, laptop .2, phone .3, gex45 .4, ccx63 .5";
     role = lib.mkOption {
       type = lib.types.enum [
         "hub"
@@ -61,10 +61,23 @@ in
       default = null;
       description = "Public key of the phone peer (10.77.0.3); the hub omits the peer while null";
     };
-    gex45PublicKey = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Public key of the gex45 peer (10.77.0.4); the hub omits the peer while null";
+    hosts = lib.mkOption {
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options = {
+            address = lib.mkOption {
+              type = lib.types.str;
+              description = "wg-nexus address of the host peer";
+            };
+            publicKey = lib.mkOption {
+              type = lib.types.str;
+              description = "WireGuard public key of the host peer";
+            };
+          };
+        }
+      );
+      default = { };
+      description = "hub: server peers by name (gex45 .4, ccx63 .5), each allowed only its own address";
     };
     address = lib.mkOption {
       type = lib.types.str;
@@ -123,10 +136,10 @@ in
               publicKey = cfg.phonePublicKey;
               allowedIPs = [ "10.77.0.3/32" ];
             })
-            (lib.optional (cfg.gex45PublicKey != null) {
-              publicKey = cfg.gex45PublicKey;
-              allowedIPs = [ "10.77.0.4/32" ];
-            })
+            (lib.mapAttrsToList (_: host: {
+              inherit (host) publicKey;
+              allowedIPs = [ "${host.address}/32" ];
+            }) cfg.hosts)
           ];
         };
       })
