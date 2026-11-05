@@ -92,6 +92,7 @@
           "incident-retro.timer"
           "tool-mine.timer"
           "eta-calibration.timer"
+          "north-tempo.timer"
           "watch-review.timer"
           "cross-project-scan.timer"
           "proton-log-watchdog.timer"
