@@ -41,7 +41,7 @@ in
               }"
             ];
             ExecStart = jobRun "worker-ledger" "${northBin}/north worker-ledger";
-            ExecStartPost = "${northBin}/agents usage --refresh";
+            ExecStartPost = "${northBin}/north usage --refresh";
           };
         };
         timers.worker-ledger = {

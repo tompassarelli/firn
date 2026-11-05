@@ -7,7 +7,6 @@ host="${FIRN_LIVENESS_HOST:-whiterabbit}"
 git_bin="${FIRN_LIVENESS_GIT:-git}"
 nix_bin="${FIRN_LIVENESS_NIX:-nix}"
 firn_bin="${FIRN_LIVENESS_CURRENT_FIRN:-$HOME/.local/bin/firn}"
-agents_bin="${FIRN_LIVENESS_AGENTS:-$HOME/.local/share/north/bin/agents}"
 north_bin="${NORTH_BIN:-$HOME/.local/share/north/bin/north}"
 python_bin="${FIRN_LIVENESS_PYTHON:-python3}"
 flock_bin="${FIRN_LIVENESS_FLOCK:-flock}"
@@ -83,8 +82,6 @@ failing_check="repository"
 revision="$("$git_bin" -C "$repo" rev-parse --verify HEAD^{commit})"
 failing_check="current_firn"
 [[ -x "$firn_bin" ]] || fail "current Firn is missing or non-executable: $firn_bin"
-failing_check="agents"
-[[ -x "$agents_bin" ]] || fail "agents command is missing or non-executable: $agents_bin"
 failing_check="north"
 [[ -x "$north_bin" ]] || fail "North command is missing or non-executable: $north_bin"
 failing_check="python"
@@ -99,7 +96,7 @@ failing_check="clean_worktree"
 source="git+file://$repo?rev=$revision&ref=main"
 
 failing_check="hook_projection"
-run "checking active hook targets and projections" "$agents_bin" status
+run "checking active hook targets and projections" "$north_bin" agents status
 failing_check="pin_ancestry"
 run "checking direct first-party pin ancestry" \
   env FIRN_REPO="$repo" "$firn_bin" repo pin-ancestry

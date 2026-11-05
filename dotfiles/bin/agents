@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stable PATH name for North's agents verbs.
+exec "${NORTH_PACE_BIN:-north}" agents "$@"
