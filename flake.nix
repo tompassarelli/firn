@@ -12,7 +12,10 @@
       url = "github:LnL7/nix-darwin/nix-darwin-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    stylix.url = "github:danth/stylix/release-26.05";
+    stylix = {
+      url = "github:danth/stylix/release-26.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     sops-nix = {
       url = "github:Mic92/sops-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -29,14 +32,21 @@
       url = "github:tompassarelli/glide";
       flake = false;
     };
-    elephant.url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
-    nur.url = "github:nix-community/NUR";
+    elephant = {
+      url = "github:abenz1267/elephant/0348d14ed9238309d2ae984f5010877470b06a73";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nur = {
+      url = "github:nix-community/NUR";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     quickshell = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
     };
     walker = {
       inputs.elephant.follows = "elephant";
+      inputs.nixpkgs.follows = "nixpkgs";
       url = "github:abenz1267/walker";
     };
     slippi = {
