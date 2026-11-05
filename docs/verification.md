@@ -45,3 +45,5 @@ weaken an expectation or retry a flake to green.
 the atomic CLI runtime. Agent registrations retain `firn-system-policy`, whose
 one-line adapter execs `firn-tools system-policy`. Runtime promotion and
 `agents sync` activate this change without a system rebuild.
+
+A landing runs none of these before the push. Each `land.after` line in `.safe-push` runs once per landed batch on main, and a red run reverts its lane (`docs/landing.md`).
