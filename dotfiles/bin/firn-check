@@ -10,6 +10,12 @@ if ! command -v statix >/dev/null || ! command -v deadnix >/dev/null || ! comman
     --command env FIRN_REPO="$root" bash "$script"
 fi
 
+if command -v firn-tools >/dev/null; then
+  printf 'firn check: units run only north subcommands and flags the installed runtime lists\n'
+  firn-tools unit-flags --repo "$root"
+else
+  printf 'firn check: ⚠ firn-tools is not installed (run firn-runtime-update), so units were not checked against north --help.\n'
+fi
 printf 'firn check: every NixOS host derivation\n'
 nix eval --json "path:$root#nixosConfigurations" \
   --apply 'hosts: builtins.mapAttrs (_: host: host.config.system.build.toplevel.drvPath) hosts'
