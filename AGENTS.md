@@ -22,5 +22,6 @@ Read `modules/north-profile/firn/docs/nixos-config-rules.md` for source/module/t
 
 Tests follow `north:agent-machinery/skills/verification/SKILL.md`; see `docs/verification.md`.
 After source edits, run `firn check`. After composition metadata edits, run `firn repo build` first.
+Land checks run after the push as `land.after` lines and a red run reverts its lane; see `docs/landing.md`.
 For agent policy, run `north agent-config-check`.
 For activation, run `north agent-config-check --local`.
