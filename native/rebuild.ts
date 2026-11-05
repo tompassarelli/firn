@@ -37,6 +37,19 @@ export function activationEffects(target: Target, host: string, platform: Platfo
   const preflight = inheritEffect('activation preflight', ['sudo', '-v']);
   return linux(platform) ? [preflight, inheritEffect('activate system profile', ['sudo', 'nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', builtPath]), activateVerifiedClosureEffect(builtPath)] : [preflight, inheritEffect('activate verified closure', withOverride(['sudo', 'darwin-rebuild', 'switch', '--flake', flakeRef(target, host)], target))];
 }
+export const hostUpgradeUnit = 'nexus-upgrade.service';
+export const activationRouteEffect = (): ArgvEffect => captureEffect('select activation route', ['systemctl', 'show', '--property=LoadState', '--value', hostUpgradeUnit]);
+export const upgradeUnitDeclared = (text: string): boolean => text.trim() === 'loaded';
+export const landedSystemEffect = (system: Snapshot): ArgvEffect => captureEffect('read landed system flake revision', ['git', '-C', system.root, 'ls-remote', 'origin', 'refs/heads/main']);
+export const landedRevision = (text: string): string => text.trim().split(/[ \t]/, 1)[0];
+export const upgradeUnitEffects = (): ArgvEffect[] => [inheritEffect('activate landed system flake', ['systemctl', 'start', hostUpgradeUnit]), captureEffect('read applied system revision', ['nixos-version', '--configuration-revision'])];
+export const lockEffect = (system: Snapshot, revision: string): ArgvEffect => captureEffect('read locked firn revision', ['git', '-C', system.root, 'show', `${revision}:flake.lock`]);
+export function lockedRevision(lock: string, input: string): string | null {
+  try {
+    const revision = JSON.parse(lock)?.nodes?.[input]?.locked?.rev;
+    return typeof revision === 'string' && /^[0-9a-f]{40}$/.test(revision) ? revision : null;
+  } catch { return null; }
+}
 export const exactPathProfileEffects = (builtPath: string): ArgvEffect[] => [inheritEffect('activation preflight', ['sudo', '-v']), inheritEffect('select persistent system profile', ['sudo', 'nix-env', '--profile', '/nix/var/nix/profiles/system', '--set', builtPath])];
 export const systemProfileResolveEffect = (): ArgvEffect => captureEffect('verify persistent system profile', ['readlink', '-e', '/nix/var/nix/profiles/system']);
 export const generationQueryEffect = (platform: Platform): ArgvEffect => captureEffect('read active generation', linux(platform) ? ['nixos-rebuild', 'list-generations'] : ['darwin-rebuild', '--list-generations']);

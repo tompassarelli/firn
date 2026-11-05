@@ -37,7 +37,7 @@ function finishEffect(effect: r.ArgvEffect, tracePath: string | null, traceId: s
   if (!appendTrace(tracePath, traceId, r.endEvent(effect, revision, status))) return { tag: 'failed', status: 74 };
   return status === 0 ? { tag: 'succeeded', stdout } : { tag: 'failed', status };
 }
-function executeEffect(effect: r.ArgvEffect, tracePath: string | null, traceId: string, revision: string): EffectResult {
+function executeEffect(effect: r.ArgvEffect, tracePath: string | null, traceId: string, revision: string, echo = true): EffectResult {
   if (!appendTrace(tracePath, traceId, r.startEvent(effect, revision))) return { tag: 'failed', status: 74 };
   if (effect.capture) {
     const result = globalThis.firn_host_capture(effect.argv, maxCommandOutput);
@@ -46,7 +46,7 @@ function executeEffect(effect: r.ArgvEffect, tracePath: string | null, traceId: 
       return finishEffect(effect, tracePath, traceId, revision, 126, '');
     }
     const [, status, stdout, stderr] = result;
-    if (stdout !== '') globalThis.firn_host_out(stdout);
+    if (echo && stdout !== '') globalThis.firn_host_out(stdout);
     if (stderr !== '') globalThis.firn_host_err(stderr);
     return finishEffect(effect, tracePath, traceId, revision, status, stdout);
   }
@@ -181,6 +181,30 @@ function runPinned(target: r.Target, host: string, platform: r.Platform, snapsho
   stderrLine('firn rebuild: build did not return one exact Nix store path');
   return 65;
 }
+function activateLanded(target: r.Target, host: string, platform: r.Platform, tracePath: string | null, traceId: string): number {
+  if (!target.overridden) { stderrLine(`firn rebuild: this host activates through ${r.hostUpgradeUnit}, which applies the landed system flake, but no system flake checkout was found; set FIRN_SYSTEM_FLAKE`); return 69; }
+  const pinned = target.system.revision;
+  const landed = executeEffect(r.landedSystemEffect(target.system), tracePath, traceId, pinned);
+  if (landed.tag === 'failed') return failPhase(landed.status);
+  const landedRevision = r.landedRevision(landed.stdout);
+  if (landedRevision !== pinned) { stderrLine(`firn rebuild: this host activates only landed ${target.system.root} main through ${r.hostUpgradeUnit}; the checkout is at ${pinned} and origin main at ${landedRevision}`); return 65; }
+  globalThis.firn_host_out(`firn rebuild: activating landed system flake ${pinned} through ${r.hostUpgradeUnit}\n`);
+  const applied = executeEffects(r.upgradeUnitEffects(), tracePath, traceId, pinned);
+  if (applied.tag === 'failed') return failPhase(applied.status);
+  const appliedRevision = applied.stdout.trim();
+  if (appliedRevision !== pinned) { stderrLine(`firn rebuild: ${r.hostUpgradeUnit} applied ${appliedRevision} instead of ${pinned}; no generation tag was written`); return 65; }
+  const lock = executeEffect(r.lockEffect(target.system, pinned), tracePath, traceId, pinned, false);
+  if (lock.tag === 'failed') return failPhase(lock.status);
+  const firnRevision = r.lockedRevision(lock.stdout, 'firn');
+  if (firnRevision === null) { stderrLine(`firn rebuild: ${target.system.root} flake.lock at ${pinned} locks no firn revision; no generation tag was written`); return 65; }
+  return tagGeneration(r.makeSystemTarget(r.makeSnapshot(target.firn.root, firnRevision, ''), target.system.root, pinned), host, platform, tracePath, traceId);
+}
+function routeActivation(target: r.Target, host: string, platform: r.Platform, snapshotDirectory: string, tracePath: string | null, traceId: string): number {
+  if (!r.linux(platform)) return runPinned(target, host, platform, snapshotDirectory, tracePath, traceId);
+  const route = executeEffect(r.activationRouteEffect(), tracePath, traceId, targetRevision(target), false);
+  if (route.tag === 'failed') return failPhase(route.status);
+  return r.upgradeUnitDeclared(route.stdout) ? activateLanded(target, host, platform, tracePath, traceId) : runPinned(target, host, platform, snapshotDirectory, tracePath, traceId);
+}
 function prepare(root: string, systemRoot: string | null, host: string, snapshotDirectory: string, tracePath: string | null, traceId: string): number {
   const pinned = pinSnapshot(root, tracePath, traceId);
   if (pinned.tag === 'failed') return failPhase(pinned.status);
@@ -195,7 +219,7 @@ function rebuild(root: string, systemRoot: string | null, host: string, snapshot
   const selected = selectPlatform(pinned.snapshot.revision, tracePath, traceId);
   if (selected.tag === 'rejected') { stderrLine(`firn rebuild: unsupported platform '${selected.name}'`); return 69; }
   const target = pinTarget(pinned.snapshot, systemRoot, tracePath, traceId);
-  return target.tag === 'failed' ? failPhase(target.status) : runPinned(target.target, host, selected.platform, snapshotDirectory, tracePath, traceId);
+  return target.tag === 'failed' ? failPhase(target.status) : routeActivation(target.target, host, selected.platform, snapshotDirectory, tracePath, traceId);
 }
 function rollbackError(message: string, status: number): number { stderrLine(`firn rollback: ${message}`); return status; }
 const rollbackStopped = (generation: string, status: number): number => rollbackError(`stopped at first failure (status ${status}) while selecting generation ${generation}; verify the active generation before retrying`, status);
