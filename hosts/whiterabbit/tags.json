@@ -106,6 +106,7 @@
       "code-health-review",
       "eta-calibration",
       "fleet-tick",
+      "gh-broker",
       "incident-retro",
       "laptop-runner",
       "machine-update",
