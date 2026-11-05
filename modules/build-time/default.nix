@@ -11,8 +11,8 @@ let
   cfg = config.myConfig.modules.build-time;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  north = "${homeDir}/code/north/main";
-  description = "Daily Rust build-time measurement of north at origin/main in a fresh detached checkout under heavy capacity, keeping one rolling split issue when a workspace nears its structure.toml threshold";
+  mirror = "${homeDir}/.local/state/north/build-time/north/.git";
+  description = "Daily Rust build-time measurement of north at main in a fresh detached checkout of the job's own mirror under heavy capacity, keeping one rolling split issue when a workspace nears its structure.toml threshold";
 in
 {
   options.myConfig.modules.build-time.enable = lib.mkEnableOption description;
@@ -32,7 +32,8 @@ in
             Environment = [
               "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
             ];
-            ExecStart = jobRun "build-time" "${northBin}/north capacity host run --class heavy --owner build-time --timeout-seconds 3000 -- nix develop ${north} --command ${northBin}/north code-health build-time --repo ${north} --rev origin/main --file";
+            ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -d ${mirror} || ${pkgs.git}/bin/git clone --quiet --mirror https://github.com/tompassarelli/north.git ${mirror}'";
+            ExecStart = jobRun "build-time" "${northBin}/north capacity host run --class heavy --owner build-time --timeout-seconds 3000 -- nix develop github:tompassarelli/north --command ${northBin}/north code-health build-time --repo ${mirror} --rev main --file";
           };
         };
         timers.build-time = {
