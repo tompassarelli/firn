@@ -2,7 +2,7 @@
 # Interactive multi-account launcher and bootstrapper for Claude Code.
 set -euo pipefail
 runtime="${CLAUDE_RUNTIME:-$HOME/.local/lib/claude/current/bin/claude}"
-[[ -x "$runtime" ]] || { printf 'claude: run claude-runtime-update latest\n' >&2; exit 127; }
+[[ -x "$runtime" ]] || { printf 'claude: run north claude-runtime-update latest\n' >&2; exit 127; }
 [[ -z "${CLAUDE_CONFIG_DIR:-}${CLAUDE_CODE_OAUTH_TOKEN:-}" ]] || exec "$runtime" "$@"
 case "${1:-}" in -v|--version|-h|--help|doctor|install|update|upgrade) exec "$runtime" "$@" ;; esac
 state="${NORTH_STATE_DIR:-$HOME/.local/state/north}"
