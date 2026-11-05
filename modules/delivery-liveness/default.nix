@@ -39,7 +39,7 @@ in
                 ]
               }"
             ];
-            ExecStart = "${pkgs.bash}/bin/bash ${northBin}/north job-run --path ${
+            ExecStart = "${pkgs.bash}/bin/bash ${northBin}/job-run --path ${
               lib.makeBinPath [
                 pkgs.python3
                 pkgs.openssh
