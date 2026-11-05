@@ -17,14 +17,14 @@ select_lock "$work/fresh.lock" "$work/running.lock" "$work/selected.lock" >/dev/
 jq -e '.nodes[.nodes[.root].inputs.nixpkgs].locked.rev == "fresh" and .nodes.other.locked.rev == "aged"' "$work/selected.lock" >/dev/null
 printf 'ok: selected lock reference journey keeps unrelated hold and follows, adopts aged candidate, refreshes direct-root nixpkgs\n'
 
-command -v agents >/dev/null || { printf 'skip: capacity journey needs the agents CLI, which this runner does not install\n'; exit 0; }; capacity=$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs
-mkdir -p "$work/bin" "$work/capacity/scripts"
-cat > "$work/bin/agents" <<'SH'
+command -v north >/dev/null || { printf 'skip: capacity journey needs the north CLI, which this runner does not install\n'; exit 0; }; capacity=$(command -v north)
+mkdir -p "$work/bin"
+cat > "$work/bin/north" <<'SH2'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == 'path machine-capacity' ]]
-printf '%s/capacity/SKILL.md\n' "$CAPACITY_JOURNEY"
-SH
+if [[ "${1:-} ${2:-} ${3:-}" == 'capacity host run' ]]; then exec bun "$CAPACITY_STUB" run "${@:4}"; fi
+exec "$CAPACITY_CANONICAL" "$@"
+SH2
 cat > "$work/bin/git" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -32,13 +32,13 @@ set -euo pipefail
 printf 'recorded repository probe failure\n' >&2
 exit 73
 SH
-cat > "$work/capacity/scripts/machine-capacity.mjs" <<'JS'
+cat > "$work/capacity-stub.js" <<'JS'
 const args = Bun.argv.slice(2);
 const boundary = args.indexOf('--');
 if (args[0] !== 'run' || boundary < 0) process.exit(2);
 const classIndex = args.indexOf('--class');
 const kind = classIndex < 0 ? 'moderate' : args[classIndex + 1];
-const fixture = Bun.spawnSync(['bun', process.env.CAPACITY_CANONICAL, 'fixture',
+const fixture = Bun.spawnSync([process.env.CAPACITY_CANONICAL, 'capacity', 'host', 'fixture',
   '--profile', 'unattended', '--class', kind, '--cores', '3',
   '--memory-total-mib', process.env.CAPACITY_EXECUTE_CHILD ? '16384' : '7943',
   '--memory-available-mib', process.env.CAPACITY_EXECUTE_CHILD ? '16384' : '5898',
@@ -57,8 +57,8 @@ if (process.env.CAPACITY_EXECUTE_CHILD) {
 process.stderr.write('external admission receipt; child stopped before execution\n');
 process.exit(76);
 JS
-chmod +x "$work/bin/agents" "$work/bin/git"
-export CAPACITY_CANONICAL="$capacity" CAPACITY_JOURNEY="$work" CAPACITY_SOURCE_DIR="$here" GAME_RESERVE_STATE="$work/game-reserve.json" XDG_RUNTIME_DIR="$work"
+chmod +x "$work/bin/north" "$work/bin/git"
+export CAPACITY_CANONICAL="$capacity" CAPACITY_STUB="$work/capacity-stub.js" CAPACITY_JOURNEY="$work" CAPACITY_SOURCE_DIR="$here" GAME_RESERVE_STATE="$work/game-reserve.json" XDG_RUNTIME_DIR="$work"
 journey_path="$work/bin:$PATH"
 status=0
 PATH="$journey_path" "$here/machine-update" --write >"$work/write.log" 2>&1 || status=$?
@@ -71,7 +71,7 @@ jq -e '.decision == "DEFER_MEMORY_HEADROOM" and .cpus == 3 and .memoryMiB == 595
 admitted=0
 while IFS= read -r check; do
   command=${check#* :: }
-  [[ "$command" == bun* ]] || continue
+  [[ "$command" == "north capacity host run"* ]] || continue
   status=0
   PATH="$journey_path" bash -c "$command" >"$work/land.log" 2>&1 || status=$?
   [[ "$status" == 76 ]] || { cat "$work/land.log"; printf "land exited %s; expected admission receipt 76\n" "$status"; exit 1; }

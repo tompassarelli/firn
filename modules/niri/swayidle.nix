@@ -10,7 +10,7 @@ let
   username = config.myConfig.modules.users.username;
   busy = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north agents busy";
   idleState = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north desktop-idle-state";
-  capacity = "${pkgs.bun}/bin/bun ${config.myConfig.modules.users.homeDir}/.claude/skills/machine-capacity/scripts/machine-capacity.mjs mode";
+  capacity = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north capacity host mode";
 in
 {
   config = lib.mkIf cfg.enable {

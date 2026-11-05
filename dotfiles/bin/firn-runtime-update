@@ -381,7 +381,7 @@ case "$scope" in
       FIRN_REBUILD_MODULE "$rebuild_bridge" "${rebuild_sources[@]}"
     materialize_js prewarm firn-prewarm prewarm.ts \
       FIRN_PREWARM_MODULE "$prewarm_bridge" "$prewarm_source"
-    bun "$(dirname "$(agents path machine-capacity)")/scripts/machine-capacity.mjs" \
+    north capacity host \
       run --class heavy --owner rust-port --timeout-seconds 1800 -- \
       cargo build --release --locked --manifest-path "$firn_repo/tools/firn/Cargo.toml" \
       --target-dir "$firn_repo/tools/firn/target"
