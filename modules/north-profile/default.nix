@@ -21,14 +21,28 @@ in
   options.myConfig.modules.north-profile.enable =
     lib.mkEnableOption "Publish shared agent surfaces at ~/.agents";
   config = lib.mkIf cfg.enable {
-    environment.etc."north/agent-context.json".text = builtins.toJSON {
-      window = contextWindow;
-      inherit (context) autoCompactTokenLimit;
+    environment.etc = {
+      "north/agent-context.json".text = builtins.toJSON {
+        window = contextWindow;
+        inherit (context) autoCompactTokenLimit;
+      };
+      "codex/hooks/runtime/bash".source = "${pkgs.bash}/bin/bash";
+      "codex/hooks/runtime/cat".source = "${pkgs.coreutils}/bin/cat";
+      "codex/hooks/runtime/env".source = "${pkgs.coreutils}/bin/env";
+      "codex/hooks/runtime/git".source = "${pkgs.git}/bin/git";
+      "codex/hooks/runtime/mktemp".source = "${pkgs.coreutils}/bin/mktemp";
+      "codex/hooks/runtime/python3".source = "${pkgs.python3}/bin/python3";
+      "codex/hooks/runtime/rm".source = "${pkgs.coreutils}/bin/rm";
+      "codex/hooks/runtime/timeout".source = "${pkgs.coreutils}/bin/timeout";
     };
     home-manager.users.${config.myConfig.modules.users.username} = hm: {
       home = {
         activation.validateNorthHookPaths = hm.config.lib.dag.entryBefore [ "writeBoundary" ] ''
-          run ${hm.config.home.homeDirectory}/.local/share/north/bin/north config agents check-hook-paths --claude ${pkgs.writeText "north-claude-hooks.json" claudeProjection} --codex ${../codex/requirements.toml} --provider-hooks ${hm.config.home.homeDirectory}/.local/state/north/agents/current/provider-hooks
+          if [ -x ${hm.config.home.homeDirectory}/.local/share/north/bin/north ] && [ -e ${hm.config.home.homeDirectory}/.local/lib/firn/cli/current ] && [ -e ${hm.config.home.homeDirectory}/.local/state/north/agents/current ]; then
+            run ${hm.config.home.homeDirectory}/.local/share/north/bin/north config agents check-hook-paths --claude ${pkgs.writeText "north-claude-hooks.json" claudeProjection} --codex ${../codex/requirements.toml} --provider-hooks ${hm.config.home.homeDirectory}/.local/state/north/agents/current/provider-hooks
+          else
+            echo "validateNorthHookPaths: deferred until the north runtime, the firn CLI and the first agent generation are installed"
+          fi
         '';
         activation.projectNorthClaudeHooks = hm.config.lib.dag.entryAfter [ "writeBoundary" ] ''
           run ${pkgs.coreutils}/bin/env CHMOD_BIN=${pkgs.coreutils}/bin/chmod FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm ${pkgs.writeShellScript "north-claude-hook-projector" (builtins.readFile ./claude-hook-projector.sh)} ${pkgs.writeText "north-claude-hooks.json" claudeProjection} $HOME/.claude/settings.json

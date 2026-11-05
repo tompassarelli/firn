@@ -47,14 +47,6 @@ in
         path = "${flakeRoot}/modules/codex/requirements.toml";
         name = "requirements.toml";
       };
-      "codex/hooks/runtime/bash".source = "${pkgs.bash}/bin/bash";
-      "codex/hooks/runtime/cat".source = "${pkgs.coreutils}/bin/cat";
-      "codex/hooks/runtime/env".source = "${pkgs.coreutils}/bin/env";
-      "codex/hooks/runtime/git".source = "${pkgs.git}/bin/git";
-      "codex/hooks/runtime/mktemp".source = "${pkgs.coreutils}/bin/mktemp";
-      "codex/hooks/runtime/python3".source = "${pkgs.python3}/bin/python3";
-      "codex/hooks/runtime/rm".source = "${pkgs.coreutils}/bin/rm";
-      "codex/hooks/runtime/timeout".source = "${pkgs.coreutils}/bin/timeout";
     };
     systemd.tmpfiles.rules = [
       "d /etc/codex/hooks/lib 0755 root root -"

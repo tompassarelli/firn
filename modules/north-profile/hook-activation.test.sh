@@ -54,4 +54,12 @@ for registration in "$claude" "$codex"; do
   [[ $(sha256sum "$scratch/settings.json") == "$digest" ]]
   sed -i 's/missing\.sh/present.sh/g' "$registration"
 done
-printf 'ok: missing Claude and Codex hooks refused before home writes; generation before=%s after=%s\n' "$before" "$(readlink "$scratch/current")"
+home_dir=$(grep -o '[^ ]*/\.local/share/north/bin/north' <<<"$activation" | head -n 1)
+home_dir=${home_dir%/.local/share/north/bin/north}
+fresh_activation=${activation//"$home_dir"/$scratch/fresh-home}
+if ! deferred=$(north_bin=false bash -e -c "$fresh_activation" 2>&1); then
+  printf 'home activation on a fresh home failed instead of deferring:\n%s\n' "$deferred" >&2
+  exit 1
+fi
+rg -F 'validateNorthHookPaths: deferred' <<<"$deferred" >/dev/null
+printf 'ok: missing Claude and Codex hooks refused before home writes; generation before=%s after=%s; a fresh home defers the check\n' "$before" "$(readlink "$scratch/current")"
