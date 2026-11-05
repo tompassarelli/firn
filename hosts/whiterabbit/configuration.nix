@@ -90,6 +90,7 @@
           "code-health-review.timer"
           "supply-chain-scan.timer"
           "incident-retro.timer"
+          "tool-mine.timer"
           "eta-calibration.timer"
           "watch-review.timer"
           "cross-project-scan.timer"

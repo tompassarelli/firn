@@ -117,6 +117,7 @@
       "proton-log-watchdog",
       "socat",
       "supply-chain-scan",
+      "tool-mine",
       "update-notify",
       "verify-north",
       "watch-alerts",
