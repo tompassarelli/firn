@@ -30,7 +30,7 @@ in
               "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
               "CODE_HEALTH_ACCOUNT=a"
             ];
-            ExecStart = jobRun "code-health-review" "${northBin}/north code-health tick";
+            ExecStart = jobRun "code-health-review" "${northBin}/code-health-tick";
           };
         };
         timers.code-health-review = {
