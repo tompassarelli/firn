@@ -18,6 +18,7 @@ let
       Type = "simple";
       Restart = "always";
       RestartSec = "5s";
+      TimeoutStopSec = "15s";
       Nice = 5;
       Environment = [
         "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${northBin}:${homeDir}/.local/share/firn/bin:${
