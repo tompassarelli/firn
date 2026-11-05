@@ -63,7 +63,7 @@ const firnRoot = process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config
 const rebuildSnapshot = process.env.FIRN_SNAPSHOT_DIR || `${process.env.XDG_RUNTIME_DIR || '/tmp'}/firn-rebuild-snapshot-${process.pid}`;
 let reviewSnapshot = null;
 if (args[0] === 'host' && (args[1] === 'rebuild' || args[1] === 'prepare')) retireSnapshotsOnTermination(firnRoot, () => [rebuildSnapshot, reviewSnapshot].filter(Boolean));
-const coreTools = ['agents', 'threads', 'safe-push', 'capacity-watchdog'];
+const coreTools = ['agents', 'threads', 'safe-push'];
 
 const systemGeneration = () => {
   const link = Bun.spawnSync({ cmd: ['readlink', '/nix/var/nix/profiles/system'], stdin: 'ignore', stderr: 'ignore' });

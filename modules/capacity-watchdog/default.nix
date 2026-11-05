@@ -73,11 +73,9 @@ in
               CPUWeight = 200;
               MemoryMax = "512M";
               Environment = [
-                (path "${homeDir}/.local/share/north/bin")
-                "Malloc=1"
-                "JSC_numberOfGCMarkers=1"
+                (path northBin)
               ];
-              ExecStart = "${homeDir}/.local/share/north/bin/capacity-watchdog sample";
+              ExecStart = "${northBin}/north capacity watchdog sample";
             };
             Install.WantedBy = [ "default.target" ];
           };
