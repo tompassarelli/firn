@@ -15,8 +15,8 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.24.2
-    hooks:
-      - id: gitleaks
-        args: ["--config", ".gitleaks.toml"]
+      - id: betterleaks
+        name: betterleaks
+        entry: betterleaks git --pre-commit --staged --redact --no-banner --trust-local-git-config --config .betterleaks.toml
+        language: system
+        pass_filenames: false

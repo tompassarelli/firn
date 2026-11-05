@@ -95,6 +95,26 @@
             hash = "sha256-4ERutVmVdy65iUvrrppr42jZhai5Jx7hJEhvmUbu3XY=";
           };
         });
+      betterleaksRelease =
+        pkgs: fallback:
+        if pkgs.stdenv.hostPlatform.system == "x86_64-linux" then
+          pkgs.stdenvNoCC.mkDerivation {
+            pname = "betterleaks";
+            version = "1.10.0";
+            src = pkgs.fetchurl {
+              url = "https://github.com/betterleaks/betterleaks/releases/download/v1.10.0/betterleaks_1.10.0_linux_x64.tar.gz";
+              hash = "sha256-nZrVA81dgNGKk5NSJmw/zKUvENqbg81c/mRpibE5QP4=";
+            };
+            sourceRoot = ".";
+            installPhase = "install -Dm755 betterleaks $out/bin/betterleaks";
+            meta = {
+              description = "Secret scanner, the released static binary so no landing waits on a Go build";
+              license = pkgs.lib.licenses.mit;
+              mainProgram = "betterleaks";
+            };
+          }
+        else
+          fallback;
       environmentPkgs = import nixpkgs {
         system = "x86_64-linux";
         config.allowUnfree = true;
@@ -230,7 +250,7 @@
             })
             {
               nixpkgs.overlays = [
-                (final: _prev: {
+                (final: prev: {
                   unstable = import nixpkgs-unstable {
                     inherit system;
                     config.allowUnfree = true;
@@ -240,6 +260,7 @@
                     config.allowUnfree = true;
                   };
                   bun = if system == "x86_64-linux" then bunRelease final.unstable else final.unstable.bun;
+                  betterleaks = betterleaksRelease final prev.betterleaks;
                   kanata-git = final.unstable.kanata.overrideAttrs (_old: {
                     src = kanata-git;
                     version = "git";
@@ -537,7 +558,7 @@
         pkgs.mkShell {
           packages = [
             pkgs.pre-commit
-            pkgs.gitleaks
+            (betterleaksRelease pkgs pkgs.betterleaks)
           ];
           shellHook = ''
             pre-commit install --allow-missing-config 2>/dev/null

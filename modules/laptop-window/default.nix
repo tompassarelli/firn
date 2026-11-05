@@ -42,7 +42,7 @@ in
         path = [
           pkgs.python3
           pkgs.coreutils
-          pkgs.gitleaks
+          pkgs.betterleaks
           (dirOf northBin)
           "/run/current-system/sw"
         ];

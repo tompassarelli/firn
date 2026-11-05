@@ -20,7 +20,7 @@ let
       pkgs.jq
       pkgs.sqlite
       pkgs.ripgrep
-      pkgs.gitleaks
+      pkgs.betterleaks
       pkgs.iproute2
       pkgs.coreutils
     ]

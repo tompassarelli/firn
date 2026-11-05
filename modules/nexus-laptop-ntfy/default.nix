@@ -16,7 +16,7 @@ let
   toolPath = tool: [
     pkgs.python3
     pkgs.coreutils
-    pkgs.gitleaks
+    pkgs.betterleaks
     (dirOf (dirOf tool))
     "/run/current-system/sw"
   ];

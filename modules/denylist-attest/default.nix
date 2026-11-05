@@ -77,7 +77,7 @@ in
         path = [
           pkgs.gh
           pkgs.git
-          pkgs.gitleaks
+          pkgs.betterleaks
           pkgs.coreutils
           "/run/current-system/sw"
         ];
