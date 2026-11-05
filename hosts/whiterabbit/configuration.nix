@@ -69,6 +69,7 @@
           "fleet-tick.timer"
           "worker-ledger.timer"
           "agents-flow-stall.timer"
+          "ops-check.timer"
           "watch-alerts.timer"
           "outside-watch.timer"
           "lane-gc.timer"
