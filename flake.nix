@@ -454,6 +454,13 @@
               bash ${./modules/farm-runners}/busy.test.sh
               touch $out
             '';
+        bash-login-path =
+          nixpkgs.legacyPackages.x86_64-linux.runCommand "firn-bash-login-path"
+            { nativeBuildInputs = [ nixpkgs.legacyPackages.x86_64-linux.bash ]; }
+            ''
+              bash ${./modules/bash}/login-path.test.sh
+              touch $out
+            '';
         nix-syntax =
           let
             pkgs = nixpkgs.legacyPackages.x86_64-linux;

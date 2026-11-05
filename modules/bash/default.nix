@@ -53,19 +53,7 @@ in
       programs.bash = {
         bashrcExtra = ''
 
-          # Ensure ~/.local/bin (per-tool links and uv tools) is on PATH.
-          case ":$PATH:" in
-            *":$HOME/.local/bin:"*) ;;
-            *) export PATH="$HOME/.local/bin:$PATH" ;;
-          esac
-
-          # Firn, North and South tools follow ~/.local/bin, in that order.
-          for d in "$HOME/.local/share/firn/bin" "$HOME/.local/share/north/bin" "$HOME/.local/share/south/bin"; do
-            case ":$PATH:" in
-              *":$d:"*) ;;
-              *) export PATH="$PATH:$d" ;;
-            esac
-          done
+          ${builtins.readFile ./login-path.sh}
 
           # Readline-dependent setup. Skip cleanly on bash builds without
           # readline (pkgs.bash in nix dev shells) — `set -o vi`, `bind`,
