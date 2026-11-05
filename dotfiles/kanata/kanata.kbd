@@ -31,7 +31,7 @@
   tab  q    w    e    r    t    [    y    u    i    o    p    \
   lctl a    s    d    f    g    ]    h    j    k    l    ;             '    ret
   @lshiftcaps @slashshift z x    c    v    b    /    n    m    ,    .    rsft
-  lctl lalt lmet      spc                 @enteralt ralt cmp  rctl
+  lctl lalt lmet      spc                 @enteralt ralt f20  rctl
   @m4shift @m5ctrl f10
 )
 

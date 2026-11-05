@@ -1,0 +1,46 @@
+state=${XDG_RUNTIME_DIR:-/tmp}/dictation
+key=${DICTATION_KEY:-KEY_F20}
+mkdir -p "$state"
+
+start() {
+  [ -e "$state/rec" ] && return 0
+  local wav
+  wav=$(mktemp "$state/take.XXXXXX.wav")
+  pw-record --rate 16000 --channels 1 --format s16 ${DICTATION_SOURCE:+--target "$DICTATION_SOURCE"} "$wav" </dev/null >/dev/null 2>"$state/pw-record.log" &
+  echo "$! $wav" >"$state/rec"
+}
+
+stop() {
+  [ -e "$state/rec" ] || return 0
+  local pid wav text
+  read -r pid wav <"$state/rec"
+  rm -f "$state/rec"
+  kill -INT "$pid" 2>/dev/null || true
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.05; done
+  if [ "$(stat -c %s "$wav")" -gt 16000 ]; then
+    text=$(whisper-cli -m "$DICTATION_MODEL" -f "$wav" -l en -nt -np -t 8 2>/dev/null |
+      tr '\n' ' ' | sed -E 's/\[[^]]*\]//g; s/\([^)]*\)//g; s/ +/ /g; s/^ //; s/ $//')
+    [ -n "$text" ] && wtype -- "$text "
+  fi
+  rm -f "$wav"
+}
+
+listen() {
+  local line
+  while read -r line; do
+    case $line in
+    *"$key ("*") pressed") start ;;
+    *"$key ("*") released") stop ;;
+    esac
+  done
+}
+
+case ${1:-} in
+start) start ;;
+stop) stop ;;
+listen) listen ;;
+*)
+  echo "usage: dictate start|stop|listen" >&2
+  exit 2
+  ;;
+esac
