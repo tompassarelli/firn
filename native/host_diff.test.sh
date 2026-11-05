@@ -66,16 +66,14 @@ rg -q 'host check: evaluated only nixosConfigurations.alpha; its closure is buil
 drv=$(awk '/host check: changed / {print $NF}' other.log)
 nix-store --check-validity "$(nix-store --query --outputs "$drv")" 2>/dev/null && exit 1
 printf '{ outputs = _: throw "injected evaluation fault"; }\n' > flake.nix
-git add -- flake.nix
-git commit -qm 'injected evaluation fault'
+git commit -qam "injected evaluation fault"
 SAFE_PUSH_LAND_HEAD=$(git rev-parse HEAD)
-if bash "$repo/.github/scripts/host-diff.sh" build >fault.log 2>&1; then
-  printf 'host diff accepted an evaluation fault\n' >&2
-  exit 1
-fi
+! bash "$repo/.github/scripts/host-diff.sh" build >fault.log 2>&1 || { printf "host diff accepted an evaluation fault\n" >&2; exit 1; }
 rg -q 'injected evaluation fault' fault.log
-if rg -q 'host check: changed' fault.log; then
-  printf 'host diff built before all evaluations passed\n' >&2
-  exit 1
-fi
-printf 'ok: real Git/Nix host diff builds one changed derivation, reuses docs and rejects an evaluation fault\n'
+! rg -q "has no keys" fault.log || { printf "host diff hid the evaluation fault behind jq\n" >&2; exit 1; }
+git checkout -q --detach "$SAFE_PUSH_LAND_BASE"
+bash "$repo/.github/scripts/host-diff.sh" build | tee rerun.log
+rg -q "base drvPaths reused from cache" rerun.log
+rg -q "evaluated 3 base and 3 head hosts; 0 changed, 3 reused" rerun.log
+! rg -q "host check: changed" fault.log || { printf "host diff built before all evaluations passed\n" >&2; exit 1; }
+printf 'ok: real Git/Nix host diff builds one changed derivation, reuses docs and rejects an evaluation fault, and passes the base tree checked out under a failing lane\n'

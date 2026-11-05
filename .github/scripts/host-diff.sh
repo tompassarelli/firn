@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-declare -A revisions=([base]=${SAFE_PUSH_LAND_BASE:?} [head]=${SAFE_PUSH_LAND_HEAD:?})
+declare -A revisions=([base]=${SAFE_PUSH_LAND_BASE:?} [head]=$(git rev-parse HEAD))
+lane=${SAFE_PUSH_LAND_HEAD:?}
 action=${1:-build}
 case "$action" in select|build) ;; *) printf 'usage: host-diff.sh [select|build]\n' >&2; exit 64 ;; esac
-reaching=$(git diff --name-only --no-renames "${revisions[base]}" "${revisions[head]}" |
+reaching=$(git diff --name-only --no-renames "${revisions[base]}" "$lane" |
   grep -Ev '^docs/|\.test\.(sh|py)$' || true)
 if [ -z "$reaching" ]; then
   printf 'host check: skipped; no changed path outside docs/ and tests reaches a host\n'
@@ -25,7 +26,7 @@ evaluate() {
     return
   fi
   mkdir -p "$scratch/$revision/source"
-  git archive "${revisions[$revision]}" | tar -x -C "$scratch/$revision/source"
+  git archive "${revisions[$revision]}" | tar -x -C "$scratch/$revision/source" || return
   # Path snapshots omit Git revision metadata from the system identity.
   nix eval --json --impure --expr "
     let
@@ -36,9 +37,9 @@ evaluate() {
       darwinConfigurations = builtins.mapAttrs
         (_: host: host.system.drvPath) (flake.darwinConfigurations or {});
     }
-  " > "$scratch/$revision.json"
-  cp -- "$scratch/$revision.json" "$entry.$$"
-  mv -- "$entry.$$" "$entry"
+  " > "$scratch/$revision.json" || return
+  cp -- "$scratch/$revision.json" "$entry.$revision.$$"
+  mv -- "$entry.$revision.$$" "$entry"
 }
 evaluate base > "$scratch/base.log" 2>&1 &
 base_job=$!
