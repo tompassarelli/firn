@@ -65,7 +65,6 @@ in
       (providerAdapter "lib/authoring-killswitch.sh")
       (providerAdapter "codex-conduct.sh")
       (providerAdapter "lib/defaults.toml")
-      (providerAdapter "lib/defaults.py")
       (providerAdapter "defaults.toml")
     ];
     home-manager.users.${username} = { config, ... }: {
