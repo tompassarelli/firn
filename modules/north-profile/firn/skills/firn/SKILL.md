@@ -4,7 +4,7 @@ description: >-
   Change ~/code/nixos-config or install system-wide software; assess maintained-project system-closure ingress. Other project flakes use nix-development.
 grounded: 2026-10-15
 nix-version: 2.34
-nixpkgs-lock: 2026-08-31
+nixpkgs-lock: 2026-11-02
 written: 2026-10-15
 ---
 
