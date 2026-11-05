@@ -90,6 +90,7 @@
           "model-watch.timer"
           "skill-prune.timer"
           "code-health-review.timer"
+          "mutant-sweep.timer"
           "supply-chain-scan.timer"
           "incident-retro.timer"
           "tool-mine.timer"
