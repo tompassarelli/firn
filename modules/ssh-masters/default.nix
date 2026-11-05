@@ -29,8 +29,8 @@ let
           "-o ControlPersist=no"
           "-o BatchMode=yes"
           "-o ConnectTimeout=20"
-          "-o ServerAliveInterval=5"
-          "-o ServerAliveCountMax=2"
+          "-o ServerAliveInterval=15"
+          "-o ServerAliveCountMax=4"
           "-o ExitOnForwardFailure=yes"
           host
         ];
