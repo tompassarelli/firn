@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.north-tempo;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "Hourly landing tempo: record north's lanes landed, queued->main and first commit->main p50 and p90 over the last hour and day into the ledger";
+  description = "Hourly landing tempo: record north's lanes landed, queued->main and first commit->main p50 and p90 over the last hour and day into the ledger, then fail when a lander-held learning loop is stale";
 in
 {
   options.myConfig.modules.north-tempo.enable = lib.mkEnableOption description;
@@ -34,6 +34,7 @@ in
               }"
             ];
             ExecStart = jobRun "north-tempo" "${northBin}/north tempo --record";
+            ExecStartPost = jobRun "north-loops-lander" "${northBin}/north loops check --role lander";
           };
         };
         timers.north-tempo = {
