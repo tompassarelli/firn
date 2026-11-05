@@ -1,10 +1,16 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::io::Read;
+use std::os::unix::process::CommandExt;
+use std::process::{Command, Stdio};
+use std::sync::mpsc::{self, Sender};
+use std::thread;
+use std::time::{Duration, Instant};
 
 const USAGE: &str = "usage: firn-tools unit-flags --repo DIR [--north PATH]";
 const MARKER: &str = "${northBin}/north ";
 const SKIPPED: [&str; 3] = [".git", "target", "node_modules"];
+const DEADLINE: Duration = Duration::from_secs(10);
 
 #[derive(Debug, PartialEq)]
 pub struct Invocation {
@@ -60,16 +66,60 @@ fn names_flag(help: &str, flag: &str) -> bool {
     })
 }
 
-fn help(north: &Path, path: &[&str]) -> Option<String> {
-    let output = Command::new(north).args(path).arg("--help").output().ok()?;
-    output.status.success().then(|| String::from_utf8_lossy(&output.stdout).into_owned() + &String::from_utf8_lossy(&output.stderr))
+fn drain(mut pipe: impl Read + Send + 'static, sent: Sender<String>) {
+    thread::spawn(move || {
+        let mut bytes = Vec::new();
+        let _ = pipe.read_to_end(&mut bytes);
+        let _ = sent.send(String::from_utf8_lossy(&bytes).into_owned());
+    });
 }
 
-pub fn problems(invocation: &Invocation, mut ask: impl FnMut(&[&str]) -> Option<String>) -> Vec<String> {
+fn help(north: &Path, path: &[&str]) -> Result<Option<String>, String> {
+    let Ok(mut child) = Command::new(north).args(path).arg("--help").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).process_group(0).spawn() else {
+        return Ok(None);
+    };
+    let (sent, received) = mpsc::channel();
+    let (Some(stdout), Some(stderr)) = (child.stdout.take(), child.stderr.take()) else { return Ok(None) };
+    drain(stdout, sent.clone());
+    drain(stderr, sent);
+    let started = Instant::now();
+    let mut status = None;
+    let mut text = String::new();
+    let mut closed = 0;
+    while status.is_none() || closed < 2 {
+        if started.elapsed() >= DEADLINE {
+            let _ = Command::new("kill").args(["-KILL", "--", &format!("-{}", child.id())]).stderr(Stdio::null()).status();
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!("`north {} --help` ran past {} s and was killed: the installed runtime runs that verb instead of printing its usage", path.join(" "), DEADLINE.as_secs()));
+        }
+        if status.is_none() {
+            status = child.try_wait().ok().flatten();
+        }
+        if let Ok(output) = received.recv_timeout(Duration::from_millis(20)) {
+            text.push_str(&output);
+            closed += 1;
+        }
+    }
+    Ok(status.is_some_and(|status| status.success()).then_some(text))
+}
+
+pub fn problems(invocation: &Invocation, mut ask: impl FnMut(&[&str]) -> Result<Option<String>, String>) -> Vec<String> {
     let leading: Vec<&str> = invocation.words.iter().map(String::as_str).take_while(|word| !word.starts_with('-')).collect();
-    let flags: Vec<&str> = invocation.words.iter().map(String::as_str).filter(|word| word.starts_with("--")).map(|word| word.split('=').next().unwrap_or(word)).collect();
+    let flags: Vec<&str> = invocation.words.iter().map(String::as_str).take_while(|word| *word != "--").filter(|word| word.starts_with("--")).map(|word| word.split('=').next().unwrap_or(word)).collect();
     let Some(first) = leading.first() else { return Vec::new() };
-    let Some((length, help)) = (1..=leading.len()).rev().find_map(|length| ask(&leading[..length]).map(|text| (length, text))) else {
+    let mut answered = None;
+    for length in (1..=leading.len()).rev() {
+        match ask(&leading[..length]) {
+            Ok(Some(text)) => {
+                answered = Some((length, text));
+                break;
+            }
+            Ok(None) => {}
+            Err(killed) => return vec![format!("{}: {killed}", invocation.location)],
+        }
+    }
+    let Some((length, help)) = answered else {
         return vec![format!("{}: the installed north runtime has no `north {first}` subcommand", invocation.location)];
     };
     let command = leading[..length].join(" ");

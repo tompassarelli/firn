@@ -63,3 +63,34 @@ fn a_subcommand_the_runtime_lacks_is_refused() {
     assert_eq!(output.status.code(), Some(1), "{}", text(&output));
     assert!(text(&output).contains("has no `north lane-gc-tick` subcommand"), "{}", text(&output));
 }
+
+#[test]
+fn flags_after_the_command_separator_belong_to_the_wrapped_command() {
+    let output = check("ExecStart = \"${northBin}/north land serve --all -- cargo build --release\";\n", "usage: north land serve --all");
+    assert_eq!(output.status.code(), Some(0), "{}", text(&output));
+}
+
+#[test]
+fn a_help_probe_that_runs_past_its_deadline_is_killed_and_named() {
+    deadline_case("#!/usr/bin/env bash\nexec sleep 300\n");
+}
+
+#[test]
+fn a_help_probe_whose_background_child_holds_its_output_open_is_killed_and_named() {
+    deadline_case("#!/usr/bin/env bash\nsleep 300 &\nexit 0\n");
+}
+
+fn deadline_case(runtime: &str) {
+    let dir = scratch();
+    let repo = dir.join("config");
+    fs::create_dir_all(repo.join("modules/watchdog")).unwrap();
+    fs::write(repo.join("modules/watchdog/default.nix"), "ExecStart = \"${northBin}/north capacity watchdog sample --interval 5\";\n").unwrap();
+    let north = dir.join("north");
+    fs::write(&north, runtime).unwrap();
+    fs::set_permissions(&north, fs::Permissions::from_mode(0o755)).unwrap();
+    let started = std::time::Instant::now();
+    let output = Command::new(env!("CARGO_BIN_EXE_firn-tools")).args(["unit-flags", "--repo"]).arg(&repo).arg("--north").arg(&north).output().unwrap();
+    assert!(started.elapsed() < std::time::Duration::from_secs(20), "the probe ran {:?}", started.elapsed());
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output));
+    assert!(text(&output).contains("modules/watchdog/default.nix:1: `north capacity watchdog sample --help` ran past 10 s and was killed"), "{}", text(&output));
+}
