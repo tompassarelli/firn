@@ -39,6 +39,11 @@
       inputs.elephant.follows = "elephant";
       url = "github:abenz1267/walker";
     };
+    slippi = {
+      inputs.home-manager.follows = "home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:lytedev/slippi-nix";
+    };
     zen-browser = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:0xc000022070/zen-browser-flake";

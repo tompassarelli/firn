@@ -1,0 +1,11 @@
+{
+  "tags": [
+    "gaming"
+  ],
+  "optIn": [],
+  "overrides": {},
+  "supports": [],
+  "flakeInputs": {
+    "slippi": "github:lytedev/slippi-nix"
+  }
+}
