@@ -22,13 +22,14 @@ export const darwinPlatform = (): Platform => ({ name: 'Darwin' });
 export const linux = (platform: Platform): boolean => platform.name === 'Linux';
 export const platformEffect = (): ArgvEffect => captureEffect('select platform', ['uname', '-s']);
 export const pinEffects = (root: string): ArgvEffect[] => [captureEffect('pin revision', ['git', '-C', root, 'rev-parse', 'HEAD']), captureEffect('pin branch', ['git', '-C', root, 'branch', '--show-current']), platformEffect()];
+export const retireSnapshotEffect = (snapshot: Snapshot, snapshotDirectory: string): ArgvEffect => captureEffect('retire validation snapshot', ['git', '-C', snapshot.root, 'worktree', 'remove', '--force', snapshotDirectory]);
 export function preparationEffects(target: Target, host: string, platform: Platform, snapshotDirectory: string): ArgvEffect[] {
   const snapshot = target.firn;
   return [
     captureEffect('pin committed snapshot', ['git', '-C', snapshot.root, 'cat-file', '-e', `${snapshot.revision}^{commit}`]),
     captureEffect('materialize committed snapshot', ['git', '-C', snapshot.root, 'worktree', 'add', '--detach', snapshotDirectory, snapshot.revision]),
     inheritEffect('validate committed snapshot', ['env', `FIRN_REPO=${snapshotDirectory}`, 'firn', 'repo', 'validate']),
-    captureEffect('retire validation snapshot', ['git', '-C', snapshot.root, 'worktree', 'remove', '--force', snapshotDirectory]),
+    retireSnapshotEffect(snapshot, snapshotDirectory),
     captureEffect('build committed snapshot', withOverride(['nix', 'build', '--no-link', '--print-out-paths', flakeRef(target, linux(platform) ? `nixosConfigurations.${host}.config.system.build.toplevel` : `darwinConfigurations.${host}.system`)], target)),
   ];
 }

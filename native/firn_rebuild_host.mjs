@@ -3,6 +3,7 @@
 import { appendFileSync, existsSync, mkdtempSync, rmdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { retireSnapshotsOnTermination } from './firn_snapshot_retire.mjs';
 
 const decoder = new TextDecoder();
 
@@ -58,6 +59,10 @@ globalThis.firn_host_append = (path, text) => {
 const modulePath = process.env.FIRN_REBUILD_MODULE
   ?? new URL('./firn_rebuild_family.ts', import.meta.url).pathname;
 const args = Bun.argv.slice(2);
+const firnRoot = process.env.FIRN_REPO ?? `${process.env.HOME}/code/nixos-config/main`;
+const rebuildSnapshot = process.env.FIRN_SNAPSHOT_DIR || `${process.env.XDG_RUNTIME_DIR || '/tmp'}/firn-rebuild-snapshot-${process.pid}`;
+let reviewSnapshot = null;
+if (args[0] === 'host' && (args[1] === 'rebuild' || args[1] === 'prepare')) retireSnapshotsOnTermination(firnRoot, () => [rebuildSnapshot, reviewSnapshot].filter(Boolean));
 const coreTools = ['agents', 'threads', 'safe-push', 'capacity-watchdog'];
 
 const systemGeneration = () => {
@@ -139,6 +144,7 @@ function review(previous, approved) {
   const end = decoder.decode(reviewed.stdout).trim();
   const directory = mkdtempSync(join(tmpdir(), 'firn-review-'));
   const snapshot = join(directory, 'snapshot');
+  reviewSnapshot = snapshot;
   try {
     const added = git(['worktree', 'add', '--detach', snapshot, snapshotRevision]);
     if (added.exitCode !== 0) {
@@ -166,6 +172,7 @@ function review(previous, approved) {
       if (removed.exitCode !== 0) throw new Error(decoder.decode(removed.stderr));
     }
     rmdirSync(directory);
+    reviewSnapshot = null;
   }
 }
 

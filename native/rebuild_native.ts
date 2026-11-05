@@ -165,8 +165,13 @@ function pinTarget(snapshot: r.Snapshot, systemRoot: string | null, tracePath: s
   stderrLine(`firn rebuild: system flake ${systemRoot} has uncommitted tracked changes; commit or discard them first`);
   return { tag: 'failed', status: 65 };
 }
-function preparePinned(target: r.Target, host: string, platform: r.Platform, snapshotDirectory: string, tracePath: string | null, traceId: string): number {
+function prepareSnapshot(target: r.Target, host: string, platform: r.Platform, snapshotDirectory: string, tracePath: string | null, traceId: string): EffectResult {
   const result = executeEffects(r.preparationEffects(target, host, platform, snapshotDirectory), tracePath, traceId, targetRevision(target));
+  if (result.tag === 'failed' && globalThis.firn_host_git_checkout(snapshotDirectory)) executeEffect(r.retireSnapshotEffect(target.firn, snapshotDirectory), tracePath, traceId, targetRevision(target));
+  return result;
+}
+function preparePinned(target: r.Target, host: string, platform: r.Platform, snapshotDirectory: string, tracePath: string | null, traceId: string): number {
+  const result = prepareSnapshot(target, host, platform, snapshotDirectory, tracePath, traceId);
   if (result.tag === 'failed') return failPhase(result.status);
   const builtPath = result.stdout.trim();
   if (r.exactStorePath(builtPath)) { globalThis.firn_host_out(`firn prepare: prepared ${targetRevision(target)} ${builtPath}\n`); return 0; }
@@ -174,7 +179,7 @@ function preparePinned(target: r.Target, host: string, platform: r.Platform, sna
   return 65;
 }
 function runPinned(target: r.Target, host: string, platform: r.Platform, snapshotDirectory: string, tracePath: string | null, traceId: string): number {
-  const result = executeEffects(r.preparationEffects(target, host, platform, snapshotDirectory), tracePath, traceId, targetRevision(target));
+  const result = prepareSnapshot(target, host, platform, snapshotDirectory, tracePath, traceId);
   if (result.tag === 'failed') return failPhase(result.status);
   const builtPath = result.stdout.trim();
   if (r.exactStorePath(builtPath)) return activate(target, host, platform, builtPath, tracePath, traceId);

@@ -1,5 +1,6 @@
 import { existsSync, appendFileSync } from 'node:fs';
 import { run } from '../../native/firn_rebuild_family.ts';
+import { retireSnapshotsOnTermination } from '../../native/firn_snapshot_retire.mjs';
 
 const decoder = new TextDecoder();
 const username = process.env.FIRN_LANDED_USER;
@@ -58,6 +59,7 @@ if (import.meta.main) {
     process.stderr.write('firn landed rebuild: root-owned fixed service entrypoint required\n');
     process.exitCode = 77;
   } else {
+    retireSnapshotsOnTermination(process.env.FIRN_REPO, () => [process.env.FIRN_SNAPSHOT_DIR || `${process.env.XDG_RUNTIME_DIR || '/tmp'}/firn-rebuild-snapshot-${process.pid}`]);
     process.exitCode = rebuild();
   }
 }
