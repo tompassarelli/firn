@@ -9,6 +9,7 @@
 - Keep general commands under `dotfiles/bin/` and repository commands in entity-first `firn`.
 - Route agent tools, hooks and skills to north; route secrets, host identity, Tom's policy and account skills to south.
 - Public and reusable goes to north or firn; Tom-specific or secret goes to south.
+- This checkout is the clone of github.com/tompassarelli/firn; its directory and lander unit keep the name `nixos-config`, so `north-land@nixos-config` lands firn.
 - Land through `safe-push --to main`; `modules/north-land` runs the lander for every repository and `modules/git` names its host in the machine git config, so a repository needs no `.safe-push` line to use it.
 
 ## Routes
