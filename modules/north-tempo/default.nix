@@ -33,7 +33,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "north-tempo" "${northBin}/north tempo --record";
+            ExecStart = jobRun "north-tempo" "${northBin}/north ledger tempo --record";
             ExecStartPost = jobRun "north-loops-lander" "${northBin}/north loops check --role lander";
           };
         };
