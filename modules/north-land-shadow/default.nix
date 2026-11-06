@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.north-land-shadow;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "north-land-shadow: every 2 minutes check the next queued lane's candidate on a host with room and store each check line's verdict for the lander";
+  description = "north-land-shadow: every 2 minutes run the lander doctor, then check the next queued lane's candidate on a host with room and store each check line's verdict for the lander";
 in
 {
   options.myConfig.modules.north-land-shadow.enable = lib.mkEnableOption description;
@@ -45,6 +45,7 @@ in
               }"
               "SAFE_PUSH_LAND_RUNNER=gex45"
             ];
+            ExecStartPre = "-${pkgs.coreutils}/bin/timeout 300 ${northBin}/north land doctor";
             ExecStart = jobRun "north-land-shadow" "${northBin}/north land shadow tick";
           };
         };
