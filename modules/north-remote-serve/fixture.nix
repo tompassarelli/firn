@@ -5,6 +5,10 @@
       publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureFixtureFixtureFixtureFixtureFixtureFi gex45-bridge";
       address = "192.0.2.4";
       expires = "20270202";
+      repos = [
+        "north"
+        "makgora"
+      ];
     };
     southLand = {
       enable = true;

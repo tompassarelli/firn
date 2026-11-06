@@ -12,7 +12,9 @@ let
   tokenDir = "/run/south-land-token";
   entry =
     name: peer:
-    ''restrict,from="${peer.address}",expiry-time="${peer.expires}",command="${northBin}/north remote-serve --peer ${name}" ${peer.publicKey}'';
+    ''restrict,from="${peer.address}",expiry-time="${peer.expires}",command="${northBin}/north remote-serve --peer ${name}${
+      lib.optionalString (peer.repos != [ ]) " --repos ${lib.concatStringsSep "," peer.repos}"
+    }" ${peer.publicKey}'';
 in
 {
   options.myConfig.modules.north-remote-serve = {
@@ -34,6 +36,11 @@ in
             expires = lib.mkOption {
               type = lib.types.strMatching "[0-9]{8}";
               description = "YYYYMMDD after which sshd refuses the key";
+            };
+            repos = lib.mkOption {
+              type = lib.types.listOf (lib.types.strMatching "[a-z0-9-]+");
+              default = [ ];
+              description = "repositories whose items the peer may name in threads calls; none refuses every item ref";
             };
           };
         }
