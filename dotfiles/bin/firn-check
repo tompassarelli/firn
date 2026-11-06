@@ -26,5 +26,5 @@ statix check .
 printf 'firn check: deadnix\n'
 deadnix --fail .
 printf 'firn check: nixfmt\n'
-nix fmt -- --ci
+nix run "path:$root#formatter.$(nix eval --raw --impure --expr builtins.currentSystem)" -- --ci
 printf 'firn check: passed\n'

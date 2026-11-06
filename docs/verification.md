@@ -10,7 +10,9 @@ It runs `nix flake check --no-build`, then evaluates every entry in the
 flake's `nixosConfigurations` to its `system.build.toplevel.drvPath`.
 NixOS checks option types, rejects unknown options and enforces module
 `assertions`. No system derivation is built. The command then runs
-`statix check`, `deadnix --fail` and `nix fmt -- --ci` over the Nix sources.
+`statix check`, `deadnix --fail` and the flake formatter with `--ci` over the
+Nix sources. Every nix step reads the checkout as `path:`, so a checkout another
+user owns, such as firn-landed-rebuild's root-owned snapshot, still validates.
 The tools come from the checkout's locked nixpkgs when absent from PATH.
 
 For editor diagnostics, configure `nixd` or `nil` as your Nix language server.

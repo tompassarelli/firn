@@ -135,7 +135,7 @@ global/system edit, say so and commit it — don't leave it dangling in `~`.
 
 Edit ordinary `.nix` sources. Run `firn check` before building: it evaluates
 the flake and every NixOS host derivation, enforces types and assertions,
-then runs statix, deadnix and `nix fmt -- --ci`. For editor errors, configure nixd or nil.
+then runs statix, deadnix and the flake formatter with `--ci`. For editor errors, configure nixd or nil.
 Use `firn schema explain` to inspect an option's type and declarations.
 
 Composition lives in module `metadata.json` and host `tags.json`. Run
