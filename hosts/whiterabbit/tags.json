@@ -104,6 +104,7 @@
       "alsa-lib",
       "claude",
       "code-health-review",
+      "coverage-map-refresh",
       "eta-calibration",
       "fleet-tick",
       "gh-broker",
