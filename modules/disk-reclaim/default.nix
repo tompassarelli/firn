@@ -12,7 +12,7 @@ let
 in
 {
   options.myConfig.modules.disk-reclaim.enable =
-    lib.mkEnableOption "disk-reclaim: hourly north reclaim of idle /tmp scratch, Wisp LAN pair copies and cargo targets, and of build and test caches past their size cap";
+    lib.mkEnableOption "disk-reclaim: hourly north lane reclaim of idle /tmp scratch, Wisp LAN pair copies and cargo targets, and of build and test caches past their size cap";
   config = lib.mkIf cfg.enable {
     systemd = {
       services.disk-reclaim = {
@@ -28,7 +28,7 @@ in
           Nice = 19;
           IOSchedulingClass = "idle";
           TimeoutStartSec = "20min";
-          ExecStart = "${northBin}/north reclaim";
+          ExecStart = "${northBin}/north lane reclaim";
         };
       };
       timers.disk-reclaim = {

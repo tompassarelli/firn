@@ -41,7 +41,7 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc" "${northBin}/north lane-gc";
+              ExecStart = jobRun "lane-gc" "${northBin}/north lane gc";
             };
           };
         };
