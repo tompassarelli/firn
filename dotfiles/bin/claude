@@ -24,7 +24,7 @@ elif [[ "${1:-}" == accounts || "${1:-}" == --accounts ]]; then mode="list"; shi
 elif [[ "${1:-}" == --as || "${1:-}" == --account ]]; then target="${2:?usage: claude --as <email|label> [claude args...]}"; shift 2
 elif [[ "${1:-}" == *@* || "${1:-}" =~ ^claude-[a-z0-9]+$ ]]; then target="$1"; shift
 elif [[ "${1:-}" =~ ^[a-zA-Z0-9._+-]+\.[a-zA-Z]{2,}$ && ! -e "${1:-}" ]] && jq -e --arg q "${1,,}" 'any(.[]; ((.email // "") | ascii_downcase | contains($q)))' "$map_file" >/dev/null 2>&1; then target="$1"; shift; fi
-[[ "${target#claude-}" != api ]] || CLAUDE_CONFIG_DIR="$state/profiles/claude-api" ANTHROPIC_API_KEY="$(<"$state/api-keys/anthropic")" exec "$runtime" "$@"
+[[ ! "${target#claude-}" =~ ^api(:([a-z]+))?$ ]] || CLAUDE_CONFIG_DIR="$state/profiles/claude-api" ANTHROPIC_API_KEY="$(<"/run/secrets/anthropic-${BASH_REMATCH[2]:-proton}-key")" exec "$runtime" "$@"
 query_accounts() {
   local g="{}"; [[ ! -s "$gate" ]] || g="$(<"$gate")"
   jq -rn --slurpfile map "$map_file" --argjson gate "$g" --arg authed "$authed" --arg target "$1" --arg mode "$2" '
