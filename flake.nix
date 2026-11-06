@@ -485,6 +485,17 @@
               bash ${./modules/farm-runners}/busy.test.sh
               touch $out
             '';
+        north-land-unit =
+          let
+            pkgs = nixpkgs.legacyPackages.x86_64-linux;
+            system = self.nixosConfigurations.whiterabbit.config;
+            user = system.myConfig.modules.users.username;
+            unit = system.home-manager.users.${user}.systemd.user.services."north-land@north";
+          in
+          pkgs.runCommand "firn-north-land-unit" { nativeBuildInputs = [ pkgs.bash ]; } ''
+            bash ${./modules/north-land}/tests/unit.test.sh ${pkgs.writeText "north-land-unit.json" (builtins.toJSON unit)}
+            touch $out
+          '';
         bash-login-path =
           nixpkgs.legacyPackages.x86_64-linux.runCommand "firn-bash-login-path"
             { nativeBuildInputs = [ nixpkgs.legacyPackages.x86_64-linux.bash ]; }
