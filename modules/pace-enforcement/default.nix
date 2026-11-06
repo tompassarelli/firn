@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.pace-enforcement;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "pace-enforcement: measure provider burn and control worker admission every minute";
+  description = "pace-enforcement: sample each provider account's usage windows every minute for north's spend rule";
   path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${
     lib.makeBinPath [
       pkgs.python3
