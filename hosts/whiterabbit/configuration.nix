@@ -60,6 +60,7 @@
           "activity-daemon.service"
           "north-gh-broker.service"
           "capacity-watchdog.service"
+          "capacity-taker.service"
           "padbridge.service"
           "dconf.service"
           "app-niri-*.scope"
