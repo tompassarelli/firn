@@ -87,6 +87,7 @@
           "north-strategy-log-retain.timer"
           "north-land@*.service"
           "north-land-shadow.timer"
+          "north-land-drill.timer"
           "north-watch.timer"
           "firn-delivery-liveness.timer"
           "model-watch.timer"
