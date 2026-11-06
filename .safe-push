@@ -10,4 +10,6 @@
 	after = native/,.github/scripts/host-diff.sh :: bash .github/scripts/land-checks.sh native
 	after = modules/,hosts/,config/,native/nix/,flake.nix,flake.lock,dotfiles/bin/firn-check,.github/scripts/host-diff.sh,.github/scripts/land-checks.sh :: bash .github/scripts/land-checks.sh drift
 	after = dotfiles/bin/ :: bash .github/scripts/land-checks.sh dotfiles
+	after = . :: nix flake check --offline --no-update-lock-file --no-build
 	after = . :: nix flake check --offline --no-update-lock-file
+	local-only = builds checks.host-whiterabbit, whose system closure only whiterabbit's store holds, so an offload host would rebuild it from source, gcc included, and fail offline :: nix flake check --offline --no-update-lock-file
