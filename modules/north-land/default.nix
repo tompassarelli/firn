@@ -20,7 +20,6 @@ let
       RestartSec = "5s";
       TimeoutStopSec = "15s";
       Nice = 5;
-      Slice = "agent.slice";
       Environment = [
         "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${northBin}:${homeDir}/.local/share/firn/bin:${
           lib.makeBinPath [
@@ -36,6 +35,7 @@ let
             pkgs.util-linux
           ]
         }"
+        "SAFE_PUSH_LAND_RUNNER="
         "NORTH_RUNTIME_LINK=${landerRuntime}"
       ];
       ExecStart = "${landerRuntime}/tree/bin/north land serve --depth 4 ${serves}";
