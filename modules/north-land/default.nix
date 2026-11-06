@@ -12,8 +12,8 @@ let
   username = config.myConfig.modules.users.username;
   description = "north-land: the lander, which checks each repository's queued lane tickets as one candidate and lands them on that repository's main";
   landerRuntime = "${homeDir}/.local/state/north/lander";
-  unit = repo: {
-    Unit.Description = "${description} (${repo})";
+  unit = label: serves: {
+    Unit.Description = "${description} (${label})";
     Service = {
       Type = "simple";
       Restart = "always";
@@ -38,7 +38,7 @@ let
         "SAFE_PUSH_LAND_RUNNER="
         "NORTH_RUNTIME_LINK=${landerRuntime}"
       ];
-      ExecStart = "${landerRuntime}/tree/bin/north land serve --depth 4 --repo ${homeDir}/code/${repo}/main";
+      ExecStart = "${landerRuntime}/tree/bin/north land serve --depth 4 ${serves}";
     };
     Install.WantedBy = [ "default.target" ];
   };
@@ -49,24 +49,37 @@ in
     repositories = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [
-        "north"
+        "battlecraft"
+        "clause"
+        "glide"
         "makgora"
+        "makgora-client"
         "nixos-config"
+        "north"
         "padbridge"
+        "slippi-launcher"
         "south"
         "wisp"
       ];
       description = ''
         Repositories under ~/code/<name>/main that each get their own lander unit north-land@<name>, so an error in one repository's loop never delays another's.
+        Every other repository with a land queue on this host is served by north-land-rest (north land serve --all, which skips the repositories listed here),
+        so no queue waits without a server and a private repository never has to be named in this public file; north land route refuses a lane on a host that declares neither.
         Every unit runs the runtime ~/.local/state/north/lander points at, which moves only through north land promote, never with main.
       '';
     };
   };
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
-      systemd.user.services = lib.listToAttrs (
-        map (repo: lib.nameValuePair "north-land@${repo}" (unit repo)) cfg.repositories
-      );
+      systemd.user.services =
+        lib.listToAttrs (
+          map (
+            repo: lib.nameValuePair "north-land@${repo}" (unit repo "--repo ${homeDir}/code/${repo}/main")
+          ) cfg.repositories
+        )
+        // {
+          north-land-rest = unit "every other queue" "--all";
+        };
     };
   };
 }
