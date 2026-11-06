@@ -8,8 +8,9 @@
 let
   cfg = config.myConfig.modules.github-pat;
   username = config.myConfig.modules.users.username;
-  applyPath = config.sops.secrets.nexus-apply.path;
-  workPath = config.sops.secrets.nexus-work.path;
+  fromFiles = cfg.applyTokenFile != null;
+  applyPath = if fromFiles then cfg.applyTokenFile else config.sops.secrets.nexus-apply.path;
+  workPath = if fromFiles then cfg.workTokenFile else config.sops.secrets.nexus-work.path;
   selector = pkgs.writeShellApplication {
     name = "github-pat";
     runtimeInputs = [
@@ -85,8 +86,21 @@ in
   options.myConfig.modules.github-pat = {
     enable = lib.mkEnableOption "per-repository GitHub PATs from sops for git and gh";
     sopsFile = lib.mkOption {
-      type = lib.types.path;
-      description = "sops file holding the nexus-apply and nexus-work tokens";
+      type = lib.types.nullOr lib.types.path;
+      default = null;
+      description = "sops file holding the nexus-apply and nexus-work tokens; unset when applyTokenFile and workTokenFile supply them";
+    };
+    applyTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/nexus-gh-token/apply";
+      description = "runtime path of a file holding the token for applyRepos, refreshed by a timer; replaces the nexus-apply sops secret";
+    };
+    workTokenFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/run/nexus-gh-token/work";
+      description = "runtime path of a file holding the token for every other repository; replaces the nexus-work sops secret";
     };
     applyRepos = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -124,7 +138,21 @@ in
       '';
     })
     (lib.mkIf cfg.enable {
-      sops = {
+      assertions = [
+        {
+          assertion = (cfg.applyTokenFile == null) == (cfg.workTokenFile == null);
+          message = "github-pat: set applyTokenFile and workTokenFile together";
+        }
+        {
+          assertion = fromFiles || cfg.sopsFile != null;
+          message = "github-pat: set sopsFile, or applyTokenFile and workTokenFile";
+        }
+        {
+          assertion = !(fromFiles && cfg.nixAccessToken);
+          message = "github-pat: nixAccessToken reads the sops secret; with token files set nixAccessTokenFile";
+        }
+      ];
+      sops = lib.mkIf (!fromFiles) {
         secrets = {
           nexus-apply = {
             inherit (cfg) sopsFile;
