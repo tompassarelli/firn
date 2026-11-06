@@ -37,6 +37,7 @@ let
         }"
         "SAFE_PUSH_LAND_RUNNER="
         "NORTH_RUNTIME_LINK=${landerRuntime}"
+        "NORTH_LAND_RUNNER_SLICE=agent.slice"
       ];
       ExecStart = "${landerRuntime}/tree/bin/north land serve --depth 4 ${serves}";
     };
