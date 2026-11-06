@@ -12,6 +12,7 @@ let
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "north-runtime-follow: every 2 min promote origin/main of north to the live runtime";
+  retainDescription = "north-strategy-log-retain: hourly compress the decision log's closed hours and delete days past its retention";
 in
 {
   options.myConfig.modules.north-runtime-follow.enable = lib.mkEnableOption description // {
@@ -44,6 +45,31 @@ in
             ];
             ExecStart = jobRun "north-runtime-follow" "${northBin}/north runtime update";
           };
+        };
+        services.north-strategy-log-retain = {
+          Unit.Description = retainDescription;
+          Service = {
+            Type = "oneshot";
+            Nice = 10;
+            TimeoutStartSec = "30min";
+            Environment = [
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
+                lib.makeBinPath [
+                  pkgs.coreutils
+                  pkgs.zstd
+                ]
+              }"
+            ];
+            ExecStart = jobRun "north-strategy-log-retain" "${northBin}/north strategy log retain";
+          };
+        };
+        timers.north-strategy-log-retain = {
+          Unit.Description = retainDescription;
+          Timer = {
+            OnCalendar = "hourly";
+            Persistent = true;
+          };
+          Install.WantedBy = [ "timers.target" ];
         };
         timers.north-runtime-follow = {
           Unit.Description = description;

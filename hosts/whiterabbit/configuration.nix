@@ -84,6 +84,7 @@
           "git-maintenance-nightly.timer"
           "agent-runtime-update.timer"
           "north-runtime-follow.timer"
+          "north-strategy-log-retain.timer"
           "north-land@*.service"
           "north-land-shadow.timer"
           "north-watch.timer"
