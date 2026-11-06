@@ -2,6 +2,7 @@
   config,
   lib,
   pkgs,
+  northBin,
   ...
 }:
 
@@ -9,6 +10,7 @@ let
   cfg = config.myConfig.modules.ssh-masters;
   username = config.myConfig.modules.users.username;
   hostList = lib.concatStringsSep " " cfg.hosts;
+  probeDescription = "ssh-master-probe: time a round trip through each shared ssh master and recycle one slower than 3 s while a direct connection answers (north#682)";
   mkMaster = host: {
     name = "ssh-master-${host}";
     value = {
@@ -56,7 +58,33 @@ in
 
     '';
     home-manager.users.${username} = _: {
-      systemd.user.services = builtins.listToAttrs (map mkMaster cfg.hosts);
+      systemd.user.services = builtins.listToAttrs (map mkMaster cfg.hosts) // {
+        ssh-master-probe = {
+          Unit.Description = probeDescription;
+          Service = {
+            Type = "oneshot";
+            TimeoutStartSec = "3min";
+            Environment = [
+              "PATH=${
+                lib.makeBinPath [
+                  pkgs.openssh
+                  pkgs.systemd
+                ]
+              }"
+            ];
+            ExecStart = "${northBin}/north ssh-master probe ${hostList}";
+          };
+        };
+      };
+      systemd.user.timers.ssh-master-probe = {
+        Unit.Description = probeDescription;
+        Timer = {
+          OnBootSec = "1min";
+          OnUnitInactiveSec = "1min";
+          AccuracySec = "5s";
+        };
+        Install.WantedBy = [ "timers.target" ];
+      };
     };
   };
 }
