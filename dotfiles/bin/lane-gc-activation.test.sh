@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-for unit in lane-gc lane-gc-remote; do
+for unit in lane-gc; do
   method=$(nix eval --raw "$root#nixosConfigurations.whiterabbit.config.home-manager.users.tom.systemd.user.services.$unit.Unit.X-SwitchMethod")
   [[ "$method" == keep-old ]] || { printf 'FAIL: %s switches with %s; a restarted oneshot blocks activation\n' "$unit" "$method" >&2; exit 1; }
 done
