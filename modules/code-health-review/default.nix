@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  pkgs,
   jobRun,
   northBin,
   ...
@@ -27,7 +28,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
               "CODE_HEALTH_ACCOUNT=a"
             ];
             ExecStart = jobRun "code-health-review" "${northBin}/north code-health tick";
