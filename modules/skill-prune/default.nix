@@ -1,46 +1,42 @@
 {
   config,
   lib,
-  pkgs,
+  jobRun,
   northBin,
   ...
 }:
 
 let
-  cfg = config.myConfig.modules.watch-alerts;
+  cfg = config.myConfig.modules.skill-prune;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "Deterministic location safety alerts";
+  description = "Weekly skill and lesson prune";
 in
 {
-  options.myConfig.modules.watch-alerts.enable = lib.mkEnableOption description;
+  options.myConfig.modules.skill-prune.enable = lib.mkEnableOption description;
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
       systemd.user = {
-        services.watch-alerts = {
+        services.skill-prune = {
           Unit = {
             Description = description;
-            After = [ "network-online.target" ];
             OnFailure = [ "update-notify@%n.service" ];
             X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";
             Nice = 10;
-            TimeoutStartSec = "4min";
+            TimeoutStartSec = "100min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
-                lib.makeBinPath [ pkgs.python3 ]
-              }"
+              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
             ];
-            ExecStart = "${northBin}/north ops model-watch --alerts-only";
+            ExecStart = jobRun "skill-prune" "${northBin}/north skill-prune";
           };
         };
-        timers.watch-alerts = {
+        timers.skill-prune = {
           Unit.Description = description;
           Timer = {
-            OnCalendar = "*:0/5";
-            AccuracySec = "30s";
+            OnCalendar = [ "Sun 09:00" ];
             Persistent = true;
           };
           Install.WantedBy = [ "timers.target" ];
