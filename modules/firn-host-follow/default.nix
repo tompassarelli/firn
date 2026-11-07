@@ -37,7 +37,10 @@ in
     home-manager.users.${username} = _: {
       systemd.user = {
         services.firn-host-follow = {
-          Unit.Description = description;
+          Unit = {
+            Description = description;
+            X-SwitchMethod = "keep-old";
+          };
           Service = {
             Type = "oneshot";
             Nice = 10;
