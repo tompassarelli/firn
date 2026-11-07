@@ -15,6 +15,7 @@ let
   unit = label: serves: {
     Unit.Description = "${description} (${label})";
     Service = {
+      Slice = "agent.slice";
       Type = "simple";
       Restart = "always";
       RestartSec = "5s";

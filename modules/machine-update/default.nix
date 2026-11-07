@@ -82,6 +82,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
+            Slice = "agent.slice";
             Type = "oneshot";
             TimeoutStartSec = "4h";
             Environment = [

@@ -63,6 +63,7 @@ in
               X-SwitchMethod = "keep-old";
             };
             Service = {
+              Slice = "agent.slice";
               Type = "oneshot";
               Environment = [ path ];
               ExecStart = jobRun "nexus-pull" "${pull}/bin/nexus-pull";
@@ -75,6 +76,7 @@ in
               X-SwitchMethod = "keep-old";
             };
             Service = {
+              Slice = "agent.slice";
               Type = "oneshot";
               Environment = [ path ];
               ExecStart = jobRun "nexus-restore-test" "${restoreTest}/bin/nexus-restore-test";

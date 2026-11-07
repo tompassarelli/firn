@@ -25,6 +25,7 @@ in
         };
         services.firn-delivery-liveness = {
           Service = {
+            Slice = "agent.slice";
             Environment = [
               "NORTH_BIN=${northBin}/north"
               "PATH=${hm.config.home.homeDirectory}/.local/share/firn/bin:${northBin}:${

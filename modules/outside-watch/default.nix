@@ -24,6 +24,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
+            Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
               "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${

@@ -21,6 +21,7 @@ in
           X-SwitchMethod = "keep-old";
         };
         Service = {
+          Slice = "agent.slice";
           Type = "oneshot";
           Environment = [ "PATH=${pkgs.patchelf}/bin:/run/current-system/sw/bin" ];
           ExecStart = "${homeDir}/.local/share/north/bin/north codex-runtime-gcroots";

@@ -35,6 +35,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
+            Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
               "PATH=${homeDir}/.local/share/firn/bin:${northBin}:${

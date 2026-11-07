@@ -67,6 +67,7 @@ in
           capacity-watchdog = {
             Unit.Description = description;
             Service = {
+              Slice = "control.slice";
               Type = "simple";
               Restart = "always";
               RestartSec = "10s";
@@ -86,6 +87,7 @@ in
               X-SwitchMethod = "keep-old";
             };
             Service = {
+              Slice = "agent.slice";
               Type = "oneshot";
               Nice = 10;
               TimeoutStartSec = "4h";

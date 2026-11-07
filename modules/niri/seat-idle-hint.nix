@@ -20,6 +20,7 @@ in
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
+          Slice = "control.slice";
           ExecStart = "${north} capacity seat-idle-hint --seconds 300";
           Restart = "on-failure";
           RestartSec = 5;

@@ -34,6 +34,7 @@ in
           OnFailure = [ "update-notify@%n.service" ];
         };
         Service = {
+          Slice = "agent.slice";
           Type = "simple";
           Restart = "always";
           RestartSec = "10s";

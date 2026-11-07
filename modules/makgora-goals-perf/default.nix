@@ -34,6 +34,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
+            Slice = "agent.slice";
             Type = "oneshot";
             Nice = 10;
             TimeoutStartSec = "30min";
