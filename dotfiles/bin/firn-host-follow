@@ -31,7 +31,7 @@ elif [[ "$pin" != "$firn_main" ]]; then
   subject="$(git -C "$firn" log -1 --format=%s "$firn_main")"
   if git -C "$overlay" worktree add --quiet -b "${lane##*/}" "$lane" origin/main \
     && (cd "$lane" && nix flake lock --override-input firn "github:$slug/$firn_main" \
-      && git commit --quiet flake.lock -m "Pin firn to ${firn_main:0:8}, its main, so every host follows it: $subject" \
+      && git commit --quiet flake.lock -m "Pin firn to ${firn_main:0:8}, its main, so every host follows it: $subject" -m "Incident-test: none; a pin bump adds no behavior of its own, the pinned firn commit carries its tests" \
       && safe-push --to main); then
     printf '%s\n' "$firn_main" >"$state/pin"
   else
