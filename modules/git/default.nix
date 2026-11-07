@@ -24,7 +24,7 @@ in
             init.defaultBranch = "main";
             landing = {
               lander-host = "whiterabbit";
-              remote-hosts = "gex45";
+              remote-hosts = "gex45 nexus";
             };
             maintenance = {
               auto = false;
