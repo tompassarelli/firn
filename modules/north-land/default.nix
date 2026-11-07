@@ -35,7 +35,6 @@ let
             pkgs.util-linux
           ]
         }"
-        "SAFE_PUSH_LAND_RUNNER="
         "NORTH_RUNTIME_LINK=${landerRuntime}"
         "NORTH_LAND_RUNNER_SLICE=agent.slice"
       ];
