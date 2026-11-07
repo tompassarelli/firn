@@ -156,7 +156,7 @@ gather() {
         log=$(journalctl -u sshd.service --since=-15min -o cat --no-pager)
         journalctl -u sshd.service -n 1 --cursor-file="$state/sshd.cursor" --no-pager >/dev/null
       fi
-      accepted=$(printf '%s\n' "$log" | grep 'Accepted ' || true)
+      accepted=$(printf '%s\n' "$log" | grep 'Accepted ' | sed -E 's/ port [0-9]+ / port 0 /' | sort -u || true)
       local sessions seen=""
       sessions=$(loginctl list-sessions --no-legend)
       [ -f "$state/console.seen" ] && seen=$(cat "$state/console.seen")
