@@ -26,7 +26,23 @@ let
       export SCCACHE_MULTILEVEL_CHAIN=disk,webdav SCCACHE_WEBDAV_ENDPOINT=http://127.0.0.1:${toString relayPort}
     fi
   '';
+  serverUp = ''
+    server_up() {
+      if [ -n "''${SCCACHE_SERVER_UDS:-}" ]; then
+        [ -S "$SCCACHE_SERVER_UDS" ]
+      else
+        (exec 3<>/dev/tcp/127.0.0.1/"''${SCCACHE_SERVER_PORT:-4226}") 2>/dev/null
+      fi
+    }
+  '';
+  startOrBypass = ''
+    if ! server_up && ! startup_error=$(${sccache} --start-server 2>&1 >/dev/null) && ! server_up; then
+      printf 'sccache: cache unusable (%s), compiling without it\n' "$(printf %s "$startup_error" | ${pkgs.gnused}/bin/sed -n 's/.*startup failed: //p;T;q')" >&2
+      exec "$@"
+    fi
+  '';
   wrapper = pkgs.writeShellScript "sccache-lane" ''
+    ${serverUp}
     out=$PWD prev=
     for arg in "$@"; do
       [ "$prev" = --out-dir ] && out=$arg
@@ -37,6 +53,7 @@ let
       export SCCACHE_SERVER_PORT=$((20000 + $(printf %s "$SCCACHE_BASEDIRS" | ${pkgs.coreutils}/bin/cksum | ${pkgs.coreutils}/bin/cut -d' ' -f1) % 20000))
     fi
     ${remoteLevel}
+    ${startOrBypass}
     exec ${sccache} "$@"
   '';
   evict = pkgs.writeShellScript "sccache-cache-evict" ''
