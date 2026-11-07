@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.north-runtime-follow;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "north-runtime-follow: every 2 min promote origin/main of north to the live runtime";
+  description = "north-runtime-follow: every 20 s promote origin/main of north to the live runtime";
   retainDescription = "north-strategy-log-retain: hourly compress the decision log's closed hours and delete days past its retention";
 in
 {
@@ -75,8 +75,8 @@ in
           Unit.Description = description;
           Timer = {
             OnBootSec = "2min";
-            OnUnitInactiveSec = "2min";
-            AccuracySec = "15s";
+            OnUnitInactiveSec = "20s";
+            AccuracySec = "5s";
           };
           Install.WantedBy = [ "timers.target" ];
         };
