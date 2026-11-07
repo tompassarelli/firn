@@ -91,6 +91,7 @@
     "users",
     "vscode",
     "windows-vm",
+    "wm-facts",
     "worker-ledger"
   ],
   "turnsOff": [

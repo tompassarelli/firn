@@ -58,6 +58,7 @@
           "dbus-broker.service"
           "app-nm*applet@autostart.service"
           "activity-daemon.service"
+          "wm-facts-daemon.service"
           "north-gh-broker.service"
           "capacity-watchdog.service"
           "capacity-taker.service"
