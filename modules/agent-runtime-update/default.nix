@@ -46,7 +46,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "agent-runtime-update" "${northBin}/north agent-runtime-update";
+            ExecStart = jobRun "agent-runtime-update" "${northBin}/north runtime agents";
           };
         };
         timers.agent-runtime-update = {
