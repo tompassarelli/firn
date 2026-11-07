@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+host="${1:?usage: firn-host-push HOST  (FIRN_DEPLOY_REPO names a checkout at origin/main of the repo the host upgrades from)}"
+repo="${FIRN_DEPLOY_REPO:-$PWD}"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/firn/host-follow"
+key="$state/signing-key"
+quiet="${FIRN_PUSH_QUIET:-30}"
+mkdir -p "$state"
+remote() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"; }
+
+if ! remote systemctl cat nexus-deploy@x.service >/dev/null 2>&1; then
+  printf 'firn host push: %s has no nexus-deploy@ unit; deploying through its upgrade unit\n' "$host"
+  exec "${FIRN_HOST_DEPLOY:-firn-host-deploy}" "$host"
+fi
+
+head="$(git -C "$repo" rev-parse HEAD)"
+origin="$(git -C "$repo" remote get-url origin)"
+waited=0
+while ((waited < quiet)); do
+  sleep 10
+  waited=$((waited + 10))
+  if [[ "$(git ls-remote "$origin" refs/heads/main | cut -f1)" != "$head" ]]; then
+    printf 'firn host push: main moved past %s; the next run deploys the newest main once it is quiet\n' "${head:0:8}"
+    exit 0
+  fi
+done
+
+name="$(remote hostname)"
+attr="$repo#nixosConfigurations.$name"
+stamp="$(nix eval --raw "$attr" --apply 'c: (c.extendModules { modules = [ ({ lib, ... }: { system.configurationRevision = lib.mkForce null; }) ]; }).config.system.build.toplevel.drvPath')"
+if [[ "$(cat "$state/$host.stamp" 2>/dev/null || true)" == "$stamp" ]]; then
+  printf 'firn host push: %s changes nothing on %s at %s apart from its revision stamp; no deploy\n' "${head:0:8}" "$host" "$name"
+  exit 0
+fi
+
+[[ -f "$key" ]] || (umask 077 && nix key generate-secret --key-name "${HOSTNAME:-follower}-deploy-1" >"$key")
+top="$(nix build --no-link --print-out-paths "$attr.config.system.build.toplevel")"
+nix store sign --key-file "$key" --recursive "$top"
+NIX_SSHOPTS='-o BatchMode=yes -o ConnectTimeout=15' nix copy --substitute-on-destination --to "ssh-ng://$host" "$top"
+
+unit="nexus-deploy@$(systemd-escape --path "$top").service"
+printf 'starting %s on %s for %s %s\n' "${unit%%@*}" "$host" "$name" "${head:0:8}"
+remote systemctl start "$(printf '%q' "$unit")" || {
+  remote journalctl -u "$(printf '%q' "$unit")" -n 20 --no-pager -o cat >&2 || true
+  exit 1
+}
+
+booted="$(remote readlink /run/current-system)"
+staged="$(remote readlink /nix/var/nix/profiles/system)"
+[[ "$booted" == "$top" || "$staged" == "$top" ]] || { printf 'firn host push: %s runs %s and staged %s, not %s\n' "$host" "$booted" "$staged" "$top" >&2; exit 1; }
+printf '%s\n' "$stamp" >"$state/$host.stamp"
+[[ "$booted" == "$top" ]] && printf '%s runs %s (%s)\n' "$host" "$top" "$head" || printf '%s staged %s for its next boot, because the kernel, initrd or modules changed\n' "$host" "$top"

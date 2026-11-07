@@ -9,6 +9,10 @@ if ! ssh "$host" systemctl cat "$unit" >/dev/null 2>&1; then
   exit 2
 fi
 
+if ssh "$host" systemctl cat nexus-deploy@x.service >/dev/null 2>&1; then
+  exec "${FIRN_HOST_PUSH:-${0%/*}/firn-host-push}" "$host"
+fi
+
 # shellcheck disable=SC2016
 flake="$(ssh "$host" 'grep -ohE "github:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+#[A-Za-z0-9_.-]+" $(systemctl show -P ExecStart nixos-upgrade.service | grep -oE "/nix/store/[^ ;]+") | sort -u')"
 slug="${flake#github:}"

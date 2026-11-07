@@ -13,6 +13,18 @@ let
   wgInterface = "wg-nexus";
   creds = " -p wa -k nexus-creds";
   inherit (cfg) upgradeFlake;
+  deployScript = pkgs.writeShellScript "nexus-deploy" ''
+    set -euo pipefail
+    top="$1"
+    [[ "$top" =~ ^/nix/store/[a-z0-9]{32}-nixos-system-[A-Za-z0-9._+-]+$ ]] || { echo "refusing $top: not a nixos-system store path" >&2; exit 2; }
+    nix-store --check-validity "$top"
+    [[ -x "$top/bin/switch-to-configuration" ]] || { echo "refusing $top: no switch-to-configuration" >&2; exit 2; }
+    nix-env --profile /nix/var/nix/profiles/system --set "$top"
+    booted="$(readlink /run/booted-system/{initrd,kernel,kernel-modules})"
+    built="$(readlink "$top"/{initrd,kernel,kernel-modules})"
+    if [[ "$booted" == "$built" ]]; then action=switch; else action=boot; fi
+    "$top/bin/switch-to-configuration" "$action"
+  '';
 in
 {
   options.myConfig.modules.nexus-hardening = {
@@ -30,6 +42,11 @@ in
       type = lib.types.bool;
       default = false;
       description = "also serve key-only sshd on every address with port 22 open, for a first boot before the wg-nexus handshake is verified";
+    };
+    deployKeys = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ ];
+      description = "Nix public keys whose signature makes a pushed system closure importable by the login user; with one set, `systemctl start nexus-deploy` activates that nixos-system store path as root, so a deployer builds the closure elsewhere and the host never evaluates or builds its own";
     };
     publicTcpPorts = lib.mkOption {
       type = lib.types.listOf lib.types.port;
@@ -81,6 +98,19 @@ in
           wants = [ "network-online.target" ];
           after = [ "network-online.target" ];
         };
+        "nexus-deploy@" = lib.mkIf (cfg.deployKeys != [ ]) {
+          description = "Activate the pushed system closure %f";
+          restartIfChanged = false;
+          stopIfChanged = false;
+          path = [
+            config.nix.package
+            pkgs.coreutils
+          ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = "${deployScript} %f";
+          };
+        };
         nexus-upgrade = {
           description = "Run the NixOS auto-upgrade from the upgrade flake now";
           serviceConfig = {
@@ -121,6 +151,15 @@ in
             }
           });
 
+        ''
+        + lib.optionalString (cfg.deployKeys != [ ]) ''
+          polkit.addRule(function(action, subject) {
+            if (action.id == 'org.freedesktop.systemd1.manage-units' && subject.user == '${username}' &&
+                action.lookup('unit').indexOf('nexus-deploy@') == 0 && action.lookup('verb') == 'start') {
+              return polkit.Result.YES;
+            }
+          });
+
         '';
       };
       audit = {
@@ -135,6 +174,7 @@ in
       };
       auditd.enable = true;
     };
+    nix.settings.extra-trusted-public-keys = cfg.deployKeys;
     system.autoUpgrade = {
       flake = lib.mkForce upgradeFlake;
       flags = lib.mkForce [
