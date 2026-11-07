@@ -39,7 +39,7 @@ let
         "NORTH_RUNTIME_LINK=${landerRuntime}"
         "NORTH_LAND_RUNNER_SLICE=agent.slice"
       ];
-      ExecStart = "${landerRuntime}/tree/bin/north land serve --depth 4 ${serves}";
+      ExecStart = "${landerRuntime}/tree/bin/north land serve ${serves}";
     };
     Install.WantedBy = [ "default.target" ];
   };
