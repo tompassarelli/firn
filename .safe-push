@@ -11,5 +11,5 @@
 	after = modules/,hosts/,config/,native/nix/,flake.nix,flake.lock,dotfiles/bin/firn-check,.github/scripts/host-diff.sh,.github/scripts/land-checks.sh :: bash .github/scripts/land-checks.sh drift
 	after = dotfiles/bin/ :: bash .github/scripts/land-checks.sh dotfiles
 	after = . :: nix flake check --offline --no-update-lock-file --no-build
-	after = . :: nix flake check --offline --no-update-lock-file
-	local-only = builds checks.host-whiterabbit, whose system closure only whiterabbit's store holds, so an offload host would rebuild it from source, gcc included, and fail offline :: nix flake check --offline --no-update-lock-file
+	after = . :: nix flake check --no-update-lock-file
+	local-only = builds checks.host-whiterabbit, whose system closure only whiterabbit's store holds, so an offload host would rebuild it from source, gcc included; it runs with the binary cache on, since --offline turned substituters off and built every path missing here from source :: nix flake check --no-update-lock-file
