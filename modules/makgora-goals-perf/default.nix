@@ -18,7 +18,7 @@ let
     mkdir -p "$(dirname ${record})"
     tmp="${record}.new"
     cd ${homeDir}/code/makgora/main
-    ${northBin}/north dev-shell run --dir . -- bash -c "cd ts && bun wisp perf playable-bot-four --samples --out '$tmp'"
+    ${northBin}/north capacity dev-shell run --dir . -- bash -c "cd ts && bun wisp perf playable-bot-four --samples --out '$tmp'"
     mv "$tmp" ${record}
   '';
 in
