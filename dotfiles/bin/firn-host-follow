@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+firn="${FIRN_FOLLOW_FIRN:-$HOME/code/nixos-config/main}" # hardcoded-repo-path:allow
+overlay="${FIRN_FOLLOW_OVERLAY:?set FIRN_FOLLOW_OVERLAY to the overlay checkout whose flake pins firn and builds the remote hosts}"
+deploy="${FIRN_HOST_DEPLOY:-firn-host-deploy}"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/firn/host-follow"
+tree="$(dirname "$overlay")/worktrees/firn-host-follow"
+read -ra inert <<<"${FIRN_FOLLOW_INERT:-}"
+excludes=("${inert[@]/#/:(exclude)}")
+mkdir -p "$state"
+
+alarm() {
+  printf 'firn host follow: %s\n' "$1" >&2
+  north fleet send --from service:firn-host-follow proxy "firn host follow: $1" || printf 'firn host follow: proxy alarm delivery failed\n' >&2
+}
+
+git -C "$firn" fetch --quiet origin main && git -C "$overlay" fetch --quiet origin main || exit 75
+firn_main="$(git -C "$firn" rev-parse origin/main)"
+overlay_main="$(git -C "$overlay" rev-parse origin/main)"
+pin="$(git -C "$overlay" show origin/main:flake.lock | jq -r .nodes.firn.locked.rev)"
+slug="$(git -C "$firn" remote get-url origin | sed -E 's#^.*github\.com[/:]##; s#\.git$##')"
+
+queued="$(cat "$state/pin" 2>/dev/null || true)"
+if [[ "$pin" != "$firn_main" && -n "$queued" && "$queued" != "$pin" && -z "$(find "$state/pin" -mmin +15)" ]]; then
+  printf 'firn host follow: the pin bump to %s is still landing\n' "${queued:0:8}"
+elif [[ "$pin" != "$firn_main" ]]; then
+  [[ -n "$queued" && "$queued" != "$pin" ]] && alarm "the overlay pin bump to firn ${queued:0:8} did not land within 15 min; queuing firn ${firn_main:0:8} again"
+  lane="$(dirname "$overlay")/worktrees/firn-pin-${firn_main:0:8}-$(date +%s)"
+  subject="$(git -C "$firn" log -1 --format=%s "$firn_main")"
+  if git -C "$overlay" worktree add --quiet -b "${lane##*/}" "$lane" origin/main \
+    && (cd "$lane" && nix flake lock --override-input firn "github:$slug/$firn_main" \
+      && git commit --quiet flake.lock -m "Pin firn to ${firn_main:0:8}, its main, so every host follows it: $subject" \
+      && safe-push --to main); then
+    printf '%s\n' "$firn_main" >"$state/pin"
+  else
+    alarm "could not queue the overlay pin bump to firn ${firn_main:0:8} from $lane"
+    printf '%s\n' "$firn_main" >"$state/pin"
+  fi
+fi
+
+[[ -d "$tree" ]] || git -C "$overlay" worktree add --quiet --detach "$tree" "$overlay_main" || exit 1
+git -C "$tree" checkout --quiet --detach "$overlay_main" || exit 1
+
+follow() {
+  local host="$1" target="$2" log="$state/$1.log"
+  [[ "$(cat "$state/$host" 2>/dev/null)" == "$target" ]] && return 0
+  if [[ "$host" == self ]]; then
+    revision="$(nixos-version --configuration-revision)"
+  else
+    revision="$(ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" nixos-version --configuration-revision 2>/dev/null)"
+  fi
+  printf '%s\n' "$target" >"$state/$host"
+  [[ "$revision" == "$target" ]] && return 0
+  if [[ "$host" != self ]] && git -C "$overlay" diff --quiet "$revision" "$target" -- . "${excludes[@]}" 2>/dev/null; then
+    printf 'firn host follow: %s on %s needs no deploy: %s changed only paths no host build reads\n' "$host" "${revision:0:8}" "${target:0:8}"
+    return 0
+  fi
+  printf 'firn host follow: %s runs %s; deploying %s\n' "$host" "${revision:-unknown}" "$target"
+  if [[ "$host" == self ]]; then
+    FIRN_REPO="$firn" "${FIRN_CLI:-firn}" rebuild --landed "$target" >"$log" 2>&1
+  else
+    FIRN_DEPLOY_REPO="$tree" "$deploy" "$host" >"$log" 2>&1
+  fi && return 0
+  git -C "$overlay" fetch --quiet origin main
+  if [[ "$host" != self && "$(git -C "$overlay" rev-parse origin/main)" != "$target" ]]; then
+    rm -f "$state/$host"
+    return 0
+  fi
+  alarm "deploying $target to $host failed: $(tail -n 3 "$log" | tr '\n' ' ')(log $log)"
+  return 1
+}
+
+status=0 pids=()
+for host in "$@"; do
+  follow "$host" "$overlay_main" &
+  pids+=("$!")
+done
+for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+follow self "$firn_main" || status=1
+exit "$status"
