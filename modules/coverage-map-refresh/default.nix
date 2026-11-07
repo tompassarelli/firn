@@ -30,7 +30,7 @@ in
             Environment = [
               "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
             ];
-            ExecStart = jobRun "coverage-map-refresh" "${northBin}/north coverage refresh --repo north";
+            ExecStart = jobRun "coverage-map-refresh" "${northBin}/north test coverage refresh --repo north";
           };
         };
         timers.coverage-map-refresh = {

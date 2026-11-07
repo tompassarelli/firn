@@ -50,7 +50,7 @@ in
           Type = "oneshot";
           User = username;
           TimeoutStartSec = "50s";
-          ExecStart = "${northBin}/north laptop tick";
+          ExecStart = "${northBin}/north fleet laptop tick";
         };
       };
       timers.laptop-window = {

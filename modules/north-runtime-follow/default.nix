@@ -63,7 +63,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "north-strategy-log-retain" "${northBin}/north strategy log retain";
+            ExecStart = jobRun "north-strategy-log-retain" "${northBin}/north ops strategy log retain";
           };
         };
         timers.north-strategy-log-retain = {

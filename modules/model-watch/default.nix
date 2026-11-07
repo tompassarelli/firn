@@ -35,7 +35,7 @@ in
                   lib.makeBinPath [ pkgs.python3 ]
                 }"
               ];
-              ExecStart = jobRun "model-watch" "${northBin}/north model-watch";
+              ExecStart = jobRun "model-watch" "${northBin}/north ops model-watch";
             };
           };
           cross-project-scan = {

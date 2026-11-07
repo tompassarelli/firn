@@ -33,7 +33,7 @@ in
                 lib.makeBinPath [ pkgs.python3 ]
               }"
             ];
-            ExecStart = "${northBin}/north model-watch --alerts-only";
+            ExecStart = "${northBin}/north ops model-watch --alerts-only";
           };
         };
         timers.watch-alerts = {

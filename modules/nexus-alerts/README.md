@@ -13,7 +13,7 @@ A phone push should mean "act now", so only these use `urgent`:
 | nexus-checks | backup older than 26 h, root disk over 80%, unexpected SSH or console login, failed units (once per incident) |
 | nexus-checks --lynis | hardening index drop or new lynis warning |
 | nexus-vulnix | newly observed high/critical CVEs |
-| watch-alerts (north model-watch) | disaster, weather or travel advisories for the configured location |
+| watch-alerts (north ops model-watch) | disaster, weather or travel advisories for the configured location |
 | supply-chain-scan | malware flagged in a tracked lockfile |
 
 Everything else is quiet at priority 2 on `normal`: "healthy again" recovery notes, update, lock and
