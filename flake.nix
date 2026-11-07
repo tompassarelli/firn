@@ -561,7 +561,7 @@
             (betterleaksRelease pkgs pkgs.betterleaks)
           ];
           shellHook = ''
-            pre-commit install --allow-missing-config 2>/dev/null
+            pre-commit install -f --allow-missing-config 2>/dev/null
 
           '';
         };
