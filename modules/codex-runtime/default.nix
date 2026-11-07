@@ -16,7 +16,10 @@ in
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
       systemd.user.services.codex-runtime-gcroots = {
-        Unit.Description = "Root the Nix store dependencies of installed Codex runtimes";
+        Unit = {
+          Description = "Root the Nix store dependencies of installed Codex runtimes";
+          X-SwitchMethod = "keep-old";
+        };
         Service = {
           Type = "oneshot";
           Environment = [ "PATH=${pkgs.patchelf}/bin:/run/current-system/sw/bin" ];

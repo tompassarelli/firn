@@ -29,6 +29,7 @@ in
         services.pace-enforcement = {
           Unit = {
             Description = description;
+            X-SwitchMethod = "keep-old";
             OnFailure = [ "update-notify@%n.service" ];
           };
           Service = {

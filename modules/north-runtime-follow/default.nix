@@ -22,7 +22,10 @@ in
     home-manager.users.${username} = _: {
       systemd.user = {
         services.north-runtime-follow = {
-          Unit.Description = description;
+          Unit = {
+            Description = description;
+            X-SwitchMethod = "keep-old";
+          };
           Service = {
             Type = "oneshot";
             Nice = 10;

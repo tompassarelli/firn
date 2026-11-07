@@ -19,7 +19,10 @@ in
     home-manager.users.${username} = _: {
       systemd.user = {
         services.usage-sample = {
-          Unit.Description = description;
+          Unit = {
+            Description = description;
+            X-SwitchMethod = "keep-old";
+          };
           Service = {
             Type = "oneshot";
             TimeoutStartSec = "55s";
