@@ -40,7 +40,7 @@ in
                 ]
               }"
             ];
-            ExecStart = "${northBin}/north watch --once";
+            ExecStart = "${northBin}/north ops watch --once";
           };
         };
         timers.north-watch = {
