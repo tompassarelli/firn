@@ -65,7 +65,7 @@ in
 {
   _module.args.northBin = northBin;
   _module.args.jobRun =
-    name: cmd: "${pkgs.bash}/bin/bash ${northBin}/north job-run --path ${recordPath} --user ${username} ${name} -- ${cmd}";
+    name: cmd: "${northBin}/north job-run --path ${recordPath} --user ${username} ${name} -- ${cmd}";
   assertions = [
     {
       assertion = checkoutReaders == [ ];
