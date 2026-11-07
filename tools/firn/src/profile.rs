@@ -2,10 +2,10 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const USAGE: &str = "usage: firn-tools profile replace NAME INSTALLABLE [NIX_ARGS...]";
+const USAGE: &str = "usage: firn-profile replace NAME INSTALLABLE [NIX_ARGS...]";
 
 pub fn run() {
-    let args: Vec<String> = std::env::args().skip(2).collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let [verb, name, installable, extra @ ..] = args.as_slice() else {
         fail(USAGE, 64)
     };
@@ -14,7 +14,7 @@ pub fn run() {
     }
     match replace(&profile(), name, installable, extra) {
         Ok(paths) => paths.iter().for_each(|path| println!("{path}")),
-        Err(error) => fail(&format!("firn-tools profile replace: {error}"), 1),
+        Err(error) => fail(&format!("firn-profile replace: {error}"), 1),
     }
 }
 

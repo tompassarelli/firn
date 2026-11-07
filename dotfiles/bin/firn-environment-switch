@@ -8,4 +8,4 @@ ref="${2:-git+file://$firn_repo}#$name"
 shift $(($# < 2 ? $# : 2))
 
 nix build --no-link "$ref" "$@"
-exec "${FIRN_RUNTIME_ROOT:-$HOME/.local/lib/firn/cli}/current/bin/firn-tools" profile replace "$name" "$ref" "$@"
+exec firn-profile replace "$name" "$ref" "$@"

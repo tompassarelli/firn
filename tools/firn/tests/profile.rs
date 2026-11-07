@@ -63,9 +63,8 @@ fn a_profile_switch_moves_the_profile_once_and_never_through_a_generation_withou
     tool(&bin, "nix", &store, NIX);
     tool(&bin, "nix-env", &store, NIX_ENV);
 
-    let output = Command::new(env!("CARGO_BIN_EXE_firn-tools"))
+    let output = Command::new(env!("CARGO_BIN_EXE_firn-profile"))
         .args([
-            "profile",
             "replace",
             "whiterabbit-environment",
             "path:/flake#whiterabbit-environment",
