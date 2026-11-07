@@ -76,6 +76,7 @@
           "watch-alerts.timer"
           "outside-watch.timer"
           "lane-gc.timer"
+          "makgora-goals-perf.timer"
           "makgora-retain.timer"
           "verify-north.timer"
           "nexus-pull.timer"
