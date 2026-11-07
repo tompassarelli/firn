@@ -22,10 +22,11 @@ pin="$(git -C "$overlay" show origin/main:flake.lock | jq -r .nodes.firn.locked.
 slug="$(git -C "$firn" remote get-url origin | sed -E 's#^.*github\.com[/:]##; s#\.git$##')"
 
 queued="$(cat "$state/pin" 2>/dev/null || true)"
-if [[ "$pin" != "$firn_main" && -n "$queued" && "$queued" != "$pin" && -z "$(find "$state/pin" -mmin +15)" ]]; then
+[[ -n "$queued" ]] && git -C "$firn" merge-base --is-ancestor "$queued" "$pin" 2>/dev/null && queued=""
+if [[ "$pin" != "$firn_main" && -n "$queued" && -z "$(find "$state/pin" -mmin +15)" ]]; then
   printf 'firn host follow: the pin bump to %s is still landing\n' "${queued:0:8}"
 elif [[ "$pin" != "$firn_main" ]]; then
-  [[ -n "$queued" && "$queued" != "$pin" ]] && alarm "the overlay pin bump to firn ${queued:0:8} did not land within 15 min; queuing firn ${firn_main:0:8} again"
+  [[ -n "$queued" ]] && alarm "the overlay pin bump to firn ${queued:0:8} did not land within 15 min; queuing firn ${firn_main:0:8} again"
   lane="$(dirname "$overlay")/worktrees/firn-pin-${firn_main:0:8}-$(date +%s)"
   subject="$(git -C "$firn" log -1 --format=%s "$firn_main")"
   if git -C "$overlay" worktree add --quiet -b "${lane##*/}" "$lane" origin/main \
