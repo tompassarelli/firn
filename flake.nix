@@ -238,6 +238,7 @@
                 builtins.map (m: firnModules + "/${m}") moduleDirs;
               home-manager = {
                 backupFileExtension = "backup";
+                sharedModules = [ ./config/home-profile.nix ];
                 extraSpecialArgs = {
                   inputs = moduleInputs;
                 }
