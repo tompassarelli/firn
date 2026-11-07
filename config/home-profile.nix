@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   firnProfile = pkgs.rustPlatform.buildRustPackage {
@@ -14,7 +19,10 @@ let
       ];
     };
     cargoLock.lockFile = ../tools/firn/Cargo.lock;
-    cargoBuildFlags = [ "--bin" "firn-profile" ];
+    cargoBuildFlags = [
+      "--bin"
+      "firn-profile"
+    ];
     doCheck = false;
   };
 in
