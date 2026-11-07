@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+if grep -qs Discharging /sys/class/power_supply/BAT*/status; then
+  printf 'on battery\n'
+  exit 0
+fi
+read -r load _ </proc/loadavg
+if awk -v load="$load" -v cores="$(nproc)" 'BEGIN { exit !(load > cores) }'; then
+  printf 'load %s on %s cores\n' "$load" "$(nproc)"
+  exit 0
+fi
+exit 1

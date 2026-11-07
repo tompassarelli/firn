@@ -27,6 +27,11 @@ in
       default = [ ];
       description = "SSH names of the remote hosts that upgrade from the overlay's main through nexus-upgrade.service.";
     };
+    builder = lib.mkOption {
+      type = lib.types.str;
+      default = "";
+      description = "SSH name of the host that evaluates, builds and signs each remote host's toplevel; empty builds on this machine, which then defers while it is on battery or its load exceeds its cores.";
+    };
     inertPaths = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
@@ -51,6 +56,8 @@ in
               "\"FIRN_FOLLOW_INERT=${lib.concatStringsSep " " cfg.inertPaths}\""
               "FIRN_HOST_DEPLOY=${script "firn-host-deploy"}"
               "FIRN_HOST_PUSH=${script "firn-host-push"}"
+              "FIRN_HOST_BUSY=${script "firn-host-busy"}"
+              "FIRN_PUSH_BUILDER=${cfg.builder}"
               "PATH=/run/wrappers/bin:${northBin}:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${
                 lib.makeBinPath [
                   pkgs.bash
