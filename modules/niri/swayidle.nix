@@ -8,7 +8,7 @@
 let
   cfg = config.myConfig.modules.niri;
   username = config.myConfig.modules.users.username;
-  busy = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north agents busy";
+  busy = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north config agents busy";
   idleState = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north desktop-idle-state";
   capacity = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north capacity host mode";
 in

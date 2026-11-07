@@ -34,7 +34,7 @@ in
                 ]
               }"
             ];
-            ExecStart = jobRun "usage-sample" "${northBin}/north usage sample";
+            ExecStart = jobRun "usage-sample" "${northBin}/north fleet usage sample";
           };
         };
         timers.usage-sample = {
