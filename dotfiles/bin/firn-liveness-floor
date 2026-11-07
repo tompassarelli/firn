@@ -96,7 +96,7 @@ failing_check="clean_worktree"
 source="git+file://$repo?rev=$revision&ref=main"
 
 failing_check="hook_projection"
-run "checking active hook targets and projections" "$north_bin" agents status
+run "checking active hook targets and projections" "$north_bin" config agents status
 failing_check="pin_ancestry"
 run "checking direct first-party pin ancestry" \
   env FIRN_REPO="$repo" "$firn_bin" repo pin-ancestry
