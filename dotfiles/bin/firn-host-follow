@@ -63,8 +63,10 @@ follow() {
   else
     FIRN_DEPLOY_REPO="$tree" "$deploy" "$host" >"$log" 2>&1
   fi && return 0
-  git -C "$overlay" fetch --quiet origin main
-  if [[ "$host" != self && "$(git -C "$overlay" rev-parse origin/main)" != "$target" ]]; then
+  local repo="$overlay"
+  [[ "$host" == self ]] && repo="$firn"
+  git -C "$repo" fetch --quiet origin main
+  if [[ "$(git -C "$repo" rev-parse origin/main)" != "$target" ]]; then
     rm -f "$state/$host"
     return 0
   fi
@@ -78,5 +80,6 @@ for host in "$@"; do
   pids+=("$!")
 done
 for pid in "${pids[@]}"; do wait "$pid" || status=1; done
-follow self "$firn_main" || status=1
+git -C "$firn" fetch --quiet origin main
+follow self "$(git -C "$firn" rev-parse origin/main)" || status=1
 exit "$status"
