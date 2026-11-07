@@ -45,7 +45,7 @@ in
             SuccessExitStatus = "75";
             Environment = [
               "FIRN_FOLLOW_OVERLAY=${homeDir}/${cfg.overlay}"
-              "FIRN_FOLLOW_INERT=${lib.concatStringsSep " " cfg.inertPaths}"
+              "\"FIRN_FOLLOW_INERT=${lib.concatStringsSep " " cfg.inertPaths}\""
               "FIRN_HOST_DEPLOY=${script "firn-host-deploy"}"
               "PATH=/run/wrappers/bin:${northBin}:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${
                 lib.makeBinPath [
