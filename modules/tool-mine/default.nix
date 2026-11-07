@@ -21,6 +21,7 @@ in
         services.tool-mine = {
           Unit = {
             Description = description;
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

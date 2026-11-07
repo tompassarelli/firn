@@ -21,7 +21,10 @@ let
     }"
   ];
   unit = name: description: arguments: {
-    Unit.Description = description;
+    Unit = {
+      Description = description;
+      X-SwitchMethod = "keep-old";
+    };
     Service = {
       Type = "oneshot";
       Nice = 10;

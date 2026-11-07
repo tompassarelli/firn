@@ -33,7 +33,10 @@ in
     home-manager.users.${username} = _: {
       systemd.user = {
         services.agents-flow-stall = {
-          Unit.Description = "Report stalled repository landings";
+          Unit = {
+            Description = "Report stalled repository landings";
+            X-SwitchMethod = "keep-old";
+          };
           Service = {
             Type = "oneshot";
             Environment = [ path ];

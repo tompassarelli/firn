@@ -32,6 +32,7 @@ in
           Unit = {
             Description = description;
             OnFailure = [ notify ];
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

@@ -21,6 +21,7 @@ in
         services.north-tempo = {
           Unit = {
             Description = description;
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

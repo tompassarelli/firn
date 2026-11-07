@@ -60,6 +60,7 @@ in
             Unit = {
               Description = "Pull nexus's encrypted backups";
               OnFailure = [ "update-notify@%N.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";
@@ -71,6 +72,7 @@ in
             Unit = {
               Description = "Decrypt the newest nexus backups in tmpfs and check their integrity";
               OnFailure = [ "update-notify@%N.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";

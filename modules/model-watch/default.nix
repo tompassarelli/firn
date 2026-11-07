@@ -24,6 +24,7 @@ in
               Description = description;
               After = [ "agent-runtime-update.service" ];
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";
@@ -41,6 +42,7 @@ in
             Unit = {
               Description = "Daily cross-project overlap scan for Plato";
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";
@@ -56,6 +58,7 @@ in
             Unit = {
               Description = "Weekly skill and lesson prune";
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";

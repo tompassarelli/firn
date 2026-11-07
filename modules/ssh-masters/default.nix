@@ -60,7 +60,10 @@ in
     home-manager.users.${username} = _: {
       systemd.user.services = builtins.listToAttrs (map mkMaster cfg.hosts) // {
         ssh-master-probe = {
-          Unit.Description = probeDescription;
+          Unit = {
+            Description = probeDescription;
+            X-SwitchMethod = "keep-old";
+          };
           Service = {
             Type = "oneshot";
             TimeoutStartSec = "3min";

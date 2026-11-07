@@ -21,6 +21,7 @@ in
         services.watch-review = {
           Unit = {
             Description = description;
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

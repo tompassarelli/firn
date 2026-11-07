@@ -22,6 +22,7 @@ in
             Description = description;
             After = [ "network-online.target" ];
             OnFailure = [ "update-notify@%n.service" ];
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

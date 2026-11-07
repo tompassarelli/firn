@@ -83,6 +83,7 @@ in
             Unit = {
               Description = nightly;
               OnFailure = [ "update-notify@%n.service" ];
+              X-SwitchMethod = "keep-old";
             };
             Service = {
               Type = "oneshot";

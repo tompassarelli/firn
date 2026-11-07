@@ -33,6 +33,7 @@ in
           Unit = {
             Description = "Observe laptop gaming and seat activity for placement";
             ConditionFileIsExecutable = "${northBin}/north";
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";
@@ -60,6 +61,7 @@ in
           Unit = {
             Description = description;
             OnFailure = [ notify ];
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

@@ -20,6 +20,7 @@ in
           Unit = {
             Description = description;
             After = [ "network-online.target" ];
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";

@@ -51,7 +51,10 @@ in
             TimeoutStartSec = "30m";
             Type = "oneshot";
           };
-          Unit.Description = "Firn delivery liveness floor (non-switching)";
+          Unit = {
+            Description = "Firn delivery liveness floor (non-switching)";
+            X-SwitchMethod = "keep-old";
+          };
         };
         timers.firn-delivery-liveness = {
           Install.WantedBy = [ "timers.target" ];

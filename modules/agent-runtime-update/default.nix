@@ -22,6 +22,7 @@ in
           Unit = {
             Description = "Twice-daily agent runtime updates";
             OnFailure = [ "update-notify@%N.service" ];
+            X-SwitchMethod = "keep-old";
           };
           Service = {
             Type = "oneshot";
