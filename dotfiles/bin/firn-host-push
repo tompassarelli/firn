@@ -28,7 +28,7 @@ done
 
 name="$(remote hostname)"
 attr="$repo#nixosConfigurations.$name"
-stamp="$(nix eval --raw "$attr" --apply 'c: (c.extendModules { modules = [ ({ lib, ... }: { system.configurationRevision = lib.mkForce null; }) ]; }).config.system.build.toplevel.drvPath')"
+stamp="$(nix eval --raw "$attr" --apply 'c: (c.extendModules { modules = [ ({ lib, ... }: { system.configurationRevision = lib.mkOverride 0 null; }) ]; }).config.system.build.toplevel.drvPath')"
 if [[ "$(cat "$state/$host.stamp" 2>/dev/null || true)" == "$stamp" ]]; then
   printf 'firn host push: %s changes nothing on %s at %s apart from its revision stamp; no deploy\n' "${head:0:8}" "$host" "$name"
   exit 0
