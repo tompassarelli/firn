@@ -11,7 +11,7 @@ let
   cfg = config.myConfig.modules.verify-north;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  description = "verify-north: daily unattended end-to-end run of the promoted north runtime through the fleet TUI and CLI";
+  description = "verify-north: daily unattended end-to-end run of the promoted north runtime: a worker takes a brief, safe-push queues its change and the lander lands it";
 in
 {
   options.myConfig.modules.verify-north.enable = lib.mkEnableOption description;
