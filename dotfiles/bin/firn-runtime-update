@@ -19,7 +19,7 @@ case "$scope" in
     ;;
 esac
 
-if [[ "$scope" = full ]] && { ! command -v cargo >/dev/null || ! command -v rustc >/dev/null || ! command -v cc >/dev/null; }; then
+if [[ "$scope" = full ]] && { ! cargo --version >/dev/null 2>&1 || ! rustc --version >/dev/null 2>&1 || ! command -v cc >/dev/null; }; then
   exec nix shell --inputs-from "path:$firn_repo" nixpkgs#cargo nixpkgs#rustc nixpkgs#gcc \
     --command env FIRN_REPO="$firn_repo" FIRN_RUNTIME_ROOT="$runtime_root" \
     bash "$firn_repo/dotfiles/bin/firn-runtime-update" "$scope"
