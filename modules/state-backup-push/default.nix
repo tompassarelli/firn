@@ -45,6 +45,10 @@ let
       keep_days=8
       key=${keyPath}
       vault_host=${cfg.vaultHost}
+      box_host=${lib.optionalString (cfg.storageBox != null) cfg.storageBox.host}
+      box_port=${if cfg.storageBox != null then toString cfg.storageBox.port else "0"}
+      box_user=${lib.optionalString (cfg.storageBox != null) cfg.storageBox.user}
+      box_key=${lib.optionalString (cfg.storageBox != null) cfg.storageBox.keyFile}
       ${builtins.readFile ./push.sh}'';
   };
   run = pkgs.writeShellScript "state-backup-push" ''
@@ -61,6 +65,26 @@ in
     recipients = lib.mkOption {
       type = lib.types.nonEmptyListOf lib.types.str;
       description = "age public recipients; the laptop keeps no identity that opens the archives it sends";
+    };
+    storageBox = lib.mkOption {
+      default = null;
+      description = "a Hetzner Storage Box sub-account that also receives each archive over sftp; null sends to the vault only";
+      type = lib.types.nullOr (
+        lib.types.submodule {
+          options = {
+            host = lib.mkOption { type = lib.types.str; };
+            port = lib.mkOption {
+              type = lib.types.port;
+              default = 23;
+            };
+            user = lib.mkOption { type = lib.types.str; };
+            keyFile = lib.mkOption {
+              type = lib.types.str;
+              description = "private ssh key of the sub-account, which is confined to its own folder";
+            };
+          };
+        }
+      );
     };
     vaultHost = lib.mkOption {
       type = lib.types.str;
