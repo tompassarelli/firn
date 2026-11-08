@@ -15,3 +15,10 @@
 	after = . :: nix flake check --offline --no-update-lock-file --no-build
 	after = . :: nix flake check --no-update-lock-file
 	local-only = builds checks.host-whiterabbit, whose system closure only whiterabbit's store holds, so an offload host would rebuild it from source, gcc included; it runs with the binary cache on, since --offline turned substituters off and built every path missing here from source :: nix flake check --no-update-lock-file
+	after-only = it judges firn against the north and south checkouts on main beside the host, which a lane tree does not hold :: north config agents check-owners --north-root \"$HOME/code/north/main\" --south-root \"$HOME/code/south/main\" --nixos-root \"$PWD\" # hardcoded-repo-path:allow
+	after-only = "north#633 lands firn first and checks it after the push, reverting only the lane a red run names: it builds and tests the firn Rust tool in a nix shell, minutes per lane :: nix shell --inputs-from . nixpkgs#cargo nixpkgs#rustc nixpkgs#gcc --command cargo test --locked --manifest-path tools/firn/Cargo.toml"
+	after-only = the native host tests run the installed firn runtime of the host (FIRN_RUNTIME_BIN), which an offload slot does not have :: bash .github/scripts/land-checks.sh native
+	after-only = "north#633 lands firn first and checks it after the push, reverting only the lane a red run names: it evaluates every host's derivations against the base and builds what changed, minutes per lane :: bash .github/scripts/land-checks.sh drift"
+	after-only = "north#633 lands firn first and checks it after the push, reverting only the lane a red run names: it runs the changed dotfiles/bin tests :: bash .github/scripts/land-checks.sh dotfiles"
+	after-only = "north#633 lands firn first and checks it after the push, reverting only the lane a red run names: it evaluates every flake output, about 30 s per lane (c589e73c) :: nix flake check --offline --no-update-lock-file --no-build"
+	after-only = it builds checks.host-whiterabbit, whose system closure only whiterabbit's store holds (be08ad55) :: nix flake check --no-update-lock-file
