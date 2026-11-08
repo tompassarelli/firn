@@ -3,6 +3,7 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   pkgs,
   ...
 }:
@@ -32,7 +33,7 @@ in
             TimeoutStartSec = "60min";
             SuccessExitStatus = [ 1 ];
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
+              "PATH=${unitPath}:${lib.makeBinPath [ pkgs.git ]}"
             ];
             ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -d ${mirror} || ${pkgs.git}/bin/git clone --quiet --mirror https://github.com/tompassarelli/north.git ${mirror}'";
             ExecStart = jobRun "build-time" "${northBin}/north capacity host run --class heavy --owner build-time --timeout-seconds 3000 -- nix develop github:tompassarelli/north --command ${northBin}/north code-health build-time --repo ${mirror} --rev main --file";

@@ -3,6 +3,7 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -29,7 +30,7 @@ in
           Restart = "always";
           RestartSec = "2s";
           Environment = [
-            "PATH=${northBin}:/run/wrappers/bin:/run/current-system/sw/bin:${
+            "PATH=${unitPath}:${
               lib.makeBinPath [
                 pkgs.curl
                 pkgs.coreutils

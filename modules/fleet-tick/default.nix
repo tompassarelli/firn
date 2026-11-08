@@ -4,15 +4,15 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.fleet-tick;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "fleet-tick: flush this host's north fleet spool, publish its sessions and deliver the rows addressed to them, and run again the sessions a reboot stranded";
-  path = "PATH=${northBin}:/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.nix-profile/bin:${homeDir}/.local/share/firn/bin:${
+  path = "PATH=${unitPath}:${
     lib.makeBinPath [
       pkgs.coreutils
       pkgs.openssh

@@ -9,6 +9,15 @@ let
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   northBin = "${homeDir}/.local/state/north/current/tree/bin";
+  unitPath = lib.concatStringsSep ":" [
+    "${homeDir}/.nix-profile/bin"
+    "/etc/profiles/per-user/${username}/bin"
+    "/run/wrappers/bin"
+    "/run/current-system/sw/bin"
+    northBin
+    "${homeDir}/.local/bin"
+    "${homeDir}/.local/share/firn/bin"
+  ];
   recordPath = lib.makeBinPath [
     pkgs.bash
     pkgs.python3
@@ -95,10 +104,12 @@ let
   );
 in
 {
-  _module.args.northBin = northBin;
-  _module.args.jobRun =
-    name: cmd:
-    "${bash} ${northBin}/north job-run --path ${recordPath} --user ${username} ${name} -- ${cmd}";
+  _module.args = {
+    inherit northBin unitPath;
+    jobRun =
+      name: cmd:
+      "${bash} ${northBin}/north job-run --path ${recordPath} --user ${username} ${name} -- ${cmd}";
+  };
   assertions = [
     {
       assertion = checkoutReaders == [ ];

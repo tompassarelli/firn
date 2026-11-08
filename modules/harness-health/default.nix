@@ -2,6 +2,7 @@
   config,
   lib,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -29,7 +30,7 @@ in
             TimeoutStartSec = "6min";
             SuccessExitStatus = "1";
             Environment = [
-              "PATH=/run/wrappers/bin:${homeDir}/.nix-profile/bin:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${homeDir}/.local/share/south/bin"
+              "PATH=${unitPath}:${homeDir}/.local/share/south/bin"
             ];
             ExecStart = "${northBin}/north health";
           };

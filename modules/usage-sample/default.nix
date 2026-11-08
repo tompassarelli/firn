@@ -3,13 +3,13 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   pkgs,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.usage-sample;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "usage-sample: record each Claude account's 5h and 7d usage into the usage table every minute";
 in
@@ -28,7 +28,7 @@ in
             Type = "oneshot";
             TimeoutStartSec = "55s";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.nix-profile/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.coreutils
                   pkgs.openssh

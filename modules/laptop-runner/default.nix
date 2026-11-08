@@ -3,12 +3,12 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.laptop-runner;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   notify =
     if config.myConfig.modules.nexus-alerts.enable then
@@ -67,7 +67,7 @@ in
             Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
-              "PATH=${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

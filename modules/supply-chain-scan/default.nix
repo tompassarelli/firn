@@ -3,6 +3,7 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -10,7 +11,7 @@ let
   cfg = config.myConfig.modules.supply-chain-scan;
   username = config.myConfig.modules.users.username;
   description = "Daily osv-scanner pass over origin/main lockfiles; alerts through supply-alert on new malware or fixable advisories";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
+  path = "PATH=${unitPath}:${
     lib.makeBinPath [
       pkgs.osv-scanner
       pkgs.git

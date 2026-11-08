@@ -3,12 +3,12 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.skill-prune;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Weekly skill and lesson prune";
 in
@@ -29,7 +29,7 @@ in
             Nice = 10;
             TimeoutStartSec = "100min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
+              "PATH=${unitPath}"
             ];
             ExecStart = jobRun "skill-prune" "${northBin}/north skill-prune";
           };

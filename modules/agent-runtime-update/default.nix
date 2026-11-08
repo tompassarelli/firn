@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.agent-runtime-update;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
 in
 {
@@ -29,7 +29,7 @@ in
             Type = "oneshot";
             TimeoutStartSec = "4h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.bun

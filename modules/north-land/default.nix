@@ -2,7 +2,7 @@
   config,
   lib,
   pkgs,
-  northBin,
+  unitPath,
   ...
 }:
 
@@ -22,7 +22,7 @@ let
       TimeoutStopSec = "15s";
       Nice = 5;
       Environment = [
-        "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/bin:${northBin}:${homeDir}/.local/share/firn/bin:${
+        "PATH=${unitPath}:${
           lib.makeBinPath [
             pkgs.bash
             pkgs.bun

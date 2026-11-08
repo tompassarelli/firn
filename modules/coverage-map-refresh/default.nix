@@ -3,12 +3,12 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.coverage-map-refresh;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Nightly north coverage map: record which functions each Rust test executes on a check host, for the pre-push test selection";
 in
@@ -29,7 +29,7 @@ in
             Nice = 10;
             TimeoutStartSec = "2h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin"
+              "PATH=${unitPath}"
             ];
             ExecStart = jobRun "coverage-map-refresh" "${northBin}/north test coverage refresh --repo north";
           };

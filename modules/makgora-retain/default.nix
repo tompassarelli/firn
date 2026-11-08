@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.makgora-retain;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "makgora-retain: hourly archive gex45 Mak'gora evidence and capture batches past their age to ~/archive/makgora-gex45, sha256 verified, then delete the gex45 copy";
 in
@@ -30,7 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "50min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.openssh
                   pkgs.gnutar

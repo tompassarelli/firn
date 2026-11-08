@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.north-runtime-follow;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "north-runtime-follow: every 20 s promote origin/main of north to the live runtime";
   retainDescription = "north-strategy-log-retain: hourly compress the decision log's closed hours and delete days past its retention";
@@ -33,7 +33,7 @@ in
             TimeoutStartSec = "30min";
             SuccessExitStatus = "75";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.bun
@@ -58,7 +58,7 @@ in
             Nice = 10;
             TimeoutStartSec = "30min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.coreutils
                   pkgs.zstd

@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.north-land-drill;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Nightly north land drill: inject each lander stuck state into a scratch lander and require its remedy to clear it with nobody paged";
 in
@@ -30,7 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "1h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

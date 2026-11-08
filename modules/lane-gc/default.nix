@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.lane-gc;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "lane-gc: hourly retire landed, clean, idle worktrees and branches and every origin branch in ~/code containers; report unlanded work and box unlanded origin branches";
 in
@@ -31,7 +31,7 @@ in
               Nice = 10;
               TimeoutStartSec = "20min";
               Environment = [
-                "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+                "PATH=${unitPath}:${
                   lib.makeBinPath [
                     pkgs.git
                     pkgs.openssh

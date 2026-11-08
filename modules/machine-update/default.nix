@@ -3,7 +3,7 @@
   lib,
   pkgs,
   jobRun,
-  northBin,
+  unitPath,
   ...
 }:
 
@@ -44,7 +44,7 @@ in
             Type = "oneshot";
             TimeoutStartSec = "4h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.bun

@@ -4,27 +4,25 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.capacity-watchdog;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   inherit (cfg) rest;
   description = "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance";
   nightly = "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease";
-  path =
-    north:
-    "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${north}:${
-      lib.makeBinPath [
-        pkgs.bun
-        pkgs.git
-        pkgs.coreutils
-        pkgs.libnotify
-        pkgs.systemd
-      ]
-    }";
+  path = "PATH=${unitPath}:${
+    lib.makeBinPath [
+      pkgs.bun
+      pkgs.git
+      pkgs.coreutils
+      pkgs.libnotify
+      pkgs.systemd
+    ]
+  }";
 in
 {
   options.myConfig.modules.capacity-watchdog = {
@@ -74,7 +72,7 @@ in
               CPUWeight = 200;
               MemoryMax = "512M";
               Environment = [
-                (path northBin)
+                path
               ];
               ExecStart = "${northBin}/north capacity watchdog sample";
             };
@@ -91,7 +89,7 @@ in
               Type = "oneshot";
               Nice = 10;
               TimeoutStartSec = "4h";
-              Environment = [ (path northBin) ];
+              Environment = [ path ];
               ExecStart = jobRun "git-maintenance-nightly" "${northBin}/north git-maintenance-nightly";
             };
           };

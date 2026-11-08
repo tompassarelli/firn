@@ -4,6 +4,7 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -42,7 +43,7 @@ in
             RestartSec = "10min";
             Environment = [
               "AGENT_CAPACITY_NEED=local-state"
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bun
                   pkgs.git

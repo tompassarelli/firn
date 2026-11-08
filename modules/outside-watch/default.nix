@@ -4,6 +4,7 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -27,7 +28,7 @@ in
             Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.coreutils
                   pkgs.gh

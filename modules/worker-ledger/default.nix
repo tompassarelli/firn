@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.worker-ledger;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "worker-ledger: every 15 minutes record finished Claude, Codex and Gemini workers as runs in threads, fill landings of runs still waiting to land, and snapshot account usage (agents usage)";
 in
@@ -30,7 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.python3
                   pkgs.jq

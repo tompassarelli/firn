@@ -3,15 +3,15 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.capacity-taker;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "capacity-taker: poll the hosts this machine reaches for a queued agent heavy run and run the oldest here under capacity admission, inside a bubblewrap sandbox with no credentials or network, when it has free slots beyond the interactive reserve (north#634)";
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+  path = "PATH=${unitPath}:${
     lib.makeBinPath [
       pkgs.bubblewrap
       pkgs.coreutils

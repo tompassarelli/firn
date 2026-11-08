@@ -22,6 +22,7 @@ environment=$(nix-instantiate --eval --strict --json --expr "
       };
       pkgs = builtins.listToAttrs (map (name: { inherit name; value = \"/\" + name; }) [ \"bash\" \"bun\" \"coreutils\" \"git\" \"gnutar\" \"nix\" \"openssh\" \"rsync\" \"systemd\" \"util-linux\" ]);
       northBin = \"/north/bin\";
+      unitPath = \"/unit/bin\";
     };
     services = (module.config.home-manager.users.tom { }).systemd.user.services;
   in map (name: services.\${name}.Service.Environment) [ \"north-land@north\" \"north-land-rest\" ]

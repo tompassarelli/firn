@@ -19,6 +19,7 @@ path=$(nix-instantiate --eval --strict --json --expr "
       pkgs.git = \"/git\";
       jobRun = name: cmd: cmd;
       northBin = \"/north/bin\";
+      unitPath = \"/unit/bin\";
     };
   in builtins.head (module.config.home-manager.users.tom { }).systemd.user.services.code-health-review.Service.Environment
 " | jq -r .)

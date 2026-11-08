@@ -3,7 +3,7 @@
   lib,
   pkgs,
   jobRun,
-  northBin,
+  unitPath,
   ...
 }:
 
@@ -27,7 +27,7 @@ in
             Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
-              "PATH=${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

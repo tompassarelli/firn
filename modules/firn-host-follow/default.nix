@@ -4,7 +4,7 @@
   pkgs,
   flakeRoot,
   jobRun,
-  northBin,
+  unitPath,
   ...
 }:
 
@@ -59,7 +59,7 @@ in
               "FIRN_HOST_PUSH=${script "firn-host-push"}"
               "FIRN_HOST_BUSY=${script "firn-host-busy"}"
               "FIRN_PUSH_BUILDER=${cfg.builder}"
-              "PATH=/run/wrappers/bin:${northBin}:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

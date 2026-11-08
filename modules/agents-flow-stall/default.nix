@@ -3,14 +3,14 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.agents-flow-stall;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
-  path = "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+  path = "PATH=${unitPath}:${
     lib.makeBinPath [
       pkgs.bun
       pkgs.gh

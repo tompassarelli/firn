@@ -3,6 +3,7 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   pkgs,
   ...
 }:
@@ -31,7 +32,7 @@ in
             Nice = 10;
             TimeoutStartSec = "7h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
+              "PATH=${unitPath}:${lib.makeBinPath [ pkgs.git ]}"
             ];
             ExecStartPre = "${pkgs.bash}/bin/bash -c 'test -d ${checkout} || ${pkgs.git}/bin/git clone --quiet https://github.com/tompassarelli/north.git ${checkout}; ${pkgs.git}/bin/git -C ${checkout} fetch --quiet origin main && ${pkgs.git}/bin/git -C ${checkout} checkout --quiet --detach FETCH_HEAD'";
             ExecStart = jobRun "mutant-sweep" "${northBin}/north test mutant sweep --repo ${checkout} --host gex45 --mutants 40 --timeout 3600 --issue north#635";

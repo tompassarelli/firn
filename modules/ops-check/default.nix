@@ -4,15 +4,15 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.ops-check;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   environment = [
-    "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+    "PATH=${unitPath}:${
       lib.makeBinPath [
         pkgs.coreutils
         pkgs.git

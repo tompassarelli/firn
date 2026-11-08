@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.skill-review-queue;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   gh =
     if config.myConfig.modules.github-pat.enable then
@@ -38,7 +38,7 @@ in
             Slice = "agent.slice";
             Type = "oneshot";
             Environment = [
-              "PATH=${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils

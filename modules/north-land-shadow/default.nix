@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.north-land-shadow;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "north-land-shadow: every 2 minutes run the lander doctor, then check the next queued lane's candidate on a host with room and store each check line's verdict for the lander";
 in
@@ -30,7 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "2h";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/share/firn/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.bun

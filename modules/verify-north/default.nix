@@ -4,6 +4,7 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
@@ -31,7 +32,7 @@ in
             TimeoutStartSec = "30min";
             WorkingDirectory = "${homeDir}/code/south/main";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.tmux
                   pkgs.git

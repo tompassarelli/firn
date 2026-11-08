@@ -4,12 +4,12 @@
   pkgs,
   jobRun,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.code-health-review;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Hourly code-health tick: start one structure review lead per enrolled repo whose review signal fires";
 in
@@ -30,7 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "10min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${homeDir}/.local/share/firn/bin:${lib.makeBinPath [ pkgs.git ]}"
+              "PATH=${unitPath}:${lib.makeBinPath [ pkgs.git ]}"
               "CODE_HEALTH_ACCOUNT=a"
             ];
             ExecStart = jobRun "code-health-review" "${northBin}/north code-health tick";

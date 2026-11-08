@@ -3,12 +3,12 @@
   lib,
   pkgs,
   northBin,
+  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.north-watch;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "north-watch: every 30 s raise landing hiccups to the proxy and the lane's lead";
 in
@@ -30,7 +30,7 @@ in
             Nice = 5;
             TimeoutStartSec = "5min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${homeDir}/.local/share/firn/bin:${northBin}:${
+              "PATH=${unitPath}:${
                 lib.makeBinPath [
                   pkgs.bash
                   pkgs.coreutils
