@@ -28,9 +28,9 @@ elif [[ "${1:-}" =~ ^[a-zA-Z0-9._+-]+\.[a-zA-Z]{2,}$ && ! -e "${1:-}" ]] && jq -
 query_accounts() {
   local g="{}"; [[ ! -s "$gate" ]] || g="$(<"$gate")"
   jq -rn --slurpfile map "$map_file" --argjson gate "$g" --arg authed "$authed" --arg target "$1" --arg mode "$2" '
-    ($map[0] // {}) as $m | ($gate.claude.controls // {}) as $c | ($authed | split(",") | map(select(length>0))) as $ok | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now |
+    ($map[0] // {}) as $m | ($gate.claude.windows // {}) as $c | ($authed | split(",") | map(select(length>0))) as $ok | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now |
     (($m | keys) + $ok + ($c | keys | map(ltrimstr("claude:"))) | unique) as $labels |
-    ($labels | map(. as $l | ($c["claude:"+$l].windows // []) as $w | (($w[] | select(.window=="5h")) // {}) as $s | (($w[] | select(.window=="week")) // {}) as $wk | ($m[$l].cached.five_hour // {}) as $cs | ($m[$l].cached.seven_day // {}) as $cwk |
+    ($labels | map(. as $l | ($c["claude:"+$l] // []) as $w | (($w[] | select(.window=="5h")) // {}) as $s | (($w[] | select(.window=="week")) // {}) as $wk | ($m[$l].cached.five_hour // {}) as $cs | ($m[$l].cached.seven_day // {}) as $cwk |
       (if ($s.resets_at // "") > $now then ($s.used_pct // 0) elif ($cs.resets_at // "") > $now then ($cs.utilization // 0) else 0 end) as $su |
       (if ($wk.resets_at // "") > $now then ($wk.used_pct // 0) elif ($cwk.resets_at // "") > $now then ($cwk.utilization // 0) else 0 end) as $wu |
       (if ($wk.resets_at // "") > $now then ($wk.reset_h // 999) else 0 end) as $rh | ($ok | index($l) != null) as $au |
