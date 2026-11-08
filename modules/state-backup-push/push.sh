@@ -15,7 +15,7 @@ ship() {
     [ -e "$f" ] || continue
     name=$(basename "$f")
     if [ -e "$sent/$name" ]; then continue; fi
-    "send_$1" "$name" "$f" || return 1
+    if [ "$1" = vault ]; then send_vault "$name" "$f" || return 1; else send_box "$name" "$f" || return 1; fi
     touch "$sent/$name"
   done
   find "$sent" -type f -mtime "+$keep_days" -delete
