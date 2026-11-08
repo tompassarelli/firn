@@ -5,6 +5,7 @@
 [land]
 	check-local = true
 	inferred = false
+	check = ** :: nix run "path:$PWD#formatter.x86_64-linux" -- --ci
 	after = . :: north config agents check-owners --north-root \"$HOME/code/north/main\" --south-root \"$HOME/code/south/main\" --nixos-root \"$PWD\" # hardcoded-repo-path:allow
 	after = "tools/firn/ :: nix shell --inputs-from . nixpkgs#cargo nixpkgs#rustc nixpkgs#gcc --command cargo test --locked --manifest-path tools/firn/Cargo.toml"
 	after = native/,.github/scripts/host-diff.sh :: bash .github/scripts/land-checks.sh native
