@@ -87,6 +87,7 @@
           "north-runtime-follow.timer"
           "firn-host-follow.timer"
           "north-strategy-log-retain.timer"
+          "north-graph-retain.timer"
           "north-land@*.service"
           "north-land-shadow.timer"
           "north-land-drill.timer"
