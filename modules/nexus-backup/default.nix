@@ -26,6 +26,7 @@ let
       out=/var/lib/nexus-backup
       keep_days=35
       excludes=()
+      zstd_args=(-19 -T0)
       ledger_dbs=()
       ${builtins.readFile ./state-backup.sh}'';
   };

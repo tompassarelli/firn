@@ -19,6 +19,7 @@ let
     ledger_dbs=(${lib.escapeShellArgs cfg.ledgerDbs})
     out=${homeDir}/backups/state-push
     keep_days=8
+    zstd_args=(-6 -T4)
   '';
   backup = pkgs.writeShellApplication {
     name = "state-backup-push-archive";
@@ -149,6 +150,7 @@ in
             Slice = "agent.slice";
             Type = "oneshot";
             Nice = 15;
+            CPUQuota = "400%";
             IOSchedulingClass = "idle";
             TimeoutStartSec = "3h";
             Environment = [ "PATH=/run/wrappers/bin:${lib.makeBinPath [ pkgs.coreutils ]}" ];

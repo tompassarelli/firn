@@ -9,7 +9,7 @@ for r in "${recipients[@]}"; do recipient_args+=(-r "$r"); done
 tarq() { tar "$@" 2>/dev/null || [ $? -eq 1 ]; }
 
 seal() {
-  zstd -q -19 -T0 | age "${recipient_args[@]}" -o "$out/$1.tmp"
+  zstd -q "${zstd_args[@]}" | age "${recipient_args[@]}" -o "$out/$1.tmp"
   mv "$out/$1.tmp" "$out/$1"
 }
 
