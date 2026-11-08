@@ -23,6 +23,10 @@ let
     text = ''
       recipients=(${lib.escapeShellArgs cfg.recipients})
       paths=(${lib.escapeShellArgs cfg.paths})
+      out=/var/lib/nexus-backup
+      keep_days=35
+      excludes=()
+      ledger_dbs=()
       ${builtins.readFile ./state-backup.sh}'';
   };
 in

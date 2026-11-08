@@ -1,6 +1,6 @@
-out=/var/lib/nexus-backup
 stamp=$(date -u +%Y%m%dT%H%M%SZ)
 umask 077
+mkdir -p "$out"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 recipient_args=()
@@ -13,28 +13,37 @@ seal() {
   mv "$out/$1.tmp" "$out/$1"
 }
 
-while IFS= read -r -d '' db; do
+if [ "${#ledger_dbs[@]}" -eq 0 ]; then
+  while IFS= read -r -d "" db; do ledger_dbs+=("$db"); done < <(find "$HOME/.local/state" -name threads.db -type f -print0)
+fi
+for db in "${ledger_dbs[@]}"; do
   name=$(basename "$(dirname "$db")")-$(basename "$db" .db)
   sqlite3 "$db" ".backup '$work/copy.db'"
   sqlite3 "$work/copy.db" .dump | seal "ledger-$name-$stamp.sql.zst.age"
   rm -f "$work/copy.db"
-done < <(find "$HOME/.local/state" -name threads.db -type f -print0)
+done
 
 existing=()
 for p in "${paths[@]}"; do if [ -e "$p" ]; then existing+=("$p"); fi; done
 marker=$out/.incr-marker
 last_full=$(find "$out" -maxdepth 1 -name 'state-full-*.age' -mtime -7 | head -n1)
 touch "$work/next-marker"
+tar_excludes=()
+prune=()
+for x in "${excludes[@]}"; do
+  tar_excludes+=("--exclude=$x")
+  prune+=(-path "$x" -prune -o)
+done
 if [ "${#existing[@]}" -gt 0 ]; then
   if [ -z "$last_full" ] || [ ! -e "$marker" ] || [ "$(date +%u)" = 7 ]; then
-    tarq -cf - --ignore-failed-read "${existing[@]}" | seal "state-full-$stamp.tar.zst.age"
+    tarq -cf - --ignore-failed-read "${tar_excludes[@]}" "${existing[@]}" | seal "state-full-$stamp.tar.zst.age"
   else
-    find "${existing[@]}" -type f -newer "$marker" -print0 > "$work/changed" 2>/dev/null || true
+    find "${existing[@]}" "${prune[@]}" -type f -newer "$marker" -print0 > "$work/changed" 2>/dev/null || true
     tarq -cf - --null --no-recursion --ignore-failed-read -T "$work/changed" | seal "state-incr-$stamp.tar.zst.age"
   fi
 fi
 cp -p "$work/next-marker" "$marker"
 
-find "$out" -maxdepth 1 -name '*.age' -mtime +35 -delete
+find "$out" -maxdepth 1 -name '*.age' -mtime "+$keep_days" -delete
 find "$out" -maxdepth 1 -name '*.tmp' -delete
 date -u +%Y-%m-%dT%H:%M:%SZ > "$out/last-ok"
