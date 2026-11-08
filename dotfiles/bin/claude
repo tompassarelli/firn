@@ -12,7 +12,7 @@ mkdir -p -m 700 "$state/profiles" "$state/claude-tokens"
 [[ -s "$map_file" ]] || printf '{}\n' >"$map_file"
 shopt -s nullglob
 cfgs=("$state"/profiles/claude-*/.claude.json)
-((${#cfgs[@]} == 0)) || { jq -s 'reduce .[1:][] as $c (.[0]; ($c | input_filename | capture("claude-(?<l>[^/]+)/\\.claude\\.json$").l) as $l | .[$l] = ((.[$l] // {}) + (if $c.oauthAccount.emailAddress then {email: $c.oauthAccount.emailAddress, uuid: $c.oauthAccount.accountUuid} else {} end) + (if $c.cachedUsageUtilization.utilization then {cached: $c.cachedUsageUtilization.utilization} else {} end)))' "$map_file" "${cfgs[@]}" >"$map_file.tmp.$$" && mv -f "$map_file.tmp.$$" "$map_file"; }
+((${#cfgs[@]} == 0)) || { jq -n --slurpfile m "$map_file" 'reduce inputs as $c ($m[0]; ($c | input_filename | capture("claude-(?<l>[^/]+)/\\.claude\\.json$").l) as $l | .[$l] = ((.[$l] // {}) + (if $c.oauthAccount.emailAddress then {email: $c.oauthAccount.emailAddress, uuid: $c.oauthAccount.accountUuid} else {} end) + (if $c.cachedUsageUtilization.utilization then {cached: $c.cachedUsageUtilization.utilization} else {} end)))' "${cfgs[@]}" >"$map_file.tmp.$$" && mv -f "$map_file.tmp.$$" "$map_file"; }
 authed=""
 for d in "$state"/profiles/claude-* "$state"/claude-tokens/claude-*; do
   l="${d##*/claude-}"; [[ "$l" =~ ^[a-z0-9_-]+$ ]] && [[ -s "$state/claude-tokens/claude-$l" || -s "$state/profiles/claude-$l/.credentials.json" ]] && [[ ",$authed," != *",$l,"* ]] && authed="${authed:+$authed,}$l" || true
@@ -28,9 +28,9 @@ elif [[ "${1:-}" =~ ^[a-zA-Z0-9._+-]+\.[a-zA-Z]{2,}$ && ! -e "${1:-}" ]] && jq -
 query_accounts() {
   local g="{}"; [[ ! -s "$gate" ]] || g="$(<"$gate")"
   jq -rn --slurpfile map "$map_file" --argjson gate "$g" --arg authed "$authed" --arg target "$1" --arg mode "$2" '
-    ($map[0] // {}) as $m | ($gate.claude.controls // {}) as $c | ($authed | split(",") | map(select(length>0))) as $ok | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now |
+    ($map[0] // {}) as $m | ($gate.claude.windows // {}) as $c | ($authed | split(",") | map(select(length>0))) as $ok | (now | strftime("%Y-%m-%dT%H:%M:%SZ")) as $now |
     (($m | keys) + $ok + ($c | keys | map(ltrimstr("claude:"))) | unique) as $labels |
-    ($labels | map(. as $l | ($c["claude:"+$l].windows // []) as $w | (($w[] | select(.window=="5h")) // {}) as $s | (($w[] | select(.window=="week")) // {}) as $wk | ($m[$l].cached.five_hour // {}) as $cs | ($m[$l].cached.seven_day // {}) as $cwk |
+    ($labels | map(. as $l | ($c["claude:"+$l] // []) as $w | (($w[] | select(.window=="5h")) // {}) as $s | (($w[] | select(.window=="week")) // {}) as $wk | ($m[$l].cached.five_hour // {}) as $cs | ($m[$l].cached.seven_day // {}) as $cwk |
       (if ($s.resets_at // "") > $now then ($s.used_pct // 0) elif ($cs.resets_at // "") > $now then ($cs.utilization // 0) else 0 end) as $su |
       (if ($wk.resets_at // "") > $now then ($wk.used_pct // 0) elif ($cwk.resets_at // "") > $now then ($cwk.utilization // 0) else 0 end) as $wu |
       (if ($wk.resets_at // "") > $now then ($wk.reset_h // 999) else 0 end) as $rh | ($ok | index($l) != null) as $au |

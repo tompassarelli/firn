@@ -41,19 +41,15 @@ EOF
 cat >"$NORTH_USAGE_GATE" <<'EOF'
 {
   "claude": {
-    "controls": {
-      "claude:a": {
-        "windows": [
-          { "window": "5h", "used_pct": 0.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 2.0 },
-          { "window": "week", "used_pct": 100.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 24.0 }
-        ]
-      },
-      "claude:b": {
-        "windows": [
-          { "window": "5h", "used_pct": 10.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 3.0 },
-          { "window": "week", "used_pct": 25.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 48.0 }
-        ]
-      }
+    "windows": {
+      "claude:a": [
+        { "window": "5h", "used_pct": 0.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 2.0 },
+        { "window": "week", "used_pct": 100.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 24.0 }
+      ],
+      "claude:b": [
+        { "window": "5h", "used_pct": 10.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 3.0 },
+        { "window": "week", "used_pct": 25.0, "resets_at": "2099-01-01T00:00:00Z", "reset_h": 48.0 }
+      ]
     }
   }
 }
@@ -90,5 +86,15 @@ fi
 # 6. Pass-through when CLAUDE_CONFIG_DIR is already set
 out="$(CLAUDE_CONFIG_DIR=/custom/dir "$launcher" -p "raw")"
 [[ "$out" == "config=/custom/dir token= args=-p raw" ]] || fail "passthrough failed: $out"
+
+# 7. The profile merge names each profile by its own file: a last profile with no oauthAccount inherits nothing
+mkdir -p "$NORTH_STATE_DIR/profiles/claude-z"
+printf '{"cachedUsageUtilization":{"utilization":{"five_hour":{"utilization":99,"resets_at":"2099-01-01T00:00:00Z"}}}}\n' >"$NORTH_STATE_DIR/profiles/claude-z/.claude.json"
+"$launcher" -p "merge" >/dev/null
+[[ "$(jq -r '.z.email // "none"' "$NORTH_STATE_DIR/claude-accounts.json")" == "none" ]] || fail "claude-z inherited an email"
+[[ "$(jq -r '.d.email' "$NORTH_STATE_DIR/claude-accounts.json")" == "delta@new.dev" ]] || fail "claude-d lost its email"
+[[ "$(jq -r '.c.email' "$NORTH_STATE_DIR/claude-accounts.json")" == "charlie@new.dev" ]] || fail "claude-c lost its email"
+[[ "$(jq -r '.c.cached // "none"' "$NORTH_STATE_DIR/claude-accounts.json")" == "none" ]] || fail "claude-c inherited claude-z's usage"
+[[ "$(jq -r '.z.cached.five_hour.utilization' "$NORTH_STATE_DIR/claude-accounts.json")" == "99" ]] || fail "claude-z usage not recorded under claude-z"
 
 printf 'claude launcher tests passed\n'
