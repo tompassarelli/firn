@@ -26,7 +26,7 @@ let
       X-SwitchMethod = "keep-old";
     };
     Service = {
-      Slice = "agent.slice";
+      Slice = "control.slice";
       Type = "oneshot";
       Nice = 10;
       TimeoutStartSec = "5min";

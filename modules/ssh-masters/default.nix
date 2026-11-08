@@ -20,7 +20,7 @@ let
         X-RestartIfChanged = false;
       };
       Service = {
-        Slice = "agent.slice";
+        Slice = "control.slice";
         Type = "simple";
         Restart = "always";
         RestartSec = "5s";
@@ -66,7 +66,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
-            Slice = "agent.slice";
+            Slice = "control.slice";
             Type = "oneshot";
             TimeoutStartSec = "3min";
             Environment = [

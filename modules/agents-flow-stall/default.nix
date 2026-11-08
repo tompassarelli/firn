@@ -38,7 +38,7 @@ in
             X-SwitchMethod = "keep-old";
           };
           Service = {
-            Slice = "agent.slice";
+            Slice = "control.slice";
             Type = "oneshot";
             Environment = [ path ];
             ExecStart = "${northBin}/north ledger flow --stall-alarm";
