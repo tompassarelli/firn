@@ -1,21 +1,21 @@
 vault_ssh=(ssh -T -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "vault@$vault_host")
-box_sftp=(sftp -P "$box_port" -i "$box_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "$box_user@$box_host")
+box_sftp=(sftp -b - -P "$box_port" -i "$box_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 "$box_user@$box_host")
 send_vault() {
   if grep -qxF "$1" <<<"$remote"; then return 0; fi
   "${vault_ssh[@]}" "put $1" < "$2"
 }
 send_box() {
-  printf 'put %s %s.part\nrename %s.part %s\n' "$2" "$1" "$1" "$1" | "${box_sftp[@]}" -b - > /dev/null
+  printf 'put %s %s.part\nrename %s.part %s\n' "$2" "$1" "$1" "$1" | "${box_sftp[@]}" > /dev/null
 }
 ship() {
   local sent=$out/.sent/$1 f name
   mkdir -p "$sent"
-  if [ "$1" = vault ]; then remote=$("${vault_ssh[@]}" list | cut -f1); fi
+  if [ "$1" = vault ]; then remote=$("${vault_ssh[@]}" list | cut -f1) || return 1; fi
   for f in "$out"/*.age; do
     [ -e "$f" ] || continue
     name=$(basename "$f")
     if [ -e "$sent/$name" ]; then continue; fi
-    "send_$1" "$name" "$f"
+    "send_$1" "$name" "$f" || return 1
     touch "$sent/$name"
   done
   find "$sent" -type f -mtime "+$keep_days" -delete
