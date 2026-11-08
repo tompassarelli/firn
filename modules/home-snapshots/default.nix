@@ -54,6 +54,6 @@ in
         };
       };
     };
-    systemd.services.btrbk-home.serviceConfig.ExecStartPre = "${guard}";
+    systemd.services.btrbk-home.serviceConfig.ExecStartPre = "+${guard}";
   };
 }
