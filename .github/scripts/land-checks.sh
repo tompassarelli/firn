@@ -1,9 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mode=${1:?native|dotfiles|drift}
+mode=${1:?native|dotfiles|drift|scripts}
 if [ "$mode" = drift ]; then
   FIRN_REPO="$PWD" dotfiles/bin/firn-check
   bash .github/scripts/host-diff.sh build
+  exit
+fi
+if [ "$mode" = scripts ]; then
+  git diff --name-only --no-renames -z "${SAFE_PUSH_LAND_BASE:?}" "${SAFE_PUSH_LAND_HEAD:?}" -- modules/ |
+    while IFS= read -r -d "" path; do module=${path#modules/}; printf "modules/%s/default.nix\n" "${module%%/*}"; done |
+    sort -u | while IFS= read -r module; do
+      [ -f "$module" ] && rg -q writeShellApplication "${module%/default.nix}" || continue
+      printf "land check: building the shell applications of %s\n" "$module"
+      json=$(nix eval --json --impure --expr "import ./.github/scripts/shell-apps.nix { root = \"$PWD\"; module = \"$module\"; }")
+      mapfile -t drvs < <(jq -r ".[]" <<<"$json")
+      [ "${#drvs[@]}" = 0 ] || nix build --no-link "${drvs[@]/%/^*}"
+    done
   exit
 fi
 if [ "$mode" = native ]; then
