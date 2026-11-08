@@ -3,13 +3,13 @@
   lib,
   jobRun,
   northBin,
+  unitPath,
   pkgs,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.north-graph-retain;
-  homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   description = "Daily north graph retain: delete the fact graph's history no reader needs (retired writers, withdrawn pairs below the retention horizon, unreferenced terms) in short transactions, then reclaim the space";
 in
@@ -30,9 +30,7 @@ in
             Nice = 10;
             TimeoutStartSec = "15min";
             Environment = [
-              "PATH=/run/wrappers/bin:/run/current-system/sw/bin:${northBin}:${homeDir}/.local/bin:${
-                lib.makeBinPath [ pkgs.coreutils ]
-              }"
+              "PATH=${unitPath}:${lib.makeBinPath [ pkgs.coreutils ]}"
             ];
             ExecStart = jobRun "north-graph-retain" "${northBin}/north graph retain";
           };
