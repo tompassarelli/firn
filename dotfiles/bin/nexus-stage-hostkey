@@ -21,7 +21,8 @@ fi
 
 umask 077
 install -d -m 0755 "$out/etc" "$out/etc/ssh"
-sops -d --extract '["ssh_host_ed25519_key"]' "$secret" \
+sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt \
+  sops -d --extract '["ssh_host_ed25519_key"]' "$secret" \
   > "$out/etc/ssh/ssh_host_ed25519_key"
 chmod 0600 "$out/etc/ssh/ssh_host_ed25519_key"
 install -m 0644 "$public" "$out/etc/ssh/ssh_host_ed25519_key.pub"
