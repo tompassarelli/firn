@@ -122,6 +122,7 @@
       "mutant-sweep",
       "north-graph-retain",
       "north-tempo",
+      "opencode",
       "outside-watch",
       "pace-enforcement",
       "procps",
