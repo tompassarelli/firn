@@ -109,6 +109,7 @@
       "alsa-lib",
       "claude",
       "code-health-review",
+      "convo-retain",
       "coverage-map-refresh",
       "cross-project-scan",
       "north-land-drill",
