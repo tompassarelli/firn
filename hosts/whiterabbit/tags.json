@@ -100,7 +100,6 @@
     "glide",
     "guix",
     "piper",
-    "rebuild-nopasswd",
     "ssh"
   ],
   "adds": {

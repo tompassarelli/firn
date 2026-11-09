@@ -5,7 +5,7 @@
 - Write NixOS modules in `.nix`, with typed options and guarded configuration.
 - Use `firn schema explain` and the selected host's NixOS options for uncertain option types or declarations.
 - Compose one package/service per module through `myConfig.modules.*` and declared tags; let dynamic imports discover modules.
-- Verify `whiterabbit` and each remote host; use `firn rebuild --landed SHA` for landed main on the laptop and `firn host deploy HOST` (from a checkout at origin/main of the repo the host upgrades from) for a remote host with the upgrade unit; where `modules/firn-host-follow` is enabled, the laptop pins the overlay to firn main and runs both itself every 20 s and alarms the proxy on a failed host.
+- Verify `whiterabbit` and each remote host; use `firn rebuild` for exact committed snapshots on the laptop and `firn host deploy HOST` (from a checkout at origin/main of the repo the host upgrades from) for a remote host with the upgrade unit; where `modules/firn-host-follow` is enabled, the laptop pins the overlay to firn main and runs both itself every 20 s and alarms the proxy on a failed host.
 - Keep general commands under `dotfiles/bin/` and repository commands in entity-first `firn`.
 - Route agent tools, hooks and skills to north; route secrets, host identity, Tom's policy and account skills to south.
 - Public and reusable goes to north or firn; Tom-specific or secret goes to south.

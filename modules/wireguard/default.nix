@@ -12,6 +12,17 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ pkgs.wireguard-tools ];
     networking.firewall.checkReversePath = "loose";
+    security.sudo.extraRules = [
+      {
+        commands = [
+          {
+            command = "${pkgs.wireguard-tools}/bin/wg";
+            options = [ "NOPASSWD" ];
+          }
+        ];
+        users = [ config.myConfig.modules.users.username ];
+      }
+    ];
     services.resolved.enable = true;
     systemd.services.wireguard-watchdog = {
       after = [ "network.target" ];
