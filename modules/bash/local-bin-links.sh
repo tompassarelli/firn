@@ -3,10 +3,11 @@ set -eu
 bin="$HOME/.local/bin"
 firn="$HOME/.local/share/firn/bin"
 north="$HOME/.local/share/north/bin"
+shims="$HOME/.local/state/north/current/shims/bin"
 
 managed() {
   case "$(readlink "$1" 2>/dev/null)" in
-    "$firn"/* | "$north"/*) return 0 ;;
+    "$shims"/* | "$firn"/* | "$north"/*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -17,7 +18,7 @@ fi
 mkdir -p "$bin"
 
 declare -A seen
-for dir in "$firn" "$north"; do
+for dir in "$shims" "$firn" "$north"; do
   [ -d "$dir/" ] || continue
   for src in "$dir"/*; do
     [ -e "$src" ] || [ -L "$src" ] || continue
