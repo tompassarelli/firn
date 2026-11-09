@@ -13,9 +13,15 @@ let
       context.window
     else
       context.modelMaxContextWindow;
-  claudeProjection = builtins.toJSON (
-    builtins.fromJSON (builtins.readFile ./claude-hooks.json) // { autoCompactWindow = contextWindow; }
-  );
+  claudeProjection =
+    home:
+    builtins.toJSON (
+      builtins.fromJSON (builtins.readFile ./claude-hooks.json)
+      // {
+        autoCompactWindow = contextWindow;
+        env.CLAUDE_CODE_SHELL_PREFIX = "${home}/.local/state/north/current/north --worker-sandbox";
+      }
+    );
 in
 {
   options.myConfig.modules.north-profile.enable =
@@ -39,13 +45,13 @@ in
       home = {
         activation.validateNorthHookPaths = hm.config.lib.dag.entryBefore [ "writeBoundary" ] ''
           if [ -x ${hm.config.home.homeDirectory}/.local/share/north/bin/north ] && [ -e ${hm.config.home.homeDirectory}/.local/lib/firn/cli/current ] && [ -e ${hm.config.home.homeDirectory}/.local/state/north/agents/current ]; then
-            run ${hm.config.home.homeDirectory}/.local/share/north/bin/north config agents check-hook-paths --claude ${pkgs.writeText "north-claude-hooks.json" claudeProjection} --codex ${../codex/requirements.toml} --provider-hooks ${hm.config.home.homeDirectory}/.local/state/north/agents/current/provider-hooks
+            run ${hm.config.home.homeDirectory}/.local/share/north/bin/north config agents check-hook-paths --claude ${pkgs.writeText "north-claude-hooks.json" (claudeProjection hm.config.home.homeDirectory)} --codex ${../codex/requirements.toml} --provider-hooks ${hm.config.home.homeDirectory}/.local/state/north/agents/current/provider-hooks
           else
             echo "validateNorthHookPaths: deferred until the north runtime, the firn CLI and the first agent generation are installed"
           fi
         '';
         activation.projectNorthClaudeHooks = hm.config.lib.dag.entryAfter [ "writeBoundary" ] ''
-          run ${pkgs.coreutils}/bin/env CHMOD_BIN=${pkgs.coreutils}/bin/chmod FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm ${pkgs.writeShellScript "north-claude-hook-projector" (builtins.readFile ./claude-hook-projector.sh)} ${pkgs.writeText "north-claude-hooks.json" claudeProjection} $HOME/.claude/settings.json
+          run ${pkgs.coreutils}/bin/env CHMOD_BIN=${pkgs.coreutils}/bin/chmod FLOCK_BIN=${pkgs.util-linux}/bin/flock JQ_BIN=${pkgs.jq}/bin/jq MKDIR_BIN=${pkgs.coreutils}/bin/mkdir MV_BIN=${pkgs.coreutils}/bin/mv REALPATH_BIN=${pkgs.coreutils}/bin/realpath RM_BIN=${pkgs.coreutils}/bin/rm ${pkgs.writeShellScript "north-claude-hook-projector" (builtins.readFile ./claude-hook-projector.sh)} ${pkgs.writeText "north-claude-hooks.json" (claudeProjection hm.config.home.homeDirectory)} $HOME/.claude/settings.json
         '';
         file = {
           ".agents/AGENTS.md".source =

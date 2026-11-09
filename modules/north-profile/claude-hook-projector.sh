@@ -35,9 +35,9 @@ RM_BIN=${RM_BIN:-rm}
   die "projection is not a regular file: $projection"
 "$JQ_BIN" -e '
   type == "object"
-  and (keys - ["autoCompactWindow", "hooks", "statusLine", "subagentPromptCacheTtl"]) == []
+  and (keys - ["autoCompactWindow", "env", "hooks", "statusLine", "subagentPromptCacheTtl"]) == []
   and (.hooks | type == "object")
-' "$projection" >/dev/null || die "projection may hold only hooks, autoCompactWindow, statusLine and subagentPromptCacheTtl: $projection"
+' "$projection" >/dev/null || die "projection may hold only hooks, autoCompactWindow, env, statusLine and subagentPromptCacheTtl: $projection"
 
 parent=${target%/*}
 [[ -n $parent && $parent != "$target" ]] ||
@@ -70,7 +70,7 @@ if [[ -e $target ]]; then
     if type != "object" then
       error("Claude settings must be a JSON object")
     else
-      del(.autoCompactWindow, .hooks, .statusLine, .subagentPromptCacheTtl) + $projection[0]
+      del(.autoCompactWindow, .env, .hooks, .statusLine, .subagentPromptCacheTtl) + $projection[0]
     end
   ' "$target" >"$stage"
 else
