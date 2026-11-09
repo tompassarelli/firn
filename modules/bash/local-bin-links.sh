@@ -18,7 +18,7 @@ fi
 mkdir -p "$bin"
 
 declare -A seen
-for dir in "$shims" "$firn" "$north"; do
+for dir in "$firn" "$north"; do
   [ -d "$dir/" ] || continue
   for src in "$dir"/*; do
     [ -e "$src" ] || [ -L "$src" ] || continue
@@ -26,6 +26,9 @@ for dir in "$shims" "$firn" "$north"; do
     name="${src##*/}"
     [ -z "${seen[$name]:-}" ] || continue
     seen[$name]=1
+    if [ "$dir" = "$north" ] && { [ "$name" = cargo ] || [ "$(readlink "$src")" = cargo ]; }; then
+      src="$shims/$name"
+    fi
     dst="$bin/$name"
     if [ ! -e "$dst" ] && [ ! -L "$dst" ]; then
       ln -s "$src" "$dst"
@@ -36,6 +39,7 @@ for dir in "$shims" "$firn" "$north"; do
 done
 
 for dst in "$bin"/*; do
+  case "$(readlink "$dst" 2>/dev/null)" in "$shims"/*) continue ;; esac
   if [ -L "$dst" ] && [ ! -e "$dst" ] && managed "$dst"; then
     rm "$dst"
   fi
