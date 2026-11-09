@@ -220,11 +220,14 @@
                 !config.myConfig.modules.sops-host-key.enable
               ) "/var/lib/sops-nix/key.txt";
               environment.sessionVariables.SOPS_AGE_KEY_FILE = nixpkgs.lib.mkIf (
-                !config.myConfig.modules.sops-host-key.enable
+                !config.myConfig.modules.sops-host-key.enable && !config.myConfig.modules.sops-keyservice.enable
               ) "/var/lib/sops-nix/key.txt";
-              systemd.tmpfiles.rules = nixpkgs.lib.mkIf (!config.myConfig.modules.sops-host-key.enable) [
-                "z /var/lib/sops-nix/key.txt 0400 ${config.myConfig.modules.users.username} users -"
-              ];
+              systemd.tmpfiles.rules =
+                nixpkgs.lib.mkIf
+                  (!config.myConfig.modules.sops-host-key.enable && !config.myConfig.modules.sops-keyservice.enable)
+                  [
+                    "z /var/lib/sops-nix/key.txt 0400 ${config.myConfig.modules.users.username} users -"
+                  ];
               environment.systemPackages = with pkgs; [
                 sops
                 age

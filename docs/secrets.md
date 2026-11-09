@@ -38,9 +38,7 @@ Or simplest: leave the secret-backed modules disabled.
 Tom's overlay is the private `south` repository. Its encrypted files live at
 `${SOUTH_SECRETS:-$HOME/code/south/main/secrets}` (aws, bnet, cloudflare,
 digitalocean, gmail, wireguard). Decrypt only into a command's
-environment, never to the terminal, for example:
-
-`DIGITALOCEAN_ACCESS_TOKEN=$(sudo SOPS_AGE_KEY_FILE=/var/lib/sops-nix/key.txt sops -d --extract '["token"]' "${SOUTH_SECRETS:-$HOME/code/south/main/secrets}/digitalocean.yaml") doctl ...`
+environment with `sops -d --extract`, never to the terminal.
 
 Cloudflare credentials reach commands through `with-cloudflare <profile> --
 <command>`; the bnet credentials are projected to `/run/secrets/bnet`.

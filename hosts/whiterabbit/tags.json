@@ -84,6 +84,7 @@
     "parted",
     "pipewire",
     "remmina",
+    "sops-keyservice",
     "swap",
     "thermal-management",
     "timezone",
