@@ -1,8 +1,9 @@
 `firn rebuild --landed SHA` requests the current public Firn main tip through
 a root-owned Unix socket service. The service fetches the fixed public origin,
 authenticates the Linux socket peer, and builds root-owned committed snapshots.
-Each request fetches `~/code/south/main` as the configured user and builds
-south as of its origin/main, the same source plain `firn rebuild` uses.
+With `systemFlake` set, each request also fetches that repository's main from
+its origin as root, with a one-hour contents-read GitHub App token minted per
+request when the origin is private, and builds it around the Firn snapshot.
 
 The privileged runtime is a generated bundle of Firn's existing rebuild core.
 Regenerate it with `bash modules/landed-rebuild/build-runtime.sh` whenever its
@@ -15,5 +16,5 @@ The ported native JSON codec retains its original MIT OR Apache-2.0 license;
 the MIT notice is preserved in `LICENSE-BEAGLE`.
 
 The service stays running during configuration switches so it can deliver the
-request result. Changes to its installed service/runtime take effect after a
-service restart or reboot.
+request result, then exits; systemd starts the installed unit afresh for the
+next request, so a change to the service takes effect from that request on.

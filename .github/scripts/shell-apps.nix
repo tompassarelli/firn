@@ -87,7 +87,9 @@ let
       in
       lib.optional drv.success drv.value
     else if builtins.isString v then
-      builtins.attrNames (builtins.getContext v)
+      builtins.attrNames (
+        lib.filterAttrs (_: context: context ? outputs || context ? allOutputs) (builtins.getContext v)
+      )
     else if builtins.isList v then
       lib.concatMap (collect (depth + 1)) v
     else if builtins.isFunction v then
