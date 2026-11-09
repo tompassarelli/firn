@@ -42,11 +42,6 @@ let
           case "$arg" in --repo=*) echo "$arg" | cut -d= -f2-; return ;; esac
           prev=$arg
         done
-        owner='''; name='''
-        for arg in "$@"; do
-          case "$arg" in owner=*) owner=''${arg#owner=} ;; name=*) name=''${arg#name=} ;; esac
-        done
-        [ -z "$owner" ] || [ -z "$name" ] || { echo "$owner/$name"; return; }
         for arg in "$@"; do
           found=$(printf %s "$arg" | grep -oE '(repos/|github\.com[/:])[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+' | head -n1 | sed -E 's#^(repos/|github\.com[/:])##') || true
           [ -n "$found" ] && { echo "$found"; return; }
