@@ -20,7 +20,7 @@ environment=$(nix-instantiate --eval --strict --json --expr "
         north-land = { enable = true; repositories = [ \"north\" ]; };
         users = { username = \"tom\"; homeDir = \"/home/tom\"; };
       };
-      pkgs = builtins.listToAttrs (map (name: { inherit name; value = \"/\" + name; }) [ \"bash\" \"bun\" \"coreutils\" \"git\" \"gnutar\" \"nix\" \"openssh\" \"rsync\" \"systemd\" \"util-linux\" ]);
+      pkgs = builtins.listToAttrs (map (name: { inherit name; value = \"/\" + name; }) [ \"bash\" \"bun\" \"cargo-deny\" \"coreutils\" \"git\" \"gnutar\" \"nix\" \"openssh\" \"rsync\" \"systemd\" \"util-linux\" ]);
       northBin = \"/north/bin\";
       unitPath = \"/unit/bin\";
     };
