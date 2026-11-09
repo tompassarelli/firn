@@ -90,3 +90,18 @@ subprocess.run(["git", "worktree", "remove", str(validation)], check=True, captu
     assert activations == [tip], activations
     assert not list(state.glob("request-*"))
     print("ok: real Git and socket peer acceptance; older main, branch, malformed and wrong uid refused; dirty requester tree excluded")
+
+
+def test_missing_service_is_named():
+    import contextlib
+    import io
+    missing = "/nonexistent/firn-landed-rebuild.sock"
+    error = io.StringIO()
+    with contextlib.redirect_stderr(error):
+        status = landed.client("0" * 40, missing)
+    assert status == 69, status
+    assert missing in error.getvalue() and "does not enable the landed-rebuild module" in error.getvalue(), error.getvalue()
+    print("ok: a host without the landed-rebuild socket is told so, not given a bare [Errno 2]")
+
+
+test_missing_service_is_named()

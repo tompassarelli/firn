@@ -82,16 +82,19 @@ class Service:
         connection.sendall(json.dumps({"status": status, "output": output}).encode() + b"\n")
 
 
-def client(sha):
+def client(sha, path=SOCKET):
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.connect(SOCKET)
+            connection.connect(path)
             connection.sendall(sha.encode() + b"\n")
             connection.shutdown(socket.SHUT_WR)
             with connection.makefile("r") as stream:
                 result = json.loads(stream.readline())
         print(result["output"])
         return result["status"]
+    except (FileNotFoundError, ConnectionRefusedError):
+        print(f"firn landed rebuild: no landed-rebuild service listens on {path}; this host does not enable the landed-rebuild module (a host that follows a system flake is deployed with firn host deploy HOST, or by starting its nexus-upgrade.service)", file=sys.stderr)
+        return 69
     except (OSError, ValueError) as error:
         print(f"firn landed rebuild: {error}", file=sys.stderr)
         return 70
