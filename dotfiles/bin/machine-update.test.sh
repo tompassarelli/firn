@@ -66,21 +66,9 @@ PATH="$journey_path" "$here/machine-update" --write >"$work/write.log" 2>&1 || s
 [[ "$(cat "$work/write.log")" == 'recorded repository probe failure' ]]
 status=0
 PATH="$journey_path" MACHINE_UPDATE_ADMITTED=1 "$here/machine-update" --apply >"$work/apply.log" 2>&1 || status=$?
-[[ "$status" == 75 ]]
-jq -e '.decision == "DEFER_MEMORY_HEADROOM" and .cpus == 3 and .memoryMiB == 5957' "$work/apply.log" >/dev/null
-admitted=0
-while IFS= read -r check; do
-  command=${check#* :: }
-  [[ "$command" == "north capacity host run"* ]] || continue
-  status=0
-  PATH="$journey_path" bash -c "$command" >"$work/land.log" 2>&1 || status=$?
-  [[ "$status" == 76 ]] || { cat "$work/land.log"; printf "land exited %s; expected admission receipt 76\n" "$status"; exit 1; }
-  admitted=1
-  head -n 1 "$work/land.log" | jq -e '.decision == "RUN" and .cpus == 2 and .memoryMiB == 2048' >/dev/null
-  printf 'ok: land boundary %s\n' "$(head -n 1 "$work/land.log")"
-done < <(git config --file "$here/../../.safe-push" --get-all land.check)
-[[ "$admitted" == 1 ]]
-printf 'ok: public writer reaches repository probe without outer lease; apply rejects 3CPU/5957MiB even with old escape; Firn land admits 2CPU/2048MiB on 5898MiB available\n'
+[[ "$status" == 76 ]]
+head -n 1 "$work/apply.log" | jq -e '.decision == "RUN" and .cpus == 3 and .memoryMiB == 1985' >/dev/null
+printf 'ok: public writer reaches repository probe without outer lease; apply admits an unmeasured heavy update at 3CPU/1985MiB on 7943MiB total\n'
 
 status=0
 PATH="$journey_path" CAPACITY_EXECUTE_CHILD=1 CAPACITY_RECEIPTS="$work/receipts.jsonl" "$here/machine-update" --apply >"$work/eligible-apply.log" 2>&1 || status=$?

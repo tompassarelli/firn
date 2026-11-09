@@ -26,10 +26,9 @@ one change and an audit is scope Tom did not ask for.
    before building, because check evaluates options, assertions and Nix
    linters in seconds where a build takes minutes. Stage the exact changed
    paths, including new files, and commit.
-4. Switch only when asked, with `firn rebuild` from the committed lane and
-   outside the command sandbox, because the sandbox strips sudo's setuid bit.
-   It builds exact `HEAD`, so uncommitted work is not included; confirm the
-   printed snapshot and the requested installed result.
+4. Switch only when asked, by landing the lane and running
+   `firn rebuild --landed SHA` with the landed main commit, because the
+   rebuild service switches the laptop from landed main alone. Confirm the printed snapshot and the requested installed result.
 
 Use one package or service per module and enable it through declared options
 or tags, because dynamic imports discover modules and a stray import bypasses

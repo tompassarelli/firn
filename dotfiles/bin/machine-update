@@ -51,10 +51,9 @@ main() {
   git -C "$repo" fetch origin main && git -C "$repo" merge --ff-only origin/main
   git -C "$south" fetch origin main
   if [[ "$mode" == --apply ]]; then
-    sudo -n -v
     git -C "$south" merge --ff-only origin/main
     cd "$repo" && firn-runtime-update
-    firn rebuild
+    FIRN_REPO="$repo" firn rebuild --landed "$(git -C "$repo" rev-parse HEAD)"
   else
     candidates="$state/flake-candidates"
     mkdir -p "$candidates"
