@@ -29,12 +29,7 @@
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin north hook firn-system-policy",
             "timeout": 60
-          }
-        ]
-      },
-      {
-        "matcher": "Bash|Monitor",
-        "hooks": [
+          },
           {
             "type": "command",
             "command": "/etc/codex/hooks/runtime/env -u BASH_ENV -u ENV PATH=/etc/codex/hooks/runtime:/home/tom/.local/share/firn/bin:/home/tom/.local/share/north/bin:/home/tom/.local/share/south/bin:/run/current-system/sw/bin north hook dispatch",
