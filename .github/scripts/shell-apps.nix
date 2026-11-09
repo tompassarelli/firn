@@ -92,6 +92,12 @@ let
       lib.concatMap (collect (depth + 1)) v
     else if builtins.isFunction v then
       collect (depth + 1) (v args)
+    else if builtins.isAttrs v && (v._type or null) == "if" then
+      lib.optionals (builtins.tryEval v.condition).value (collect (depth + 1) v.content)
+    else if builtins.isAttrs v && (v._type or null) == "merge" then
+      collect (depth + 1) v.contents
+    else if builtins.isAttrs v && (v._type or null) == "override" then
+      collect (depth + 1) v.content
     else if builtins.isAttrs v && !isPackageSet v then
       lib.concatMap (collect (depth + 1)) (builtins.attrValues v)
     else
