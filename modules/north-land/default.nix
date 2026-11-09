@@ -26,6 +26,7 @@ let
           lib.makeBinPath [
             pkgs.bash
             pkgs.bun
+            pkgs.cargo-deny
             pkgs.coreutils
             pkgs.git
             pkgs.gnutar
