@@ -11,6 +11,24 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Authenticate nix's github fetches. Locking the --override-input below
+      # (and reading its lastModified) hits api.github.com; on the shared CI
+      # runner IP, unauthenticated requests rate-limit to HTTP 429 intermittently.
+      # NIX_CONFIG is read directly by the nix client doing the eval — unlike the
+      # install-nix-action config, which was NOT applied to these fetches. The
+      # runner GITHUB_TOKEN lifts the limit to 5000/hr.
+      NIX_CONFIG: |
+        access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      # north is authored as a local `git+file:///home/tom/...` input. CI
+      # cannot fetch a path on the author's machine, so override it with its
+      # public GitHub mirror. Local rebuilds keep using the file:// path.
+      # Pinned to a full 40-char SHA on purpose: a bare github:owner/repo
+      # resolves HEAD via api.github.com, which rate-limits to HTTP 429 on
+      # CI; a full SHA fetches the codeload tarball directly, no API call.
+      # Bump this SHA when north moves (or migrate it to a github input in the lock).
+      NORTH_INPUT: github:tompassarelli/north/78798d68ec0c364862abcf08445429eae4e61f3a
+      TOPLEVEL: .#nixosConfigurations.whiterabbit.config.system.build.toplevel
     steps:
       - uses: actions/checkout@v5
       - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
@@ -21,29 +39,48 @@ jobs:
           extra_nix_config: |
             extra-substituters = https://nix-community.cachix.org https://walker.cachix.org https://walker-git.cachix.org https://devenv.cachix.org https://quickshell.cachix.org
             extra-trusted-public-keys = nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= walker.cachix.org-1:fG8q+uAaMqhsMxWjwvk0IMb4mFPFLqHjuvfwQxE4oJM= walker-git.cachix.org-1:vmC0ocfPWh0S/vRAQGtChuiZBTAe4wiKDeyyXM0/7pM= devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw= quickshell.cachix.org-1:vBm3s5tZThc5KDLj6zhHVCMp8wX/AZJwle9wqdi81ts=
+
+      # GitHub release assets (the Slippi zips and AppImages, betterleaks) are
+      # fixed-output fetches that cache.nixos.org does not hold. Cache them keyed
+      # by their store paths, which embed the pinned sha256, so only a cache miss
+      # touches a release URL and nix still verifies every hash on that fetch.
+      - name: Select GitHub release sources
+        id: sources
+        run: |
+          dir="$RUNNER_TEMP/release-sources"
+          mkdir -p "$dir"
+          nix derivation show -r "$TOPLEVEL" --override-input north "$NORTH_INPUT" > "$dir/drvs.json"
+          jq -r '.derivations | to_entries[]
+            | select(.value.outputs.out.method == "flat")
+            | select((.value.structuredAttrs.urls // []) | any(test("^https://github.com/[^/]+/[^/]+/releases/download/")))
+            | "/nix/store/\(.key) \(.value.env.out)"' "$dir/drvs.json" | sort -u > "$dir/all"
+          cut -d' ' -f2 "$dir/all" | sort -u | xargs -r -P16 -I{} sh -c \
+            'curl -fsI -o /dev/null "https://cache.nixos.org/$(basename {} | cut -c1-32).narinfo" || echo {}' \
+            | sort > "$dir/outs"
+          grep -F -f "$dir/outs" "$dir/all" > "$dir/fetch" || true
+          echo "any=$([[ -s $dir/outs ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "key=$(sha256sum < "$dir/outs" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GitHub release sources
+        id: sources-cache
+        if: steps.sources.outputs.any == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/release-sources/closure.nar
+          key: release-sources-v1-${{ steps.sources.outputs.key }}
+
+      - name: Fetch GitHub release sources
+        if: steps.sources.outputs.any == 'true' && steps.sources-cache.outputs.cache-hit != 'true'
+        run: |
+          dir="$RUNNER_TEMP/release-sources"
+          nix-store --realise $(cut -d' ' -f1 "$dir/fetch") > /dev/null
+          nix-store --export $(cut -d' ' -f2 "$dir/fetch" | sort -u) > "$dir/closure.nar"
+
+      - name: Import GitHub release sources
+        if: steps.sources.outputs.any == 'true' && steps.sources-cache.outputs.cache-hit == 'true'
+        run: nix-store --import < "$RUNNER_TEMP/release-sources/closure.nar" > /dev/null
+
       - name: Build whiterabbit
-        # north is authored as a local `git+file:///home/tom/...` input. CI
-        # cannot fetch a path on the author's machine, so override it with its
-        # public GitHub mirror. Local rebuilds keep using the file:// path.
-        env:
-          # Authenticate nix's github fetches. Locking the --override-input below
-          # (and reading its lastModified) hits api.github.com; on the shared CI
-          # runner IP, unauthenticated requests rate-limit to HTTP 429 intermittently.
-          # NIX_CONFIG is read directly by the nix client doing the eval — unlike the
-          # install-nix-action config, which was NOT applied to these fetches. The
-          # runner GITHUB_TOKEN lifts the limit to 5000/hr.
-          NIX_CONFIG: |
-            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
         run: |
           # --fallback: a cache returning 5xx must cost build time, not a red run.
-          nix build --fallback .#nixosConfigurations.whiterabbit.config.system.build.toplevel \
-            --override-input north github:tompassarelli/north/78798d68ec0c364862abcf08445429eae4e61f3a
-          # Why these overrides:
-          # - north is authored as a local git+file:///home/tom/... input (fast
-          #   local iteration); CI can't fetch that path, so point it at the
-          #   public GitHub mirror. Local builds keep the file:// path.
-          # - Pinned to full 40-char SHAs on purpose: a bare github:owner/repo
-          #   resolves HEAD via api.github.com, which rate-limits to HTTP 429 on
-          #   CI; a full SHA fetches the codeload tarball directly, no API call.
-          #   Bump these SHAs when the sibling repos move (or migrate them to
-          #   github inputs in the lock).
+          nix build --fallback "$TOPLEVEL" --override-input north "$NORTH_INPUT"
