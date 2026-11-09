@@ -85,7 +85,7 @@ in
     };
     security.sudo.extraConfig = ''
       Defaults timestamp_timeout=30
-      Defaults timestamp_type=global
+      Defaults timestamp_type=tty
 
     '';
     systemd.tmpfiles.rules = [
