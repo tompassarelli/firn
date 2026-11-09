@@ -17,7 +17,10 @@ let
       pkgs.socat
     ];
     text = ''
-      IFS=- read -r _ pid uid <<<"$1"
+      uid=''${1##*-}
+      pid=''${1%-*}
+      pid=''${pid##*-}
+      pid=''${pid%%_*}
       parent=$(cut -d' ' -f4 "/proc/$pid/stat" 2>/dev/null || echo 0)
       line() { tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null | cut -c1-240 || true; }
       printf 'sops key request: uid %s pid %s (%s) parent %s (%s) cgroup %s\n' "$uid" "$pid" "$(line "$pid")" "$parent" "$(line "$parent")" "$(cut -d: -f3 "/proc/$pid/cgroup" 2>/dev/null || true)" >&2
