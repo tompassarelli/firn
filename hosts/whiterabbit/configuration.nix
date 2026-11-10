@@ -95,7 +95,6 @@
           "firn-delivery-liveness.timer"
           "skill-prune.timer"
           "convo-retain.timer"
-          "code-health-review.timer"
           "mutant-sweep.timer"
           "supply-chain-scan.timer"
           "incident-retro.timer"
