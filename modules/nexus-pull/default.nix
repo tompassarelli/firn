@@ -100,7 +100,7 @@ in
               X-SwitchMethod = "keep-old";
             };
             Service = {
-              Slice = "agent.slice";
+              Slice = "control.slice";
               Type = "oneshot";
               Environment = [ path ];
               ExecStart = jobRun "nexus-pull" "${pull}/bin/nexus-pull";
