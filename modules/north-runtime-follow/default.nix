@@ -30,7 +30,7 @@ in
             Slice = "control.slice";
             Type = "oneshot";
             Nice = 10;
-            TimeoutStartSec = "30min";
+            TimeoutStartSec = "60min";
             SuccessExitStatus = "75";
             Environment = [
               "PATH=${unitPath}:${
