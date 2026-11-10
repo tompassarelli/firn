@@ -66,7 +66,21 @@ export function generationTagEffects(target: Target, host: string, generation: s
 export const environmentQueryEffect = (target: Target, host: string): ArgvEffect => captureEffect('query user environment', ['nix', 'eval', '--json', `${target.firn.uri}#packages`, '--apply', `packages: builtins.any (system: (builtins.getAttr system packages) ? "${host}-environment") (builtins.attrNames packages)`]);
 export const environmentPresent = (text: string): boolean => text.trim() === 'true';
 export const environmentSwitchEffect = (target: Target, host: string): ArgvEffect => inheritEffect('switch user environment', ['firn-environment-switch', host, target.firn.uri]);
-export const advisoryEffect = (snapshot: Snapshot): ArgvEffect => inheritEffect('schedule agent configuration check', ['systemd-run', '--user', '--no-block', '--collect', '--quiet', '--unit', `firn-agent-config-check-${snapshot.revision}.service`, '--description', 'Firn agent configuration advisory check', '--property=Type=oneshot', 'bash', '-c', 'exec "$HOME/.local/bin/north" check harness --local']);
+// A deploy retried for the same snapshot must not fail on its advisory check:
+// systemd-run --unit refuses a unit that is still running, or that an earlier
+// attempt left loaded or as a runtime fragment, so reuse the running check and
+// clear the leftover before scheduling another.
+export const advisoryUnit = (revision: string): string => `firn-agent-config-check-${revision}.service`;
+export const advisoryScript = [
+  'unit=$1',
+  'if systemctl --user is-active --quiet "$unit"; then exit 0; fi',
+  'systemctl --user stop "$unit" >/dev/null 2>&1 || true',
+  'systemctl --user reset-failed "$unit" >/dev/null 2>&1 || true',
+  'fragment="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/systemd/user/$unit"',
+  'if [ -e "$fragment" ]; then rm -f "$fragment"; systemctl --user daemon-reload >/dev/null 2>&1 || true; fi',
+  'exec systemd-run --user --no-block --collect --quiet --unit "$unit" --description "Firn agent configuration advisory check" --property=Type=oneshot bash -c \'exec "$HOME/.local/bin/north" check harness --local\'',
+].join('\n');
+export const advisoryEffect = (snapshot: Snapshot): ArgvEffect => inheritEffect('schedule agent configuration check', ['bash', '-c', advisoryScript, 'firn-agent-config-check', advisoryUnit(snapshot.revision)]);
 export const storePath = (text: string): boolean => text.trim().startsWith('/nix/store/');
 const decimalString = (text: string): boolean => text.length > 0 && [...text].every(character => '0123456789'.includes(character));
 export const generationToken = (text: string): boolean => decimalString(text) && text[0] !== '0';

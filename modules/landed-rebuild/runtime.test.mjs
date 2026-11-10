@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,7 +56,25 @@ try {
     stdout: 'pipe', stderr: 'pipe' });
   assert.equal(lookup.exitCode, 0);
   assert.equal(new TextDecoder().decode(lookup.stdout), 'schema-found');
-  console.log('ok: existing bundled core builds fixed snapshots, selects system profile, switches exact closure, then unprivileged fixed user helper');
+  const unit = `firn-agent-config-check-${revision}.service`;
+  const advisory = commands.find(argv => argv[0] === 'bash' && argv[1] === '-c' && argv.includes(unit));
+  assert(advisory, 'the advisory check is scheduled under a unit named for the snapshot');
+  const bin = join(root, 'bin'), runtime = join(root, 'run'), ran = join(root, 'systemd-run');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(join(bin, 'systemd-run'), '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$FAKE_RUN_LOG"\n', { mode: 0o755 });
+  writeFileSync(join(bin, 'systemctl'), '#!/bin/sh\ncase "$*" in *is-active*) exit "${FAKE_ACTIVE:-1}" ;; esac\nexit 0\n', { mode: 0o755 });
+  const runAdvisory = env => nativeSpawnSync({ cmd: advisory, env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, XDG_RUNTIME_DIR: runtime, FAKE_RUN_LOG: ran, ...env }, stdout: 'pipe', stderr: 'pipe' });
+  const fragment = join(runtime, 'systemd', 'user', unit);
+  mkdirSync(join(runtime, 'systemd', 'user'), { recursive: true });
+  writeFileSync(fragment, 'left by an earlier attempt\n');
+  assert.equal(runAdvisory({}).exitCode, 0, 'a stale check unit does not fail a retried deploy');
+  assert(!existsSync(fragment), 'the stale runtime fragment is cleared');
+  assert(readFileSync(ran, 'utf8').split('\n').includes(unit), 'the cleared unit is scheduled again');
+  rmSync(ran);
+  writeFileSync(fragment, 'still running\n');
+  assert.equal(runAdvisory({ FAKE_ACTIVE: '0' }).exitCode, 0);
+  assert(existsSync(fragment) && !existsSync(ran), 'a check already running is reused untouched');
+  console.log('ok: existing bundled core builds fixed snapshots, selects system profile, switches exact closure, then unprivileged fixed user helper and an advisory check a retried deploy reuses or clears');
 } finally {
   rmSync(root, { recursive: true });
 }
