@@ -50,7 +50,7 @@ fi
 top="$(nixc build --no-link --print-out-paths "$attr.config.system.build.toplevel")"
 export NIX_SSHOPTS='-o BatchMode=yes -o ConnectTimeout=15'
 if [[ -n "$builder" ]]; then
-  nixc store sign --key-file "$state/signing-key" --recursive "$top"
+  nixc store sign --key-file "${FIRN_PUSH_BUILDER_KEY:-$key}" --recursive "$top"
   nix copy --substitute-on-destination --from "ssh-ng://$builder" --to "ssh-ng://$host" "$top"
 else
   nix store sign --key-file "$key" --recursive "$top"
