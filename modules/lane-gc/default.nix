@@ -11,7 +11,7 @@
 let
   cfg = config.myConfig.modules.lane-gc;
   username = config.myConfig.modules.users.username;
-  description = "lane-gc: hourly retire landed, clean, idle worktrees and branches and every origin branch in ~/code containers; report unlanded work and box unlanded origin branches";
+  description = "lane-gc: hourly reclaim scratch in the temporary directory idle 3 h and held by no process, retire landed, clean, idle worktrees and branches and every origin branch in ~/code containers; report unlanded work and box unlanded origin branches";
 in
 {
   options.myConfig.modules.lane-gc.enable = lib.mkEnableOption description;
@@ -42,7 +42,10 @@ in
                   ]
                 }"
               ];
-              ExecStart = jobRun "lane-gc" "${northBin}/north lane gc";
+              ExecStart = [
+                "-${jobRun "lane-gc-scratch" "${northBin}/north lane reclaim --only scratch --idle-hours 3"}"
+                (jobRun "lane-gc" "${northBin}/north lane gc")
+              ];
             };
           };
         };
