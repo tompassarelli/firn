@@ -32,10 +32,11 @@ in
     };
     controlCpuQuotaPercent = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 200;
+      default = 400;
       description = ''
         Hard CPU ceiling for control.slice, where placement, pace, relay and ledger units run ahead of the agent work they control.
         It keeps the control plane out of agent.slice's quota without leaving it an unbounded way around the envelope (north#834).
+        At 200 it throttled 34% of periods under build load, so usage-sample (55 s start limit) timed out 8 times in 12 h on 2026-11-11 (north#1093).
       '';
     };
   };
