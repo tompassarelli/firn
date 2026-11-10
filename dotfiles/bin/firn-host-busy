@@ -6,7 +6,7 @@ if grep -qs Discharging /sys/class/power_supply/BAT*/status; then
   exit 0
 fi
 read -r load _ </proc/loadavg
-if awk -v load="$load" -v cores="$(nproc)" 'BEGIN { exit !(load > cores) }'; then
+if awk -v loadavg="$load" -v cores="$(nproc)" 'BEGIN { exit !(loadavg > cores) }'; then
   printf 'load %s on %s cores\n' "$load" "$(nproc)"
   exit 0
 fi
