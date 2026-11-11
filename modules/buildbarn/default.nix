@@ -414,13 +414,16 @@ in
       };
     })
     (lib.mkIf cfg.client.enable {
-      environment.etc."buckconfig.d/remote-execution".text = ''
-        [buck2_re_client]
-        engine_address = grpc://${cfg.client.server}:${toString frontendPort}
-        action_cache_address = grpc://${cfg.client.server}:${toString frontendPort}
-        cas_address = grpc://${cfg.client.server}:${toString frontendPort}
-        tls = false
-      '';
+      environment.etc."buckconfig.d/remote-execution" = {
+        mode = "0444";
+        text = ''
+          [buck2_re_client]
+          engine_address = grpc://${cfg.client.server}:${toString frontendPort}
+          action_cache_address = grpc://${cfg.client.server}:${toString frontendPort}
+          cas_address = grpc://${cfg.client.server}:${toString frontendPort}
+          tls = false
+        '';
+      };
     })
   ];
 }
