@@ -255,3 +255,46 @@ survival of a battery that dies while asleep, which takes more than a day from 6
 `modules/swap` no longer sets `resume_offset`, `resumeDevice` or `image_size`, and declares
 the swap file at 32 GiB (it was 128 GiB, sized for a hibernate image); with 47 GiB of zram in
 front of it that is still ample swap for agent load.
+
+## Power-offs at 8% with the charger connected (11 Nov 2026)
+
+**What happened.** The laptop powered itself off at 15:47, 16:14 and 16:17. Each was an
+orderly shutdown (`Reached target System Power Off`), not a crash. On the 60 W charger the
+laptop drew about what the charger supplies, so the battery flipped between charging and
+discharging about once a minute. At 15:04 the charger's contribution fell to zero with no
+kernel line and the battery drained from 49% to 8% by 15:47, where UPower's
+`PercentageAction=8` powered off as intended. The next two boots came up at 6% and 8% with
+the charger connected and charging; each powered off 20 s after its first reading of 1.6 to
+2.8 W discharging. UPower acts 20 s after any reading of discharging at or below
+`PercentageAction` and has no setting for "only when no charger is connected", so a boot
+below 8% repeated the shutdown until the battery happened to pass 8% before its next dip.
+
+**The rule now (firn#66).** One decision over three readings, in
+`modules/upower/low-battery.sh`: whether a charger is connected (any `Mains` or `USB`
+supply under `/sys/class/power_supply` reads `online` 1), the battery's state and its
+percent.
+
+- Charger absent and discharging at 8% or below on two readings at least 20 s apart, with
+  no reading between them that says otherwise: clean power-off. This keeps the 4 Nov
+  decision above.
+- Charger connected: power off only when discharging at 2% or below, again 20 s apart.
+  UPower's own `PercentageAction` is lowered to 2 as the backstop for a stopped timer.
+- Charging, full or not charging: never.
+
+`low-battery-poweroff.timer` takes a reading every 20 s and a udev rule takes one on every
+`power_supply` change event. `bash modules/upower/low-battery.test.sh` walks this table
+against a fake `/sys/class/power_supply`.
+
+**Power state on record.** Every charger connect or disconnect and every change of the
+battery's state writes one journal line tagged `power-state` with the percent and the
+watts, and the rule writes one before it powers off, so a dropout like 15:04 and the
+requester of a power-off no longer have to be inferred from UPower's history files:
+
+```bash
+journalctl -t power-state -b -1 --no-pager
+```
+
+```
+power-state: charger absent, battery discharging (was: charger connected, battery charging): 49%, 31.2 W
+power-state: powering off: charger absent, battery discharging at 8%, 28.4 W, low for 20 s
+```
