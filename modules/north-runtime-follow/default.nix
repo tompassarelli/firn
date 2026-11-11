@@ -24,6 +24,7 @@ in
         services.north-runtime-follow = {
           Unit = {
             Description = description;
+            ConditionPathExists = "!%h/.local/state/north/channel/stable";
             X-SwitchMethod = "keep-old";
           };
           Service = {

@@ -22,6 +22,7 @@ in
           Unit = {
             Description = "Twice-daily agent runtime updates";
             OnFailure = [ "update-notify@%N.service" ];
+            ConditionPathExists = "!%h/.local/state/north/channel/stable";
             X-SwitchMethod = "keep-old";
           };
           Service = {

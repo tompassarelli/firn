@@ -89,6 +89,7 @@
           "north-strategy-log-retain.timer"
           "north-graph-retain.timer"
           "north-land@*.service"
+          "north-stable-hold.service"
           "north-land-shadow.timer"
           "north-land-drill.timer"
           "north-watch.timer"
