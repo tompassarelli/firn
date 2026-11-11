@@ -298,3 +298,34 @@ journalctl -t power-state -b -1 --no-pager
 power-state: charger absent, battery discharging (was: charger connected, battery charging): 49%, 31.2 W
 power-state: powering off: charger absent, battery discharging at 8%, 28.4 W, low for 20 s
 ```
+
+## Battery draining on the charger under load (11 Nov 2026)
+
+**What happened.** With the 60 W charger connected (20 V, 3 A negotiated) the laptop ran
+the performance platform profile (firn#43) and under agent load drew about 62 W, so the
+battery discharged while plugged in: 58% to 49% between 13:36 and 15:04, and 2 W out at
+31% at 17:20. `modules/thermal-management` chose the profile from the charger's presence
+alone and never read whether the battery was charging.
+
+**The rule now (firn#67).** auto-cpufreq no longer sets the platform profile on the
+charger; `modules/thermal-management/profile.sh` does, from the charger, the battery's
+state and the gaming hold, read through the same supply readers as the power-off rule
+(`modules/upower/power-readings.sh`).
+
+- Charger connected: performance, which keeps firn#43's purpose.
+- Charger connected and discharging on two readings at least 60 s apart, with no reading
+  between them that says otherwise: balanced.
+- Back to performance once the battery has charged for five minutes without a break, or
+  at once when it reads full or not charging (held at its charge limit).
+- Gaming hold on (`north capacity gaming status`): performance whatever the battery does.
+  The rule reads the hold's marker, `/run/user/*/agent-capacity-v1/gaming.json`, so it
+  needs no north at boot; with no marker it behaves as if no hold is on.
+- Charger absent: the profile is left to auto-cpufreq's battery setting, balanced.
+
+`charger-profile.timer` takes a reading every 20 s and a udev rule takes one on every
+`power_supply` change event. `bash modules/thermal-management/profile.test.sh` walks this
+table as a timeline against fake readings. Each switch writes one `power-state` line:
+
+```
+power-state: profile balanced (was: performance): charger connected, battery discharging for 60 s, gaming hold off: 31%, 2.0 W
+```

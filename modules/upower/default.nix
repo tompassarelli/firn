@@ -14,6 +14,7 @@ let
       config.systemd.package
     ];
     text = ''
+      ${builtins.readFile ./power-readings.sh}
       ${builtins.readFile ./low-battery.sh}
       low_battery_run /sys/class/power_supply "$RUNTIME_DIRECTORY"
     '';

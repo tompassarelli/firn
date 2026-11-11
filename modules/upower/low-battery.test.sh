@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$here/power-readings.sh"
 source "$here/low-battery.sh"
 upower_action=$(sed -n 's/.*percentageAction = \([0-9]*\);.*/\1/p' "$here/default.nix")
 root=$(mktemp -d)
