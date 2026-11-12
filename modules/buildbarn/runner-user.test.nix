@@ -148,5 +148,34 @@ pkgs.testers.runNixOSTest {
       host.succeed(f"test \"$(sha256sum < /root/outputs/copy | cut -d' ' -f1)\" = {digest}")
       host.succeed("test \"$(cat /root/outputs/ls-status)\" != 0")
       host.fail("journalctl --no-pager -u buildbarn-runner -u buildbarn-worker | grep -F 'Failed to add cached file'")
+
+
+      def enable_after_off(tmpfiles_first):
+          name = f"after-off-{int(tmpfiles_first)}"
+          host.succeed(
+              "systemctl stop buildbarn-worker buildbarn-runner",
+              "test -e ${marker}",
+              "mkdir -p ${buildDirectory}/off-action/sub",
+              "echo old > ${buildDirectory}/off-action/sub/file",
+              "chown -R buildbarn:buildbarn ${buildDirectory}",
+              "chmod 0700 ${buildDirectory}/off-action",
+              "chmod 755 ${buildDirectory}",
+          )
+          if tmpfiles_first:
+              host.succeed("systemd-tmpfiles --create")
+              host.succeed("test \"$(stat -c '%U:%G %a' ${buildDirectory})\" = 'buildbarn-run:buildbarn-run 2770'")
+          host.succeed("systemctl start buildbarn-worker")
+          settled(f"an enable after the off state, marker present, tmpfiles first: {tmpfiles_first}")
+          host.succeed("test ! -e ${buildDirectory}/off-action")
+          host.succeed(f"mkdir -p /root/{name}", f"printf '{name}\\n' > /root/client/{name}")
+          status, output = remote(
+              f"cat {name} > copy", f"--input-path={name}", "--output-path=copy", f"--d=/root/{name}"
+          )
+          assert status == 0, f"an uncached action after the off state failed:\n{output}\n{journal()}"
+          host.succeed(f"cmp /root/client/{name} /root/{name}/copy")
+
+
+      enable_after_off(False)
+      enable_after_off(True)
     '';
 }

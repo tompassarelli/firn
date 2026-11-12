@@ -47,13 +47,13 @@ let
   resetBuildDirectory = pkgs.writeShellScript "buildbarn-reset-build-directory" ''
     set -eu
     marker=/var/lib/buildbarn/build-directory-reset
-    if [ -e "$marker" ]; then
-      exit 0
-    fi
     cd -P -- ${buildDirectory}
     if [ "$(${pkgs.coreutils}/bin/pwd -P)" != ${buildDirectory} ]; then
       echo "refusing to reset ${buildDirectory}: it resolves through a symlink" >&2
       exit 1
+    fi
+    if [ -e "$marker" ] && [ "$(stat -c '%U:%G %a' .)" = "${runnerUser}:${runnerUser} 2770" ]; then
+      exit 0
     fi
     find . -xdev -mindepth 1 -delete
     chown ${runnerUser}:${runnerUser} .
