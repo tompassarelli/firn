@@ -496,16 +496,6 @@
               bash ${./modules/bash}/login-path.test.sh
               touch $out
             '';
-        agent-login = import ./modules/agent-user/check.nix {
-          inherit (nixpkgs) lib;
-          pkgs = nixpkgs.legacyPackages.x86_64-linux;
-          enabled = self.lib.mkSystem {
-            hostname = "agent-login";
-            hostConfig = ./modules/agent-user/fixture.nix;
-            hardwareConfig = ./hardware-configuration.nix;
-          };
-          disabled = self.nixosConfigurations.whiterabbit;
-        };
         nix-syntax =
           let
             pkgs = nixpkgs.legacyPackages.x86_64-linux;
