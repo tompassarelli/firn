@@ -52,11 +52,8 @@ let
         echo "refusing to reset ${buildDirectory}: it is a symlink" >&2
         exit 1
       fi
-      if [ ! -d ${buildDirectory} ]; then
-        echo "refusing to reset ${buildDirectory}: it is not a directory" >&2
-        exit 1
-      fi
-      find ${buildDirectory} -xdev -mindepth 1 -delete
+      rm -rf -- ${buildDirectory}
+      mkdir -m 2770 -- ${buildDirectory}
       chown ${runnerUser}:${runnerUser} ${buildDirectory}
       chmod 2770 ${buildDirectory}
       touch "$marker"
@@ -418,15 +415,6 @@ in
         "d ${cacheDirectory} 0700 buildbarn buildbarn -"
         "d ${buildDirectory} 2770 ${runnerUser} ${runnerUser} -"
       ];
-      systemd.services.buildbarn-build-directory-reset = {
-        description = "Empty the Buildbarn build directory once and give it to the runner user, before the runner starts";
-        before = [ "buildbarn-runner.service" ];
-        requiredBy = [ "buildbarn-runner.service" ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = resetBuildDirectory;
-        };
-      };
     })
     (lib.mkIf cfg.worker.enable {
       systemd.services = {
@@ -453,6 +441,7 @@ in
                     Group = runnerUser;
                     UMask = "0007";
                     ReadWritePaths = [ buildDirectory ];
+                    ExecStartPre = "+${resetBuildDirectory}";
                   }
                 else
                   {
@@ -473,7 +462,6 @@ in
               if cfg.worker.runnerUser then
                 {
                   SupplementaryGroups = [ runnerUser ];
-                  UMask = "0002";
                   ReadWritePaths = [ workerRoot ];
                 }
               else
