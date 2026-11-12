@@ -71,5 +71,5 @@ remote systemctl start "$(printf '%q' "$unit")" || {
 
 booted="$(remote readlink /run/current-system)"
 staged="$(remote readlink /nix/var/nix/profiles/system)"
-[[ "$booted" == "$top" || "$staged" == "$top" ]] || { printf 'firn host push: %s runs %s and staged %s, not %s\n' "$host" "$booted" "$staged" "$top" >&2; exit 1; }
+[[ "$booted" == "$top" || "$staged" == "$top" ]] || { printf 'firn host push: %s runs %q and staged %q, not %s\n' "$host" "$booted" "$staged" "$top" >&2; exit 1; }
 [[ "$booted" == "$top" ]] && printf '%s runs %s (%s)\n' "$host" "$top" "$head" || printf '%s staged %s for its next boot, because the kernel, initrd or modules changed\n' "$host" "$top"
