@@ -323,6 +323,11 @@ in
         default = 16;
         description = "size of the worker's local cache of input files, hardlinked into each action's directory";
       };
+      allowProcMount = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "lets the runner's actions mount proc inside their own user namespace, by leaving ProtectKernelTunables off the runner unit; a nested sandbox needs that mount";
+      };
     };
     client = {
       enable = lib.mkEnableOption "/etc/buckconfig.d/remote-execution, which points every Buck2 project on this host at the Buildbarn store and scheduler at `client.server`";
@@ -391,6 +396,7 @@ in
                 "buildbarn/worker/build"
               ];
               PrivateNetwork = true;
+              ProtectKernelTunables = !cfg.worker.allowProcMount;
               Nice = 10;
               CPUWeight = 50;
               IOWeight = 50;
