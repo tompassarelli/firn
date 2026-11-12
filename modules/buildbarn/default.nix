@@ -45,10 +45,17 @@ let
   buildDirectory = "${workerRoot}/build";
   runnerUser = "buildbarn-run";
   resetBuildDirectory = pkgs.writeShellScript "buildbarn-reset-build-directory" ''
-    marker=${workerRoot}/build.runner-user
+    set -eu
+    marker=/var/lib/buildbarn/build-directory-reset
     if [ ! -e "$marker" ]; then
+      if [ -L ${buildDirectory} ]; then
+        echo "refusing to reset ${buildDirectory}: it is a symlink" >&2
+        exit 1
+      fi
       rm -rf -- ${buildDirectory}
-      install -d -m 2770 -o ${runnerUser} -g ${runnerUser} ${buildDirectory}
+      mkdir -m 2770 -- ${buildDirectory}
+      chown ${runnerUser}:${runnerUser} ${buildDirectory}
+      chmod 2770 ${buildDirectory}
       touch "$marker"
     fi
   '';
@@ -455,10 +462,7 @@ in
               if cfg.worker.runnerUser then
                 {
                   SupplementaryGroups = [ runnerUser ];
-                  ReadWritePaths = [
-                    buildDirectory
-                    cacheDirectory
-                  ];
+                  ReadWritePaths = [ workerRoot ];
                 }
               else
                 {
