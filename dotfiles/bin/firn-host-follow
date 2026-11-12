@@ -47,23 +47,23 @@ follow() {
   local host="$1" target="$2" log="$state/$1.log" key="$2" built="" rc=0
   [[ "$host" == self ]] && key="$2 $overlay_main" && built="$(cat "$state/self.south" 2>/dev/null || true)"
   [[ "$(cat "$state/$host" 2>/dev/null)" == "$key" ]] && return 0
+  [[ "$(cat "$state/$host.failed" 2>/dev/null)" == "$key" && -z "$(find "$state/$host.failed" -mmin +10)" ]] && return 0
+  settled() { printf '%s\n' "$key" >"$state/$host"; rm -f "$state/$host.failed"; }
   if [[ "$host" == self ]]; then
     revision="$(nixos-version --configuration-revision)"
-  else
-    revision="$(ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" nixos-version --configuration-revision 2>/dev/null)"
-  fi
-  printf '%s\n' "$key" >"$state/$host"
-  if [[ "$host" == self ]]; then
     if [[ "$revision" == "$target" ]] && { [[ -z "$built" ]] || git -C "$overlay" diff --quiet "$built" "$overlay_main" -- . "${excludes[@]}" 2>/dev/null; }; then
       printf '%s\n' "$overlay_main" >"$state/self.south"
+      settled
       return 0
     fi
   else
-    [[ "$revision" == "$target" ]] && return 0
+    revision="$(ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" nixos-version --configuration-revision 2>/dev/null)"
+    [[ "$revision" == "$target" ]] && { settled; return 0; }
   fi
-  [[ "$host" == self ]] && reason="$("${FIRN_HOST_BUSY:-firn-host-busy}")" && { printf 'firn host follow: not rebuilding this machine to %s: %s\n' "${target:0:8}" "$reason"; rm -f "$state/$host"; return 0; }
+  [[ "$host" == self ]] && reason="$("${FIRN_HOST_BUSY:-firn-host-busy}")" && { printf 'firn host follow: not rebuilding this machine to %s: %s\n' "${target:0:8}" "$reason"; return 0; }
   if [[ "$host" != self ]] && git -C "$overlay" diff --quiet "$revision" "$target" -- . "${excludes[@]}" 2>/dev/null; then
     printf 'firn host follow: %s on %s needs no deploy: %s changed only paths no host build reads\n' "$host" "${revision:0:8}" "${target:0:8}"
+    settled
     return 0
   fi
   printf 'firn host follow: %s runs %s; deploying %s\n' "$host" "${revision:-unknown}" "$target"
@@ -74,17 +74,16 @@ follow() {
   fi || rc=$?
   if ((rc == 0)); then
     [[ "$host" == self ]] && printf '%s\n' "$overlay_main" >"$state/self.south"
+    settled
     return 0
   fi
-  ((rc == 75)) && { rm -f "$state/$host"; return 0; }
+  ((rc == 75)) && return 0
   local repo="$overlay"
   [[ "$host" == self ]] && repo="$firn"
   git -C "$repo" fetch --quiet origin main
-  if [[ "$(git -C "$repo" rev-parse origin/main)" != "$target" ]]; then
-    rm -f "$state/$host"
-    return 0
-  fi
-  alarm "deploying $target to $host failed: $(tail -n 3 "$log" | tr '\n' ' ')(log $log)"
+  [[ "$(git -C "$repo" rev-parse origin/main)" == "$target" ]] || return 0
+  [[ "$(cat "$state/$host.failed" 2>/dev/null)" == "$key" ]] || alarm "deploying $target to $host failed: $(tail -n 3 "$log" | tr '\n' ' ')(log $log); trying again every 10 min"
+  printf '%s\n' "$key" >"$state/$host.failed"
   return 1
 }
 
