@@ -18,7 +18,7 @@ in
   options.myConfig.modules.agent-claude-managed = {
     enable = lib.mkEnableOption "Claude Code's managed settings under /etc, root-owned in the Nix store, so an agent session reads its hooks and permissions from them and cannot change them";
     settings = lib.mkOption {
-      type = json.type;
+      inherit (json) type;
       default = { };
       description = "Hooks and permissions written to /etc/claude-code/managed-settings.json, the highest-precedence Claude Code source; the guards that let only managed hooks and rules run are set by the module";
     };

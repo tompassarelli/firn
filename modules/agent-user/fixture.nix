@@ -1,27 +1,31 @@
 {
-  myConfig.modules.system.stateVersion = "25.05";
-  myConfig.modules.users.username = "operator";
+  myConfig = {
+    modules = {
+      system.stateVersion = "25.05";
+      users.username = "operator";
+      agent-user.enable = true;
+      agent-claude-managed.enable = true;
+      agent-brokers = {
+        enable = true;
+        operatorUid = 1000;
+        threadsSocket = "/run/user/1000/north-threads.sock";
+      };
+      agent-cache-seed = {
+        enable = true;
+        sources = {
+          "/home/operator/.cargo/registry" = "/home/agent/.cargo/registry";
+          "/home/operator/.cache/sccache" = "/home/agent/.cache/sccache";
+          "/home/operator/.cache/cargo-target" = "/home/agent/.cache/cargo-target";
+        };
+      };
+      agent-runtime-link = {
+        enable = true;
+        target = "/var/lib/agent-runtime/runtimes/fixture";
+      };
+    };
+  };
   users.users.operator = {
     isNormalUser = true;
     uid = 1000;
-  };
-  myConfig.modules.agent-user.enable = true;
-  myConfig.modules.agent-claude-managed.enable = true;
-  myConfig.modules.agent-brokers = {
-    enable = true;
-    operatorUid = 1000;
-    threadsSocket = "/run/user/1000/north-threads.sock";
-  };
-  myConfig.modules.agent-cache-seed = {
-    enable = true;
-    sources = {
-      "/home/operator/.cargo/registry" = "/home/agent/.cargo/registry";
-      "/home/operator/.cache/sccache" = "/home/agent/.cache/sccache";
-      "/home/operator/.cache/cargo-target" = "/home/agent/.cache/cargo-target";
-    };
-  };
-  myConfig.modules.agent-runtime-link = {
-    enable = true;
-    target = "/var/lib/agent-runtime/runtimes/fixture";
   };
 }

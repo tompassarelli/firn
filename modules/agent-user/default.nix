@@ -31,7 +31,7 @@ in
       isNormalUser = true;
       group = cfg.name;
       extraGroups = [ ];
-      home = cfg.home;
+      inherit (cfg) home;
       createHome = true;
       homeMode = "0700";
       linger = true;
