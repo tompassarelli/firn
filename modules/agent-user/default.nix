@@ -24,9 +24,16 @@ in
       default = "/home/agent";
       description = "Home of the agent user, mode 0700 so no other account reads it";
     };
+    gid = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.unsigned;
+      default = null;
+      description = "Numeric group ID of the agent group, pinned so the broker can grant its socket by number";
+    };
   };
   config = lib.mkIf cfg.enable {
-    users.groups.${cfg.name} = { };
+    users.groups.${cfg.name} = {
+      inherit (cfg) gid;
+    };
     users.users.${cfg.name} = {
       isNormalUser = true;
       group = cfg.name;

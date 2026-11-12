@@ -9,30 +9,14 @@ let
   cfg = config.myConfig.modules.agent-cache-seed;
   agent = config.myConfig.modules.agent-user;
   stamp = "/var/lib/agent-user/caches-seeded";
-  relative = to: lib.removePrefix "${agent.home}/" to;
-  parents =
-    to:
-    lib.tail (
-      lib.scanl (dir: part: "${dir}/${part}") agent.home (lib.init (lib.splitString "/" (relative to)))
-    );
-  copy =
-    from: to:
-    let
-      q = lib.escapeShellArg;
-      owner = "${agent.name}:${agent.name}";
-    in
-    ''
-      if [ -e ${q from} ] && [ ! -e ${q to} ]; then
-        ${
-          lib.concatMapStrings (dir: "install -d -o ${agent.name} -g ${agent.name} ${q dir}\n") (parents to)
-        }cp -a --reflink=auto ${q from} ${q to}
-        chown -R ${owner} ${q to}
-      fi
-    '';
+  pairs = lib.concatMap (from: [
+    (lib.escapeShellArg from)
+    (lib.escapeShellArg cfg.sources.${from})
+  ]) (lib.attrNames cfg.sources);
 in
 {
   options.myConfig.modules.agent-cache-seed = {
-    enable = lib.mkEnableOption "a one-time copy of the operator's caches into the agent user's home, owned by the agent user afterwards";
+    enable = lib.mkEnableOption "a one-time copy of the operator's caches into the agent user's home, made by the agent user itself so no root process writes or chowns under that home";
     sources = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;
       default = { };
@@ -55,7 +39,7 @@ in
     ];
     systemd.tmpfiles.rules = [ "d /var/lib/agent-user 0700 root root -" ];
     systemd.services.agent-cache-seed = {
-      description = "Copy the operator's caches into the agent user's home once, then own them as the agent user";
+      description = "Copy the operator's caches into the agent user's home once, as the agent user";
       wantedBy = [ "multi-user.target" ];
       after = [ "local-fs.target" ];
       unitConfig.ConditionPathExists = "!${stamp}";
@@ -64,7 +48,9 @@ in
         RemainAfterExit = true;
         ExecStart = pkgs.writeShellScript "agent-cache-seed" ''
           set -eu
-          ${lib.concatStringsSep "\n" (lib.mapAttrsToList copy cfg.sources)}
+          ${pkgs.util-linux}/bin/runuser -u ${agent.name} -- ${pkgs.coreutils}/bin/env PATH=${
+            lib.makeBinPath [ pkgs.coreutils ]
+          } ${pkgs.bash}/bin/bash ${./copy.sh} ${lib.escapeShellArg agent.home} ${lib.concatStringsSep " " pairs}
           touch ${stamp}
         '';
       };

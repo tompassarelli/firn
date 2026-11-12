@@ -12,7 +12,7 @@ let
 in
 {
   options.myConfig.modules.agent-runtime-link = {
-    enable = lib.mkEnableOption "the runtime link the agent user follows: a symlink the operator's account owns in a directory only it writes, so the agent reads the runtime and cannot repoint it";
+    enable = lib.mkEnableOption "the runtime link the agent user follows: a symlink the operator's account owns in a directory only it writes, so the agent reads the runtime and cannot repoint it; the operator's account is trusted as root-equivalent for this link, since it owns the directory and names the target";
     path = lib.mkOption {
       type = lib.types.str;
       default = "/var/lib/agent-runtime/current";
@@ -28,8 +28,10 @@ in
       deps = [ "users" ];
       text = ''
         ${pkgs.coreutils}/bin/install -d -o ${operator} -m 0755 ${directory}
-        ${pkgs.coreutils}/bin/ln -sfn -- ${cfg.target} ${cfg.path}
-        ${pkgs.coreutils}/bin/chown -h ${operator} ${cfg.path}
+        if [ ! -e ${cfg.path} ] && [ ! -L ${cfg.path} ]; then
+          ${pkgs.coreutils}/bin/ln -s -- ${cfg.target} ${cfg.path}
+          ${pkgs.coreutils}/bin/chown -h ${operator} ${cfg.path}
+        fi
       '';
     };
   };

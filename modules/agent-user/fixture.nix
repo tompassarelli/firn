@@ -1,14 +1,18 @@
+{ pkgs, ... }:
 {
   myConfig = {
     modules = {
       system.stateVersion = "25.05";
       users.username = "operator";
-      agent-user.enable = true;
+      agent-user = {
+        enable = true;
+        gid = 1500;
+      };
       agent-claude-managed.enable = true;
       agent-brokers = {
         enable = true;
-        operatorUid = 1000;
-        threadsSocket = "/run/user/1000/north-threads.sock";
+        package = pkgs.coreutils;
+        policy = "/etc/north-broker/policy.toml";
       };
       agent-cache-seed = {
         enable = true;

@@ -2,56 +2,41 @@
 
 let
   cfg = config.myConfig.modules.agent-brokers;
-  agent = config.myConfig.modules.agent-user.name;
-  operator = config.myConfig.modules.users.username;
-  runDir = "/run/agent-brokers";
-  forward = name: upstream: {
-    systemd.sockets."agent-${name}" = {
-      description = "Socket the agent user reaches the operator's ${name} broker through";
-      wantedBy = [ "sockets.target" ];
-      socketConfig = {
-        ListenStream = "${runDir}/${name}.sock";
-        Accept = true;
-        SocketGroup = agent;
-        SocketMode = "0660";
-      };
-    };
-    systemd.services."agent-${name}@" = {
-      description = "Forwards one agent connection to the operator's ${name} broker";
-      serviceConfig = {
-        ExecStart = "${config.systemd.package}/lib/systemd/systemd-socket-proxyd ${upstream}";
-        StandardInput = "socket";
-        User = operator;
-      };
-    };
-  };
+  agent = config.myConfig.modules.agent-user;
+  systemSocket = "/run/north-broker/broker.sock";
+  agentSocket = "/run/agent-brokers/broker.sock";
 in
 {
   options.myConfig.modules.agent-brokers = {
-    enable = lib.mkEnableOption "system sockets that forward the agent user's connections to the operator's brokers, which stay the operator's and serve the agent";
-    operatorUid = lib.mkOption {
-      type = lib.types.ints.unsigned;
-      description = "UID of the operator's account, whose runtime directory holds the GitHub broker's socket";
+    enable = lib.mkEnableOption "the system credential broker with a socket for the agent user of its own, group agent: the broker applies the agent's policy by the caller's uid, and no unit forwards as the operator";
+    package = lib.mkOption {
+      type = lib.types.package;
+      description = "The north package whose broker serves both sockets";
     };
-    threadsSocket = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = "Socket of the operator's threads ledger that the agent user forwards to; no threads socket is created while null";
+    policy = lib.mkOption {
+      type = lib.types.str;
+      description = "Absolute path of the broker's policy file, which names the grants of each caller";
     };
   };
-  config = lib.mkIf cfg.enable (
-    lib.mkMerge [
-      (forward "github" "/run/user/${toString cfg.operatorUid}/north-gh-broker/broker.sock")
-      (lib.mkIf (cfg.threadsSocket != null) (forward "threads" cfg.threadsSocket))
+  config = lib.mkIf cfg.enable {
+    assertions = [
       {
-        assertions = [
-          {
-            assertion = config.myConfig.modules.agent-user.enable;
-            message = "agent-brokers forwards the agent user's connections, so myConfig.modules.agent-user must be enabled";
-          }
-        ];
-        systemd.tmpfiles.rules = [ "d ${runDir} 0711 root root -" ];
+        assertion = agent.enable;
+        message = "agent-brokers serves the agent user, so myConfig.modules.agent-user must be enabled";
       }
-    ]
-  );
+      {
+        assertion = agent.gid != null;
+        message = "agent-brokers grants the agent socket by group number, so myConfig.modules.agent-user.gid must be set";
+      }
+    ];
+    systemd.services.north-broker = {
+      description = "north credential broker: the system socket for operator tools and the agent socket for the agent user";
+      wantedBy = [ "multi-user.target" ];
+      serviceConfig = {
+        Type = "simple";
+        Restart = "on-failure";
+        ExecStart = "${cfg.package}/bin/north broker serve --socket ${systemSocket} --policy ${cfg.policy} --agent-socket ${agentSocket} --agent-gid ${toString agent.gid}";
+      };
+    };
+  };
 }

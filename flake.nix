@@ -496,6 +496,18 @@
               bash ${./modules/bash}/login-path.test.sh
               touch $out
             '';
+        agent-cache-copy =
+          nixpkgs.legacyPackages.x86_64-linux.runCommand "firn-agent-cache-copy"
+            {
+              nativeBuildInputs = [
+                nixpkgs.legacyPackages.x86_64-linux.bash
+                nixpkgs.legacyPackages.x86_64-linux.coreutils
+              ];
+            }
+            ''
+              bash ${./modules/agent-cache-seed}/copy.test.sh
+              touch $out
+            '';
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
