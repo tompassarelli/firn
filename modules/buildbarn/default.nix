@@ -41,6 +41,17 @@ let
   };
   storageRoot = "/var/lib/buildbarn/storage";
   workerRoot = "/var/lib/buildbarn/worker";
+  cacheDirectory = "${workerRoot}/cache";
+  buildDirectory = "${workerRoot}/build";
+  runnerUser = "buildbarn-run";
+  resetBuildDirectory = pkgs.writeShellScript "buildbarn-reset-build-directory" ''
+    marker=${workerRoot}/build.runner-user
+    if [ ! -e "$marker" ]; then
+      rm -rf -- ${buildDirectory}
+      install -d -m 2770 -o ${runnerUser} -g ${runnerUser} ${buildDirectory}
+      touch "$marker"
+    fi
+  '';
   runnerSocket = "/run/buildbarn-runner/runner.sock";
   frontendPort = 8980;
   storagePort = 8981;
@@ -328,6 +339,11 @@ in
         default = false;
         description = "lets the runner's actions mount proc inside their own user namespace, by leaving ProtectKernelTunables off the runner unit; a nested sandbox needs that mount";
       };
+      runnerUser = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "runs the runner's actions as buildbarn-run, which owns neither the worker's cache nor the inputs it hardlinks, so an action cannot chmod or append a store copy; off keeps the runner as buildbarn";
+      };
     };
     client = {
       enable = lib.mkEnableOption "/etc/buckconfig.d/remote-execution, which points every Buck2 project on this host at the Buildbarn store and scheduler at `client.server`";
@@ -380,6 +396,19 @@ in
         schedulerWorkerPort
       ];
     })
+    (lib.mkIf (cfg.worker.enable && cfg.worker.runnerUser) {
+      users.users.${runnerUser} = {
+        isSystemUser = true;
+        group = runnerUser;
+      };
+      users.groups.${runnerUser} = { };
+      systemd.tmpfiles.rules = [
+        "d /var/lib/buildbarn 0755 root root -"
+        "d ${workerRoot} 0751 buildbarn buildbarn -"
+        "d ${cacheDirectory} 0700 buildbarn buildbarn -"
+        "d ${buildDirectory} 2770 ${runnerUser} ${runnerUser} -"
+      ];
+    })
     (lib.mkIf cfg.worker.enable {
       systemd.services = {
         buildbarn-runner =
@@ -388,32 +417,58 @@ in
             bin.runner
             (json "runner" runnerConfig)
             [ ]
-            {
-              RuntimeDirectory = "buildbarn-runner";
-              RuntimeDirectoryMode = "0750";
-              StateDirectory = [
-                "buildbarn/worker"
-                "buildbarn/worker/build"
-              ];
-              PrivateNetwork = true;
-              ProtectKernelTunables = !cfg.worker.allowProcMount;
-              Nice = 10;
-              CPUWeight = 50;
-              IOWeight = 50;
-            };
+            (
+              {
+                RuntimeDirectory = "buildbarn-runner";
+                RuntimeDirectoryMode = "0750";
+                PrivateNetwork = true;
+                ProtectKernelTunables = !cfg.worker.allowProcMount;
+                Nice = 10;
+                CPUWeight = 50;
+                IOWeight = 50;
+              }
+              // (
+                if cfg.worker.runnerUser then
+                  {
+                    User = runnerUser;
+                    Group = runnerUser;
+                    UMask = "0007";
+                    ReadWritePaths = [ buildDirectory ];
+                    ExecStartPre = "+${resetBuildDirectory}";
+                  }
+                else
+                  {
+                    StateDirectory = [
+                      "buildbarn/worker"
+                      "buildbarn/worker/build"
+                    ];
+                  }
+              )
+            );
         buildbarn-worker =
           service
             "Buildbarn worker: fetches action inputs from the shared store, hands each action to the runner and uploads its outputs"
             bin.worker
             (json "worker" workerConfig)
             [ "buildbarn-runner.service" ]
-            {
-              StateDirectory = [
-                "buildbarn/worker"
-                "buildbarn/worker/build"
-                "buildbarn/worker/cache"
-              ];
-            }
+            (
+              if cfg.worker.runnerUser then
+                {
+                  SupplementaryGroups = [ runnerUser ];
+                  ReadWritePaths = [
+                    buildDirectory
+                    cacheDirectory
+                  ];
+                }
+              else
+                {
+                  StateDirectory = [
+                    "buildbarn/worker"
+                    "buildbarn/worker/build"
+                    "buildbarn/worker/cache"
+                  ];
+                }
+            )
           // {
             bindsTo = [ "buildbarn-runner.service" ];
           };
