@@ -8,6 +8,7 @@ key="$state/signing-key"
 quiet="${FIRN_PUSH_QUIET:-30}"
 mkdir -p "$state"
 remote() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$host" "$@"; }
+remote true || { printf 'firn host push: %s does not answer, so nothing is deployed to it\n' "$host" >&2; exit 1; }
 
 if ! remote systemctl cat nexus-deploy@x.service >/dev/null 2>&1; then
   printf 'firn host push: %s has no nexus-deploy@ unit; deploying through its upgrade unit\n' "$host"
@@ -40,10 +41,14 @@ else
   nixc() { nix "$@"; }
 fi
 attr="$src#nixosConfigurations.$name"
-stamp="$(nixc eval --raw "$attr" --apply 'c: (c.extendModules { modules = [ ({ lib, ... }: { system.configurationRevision = lib.mkOverride 0 null; }) ]; }).config.system.build.toplevel.drvPath')"
-if [[ "$(cat "$state/$host.stamp" 2>/dev/null || true)" == "$stamp" ]]; then
-  printf 'firn host push: %s changes nothing on %s at %s apart from its revision stamp; no deploy\n' "${head:0:8}" "$host" "$name"
-  exit 0
+runs="$(remote readlink /run/current-system)"
+revision="$(remote nixos-version --configuration-revision || true)"
+if [[ "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+  same="$(nixc eval --raw "$attr" --apply "c: (c.extendModules { modules = [ ({ lib, ... }: { system.configurationRevision = lib.mkOverride 0 \"$revision\"; }) ]; }).config.system.build.toplevel.outPath")"
+  if [[ "$runs" == "$same" ]]; then
+    printf 'firn host push: %s changes nothing on %s at %s apart from its revision: it runs %s; no deploy\n' "${head:0:8}" "$host" "$name" "$runs"
+    exit 0
+  fi
 fi
 
 [[ -f "$key" ]] || (umask 077 && nix key generate-secret --key-name "${HOSTNAME:-follower}-deploy-1" >"$key")
@@ -67,5 +72,4 @@ remote systemctl start "$(printf '%q' "$unit")" || {
 booted="$(remote readlink /run/current-system)"
 staged="$(remote readlink /nix/var/nix/profiles/system)"
 [[ "$booted" == "$top" || "$staged" == "$top" ]] || { printf 'firn host push: %s runs %s and staged %s, not %s\n' "$host" "$booted" "$staged" "$top" >&2; exit 1; }
-printf '%s\n' "$stamp" >"$state/$host.stamp"
 [[ "$booted" == "$top" ]] && printf '%s runs %s (%s)\n' "$host" "$top" "$head" || printf '%s staged %s for its next boot, because the kernel, initrd or modules changed\n' "$host" "$top"
