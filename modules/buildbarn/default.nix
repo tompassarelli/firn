@@ -381,17 +381,6 @@ in
       ];
     })
     (lib.mkIf cfg.worker.enable {
-      users.users.buildbarn-run = {
-        isSystemUser = true;
-        group = "buildbarn-run";
-      };
-      users.groups.buildbarn-run = { };
-      systemd.tmpfiles.rules = [
-        "d /var/lib/buildbarn 0755 root root -"
-        "d ${workerRoot} 0751 buildbarn buildbarn -"
-        "d ${workerRoot}/cache 0700 buildbarn buildbarn -"
-        "d ${workerRoot}/build 2770 buildbarn-run buildbarn-run -"
-      ];
       systemd.services = {
         buildbarn-runner =
           service
@@ -400,12 +389,12 @@ in
             (json "runner" runnerConfig)
             [ ]
             {
-              User = "buildbarn-run";
-              Group = "buildbarn-run";
-              UMask = "0007";
               RuntimeDirectory = "buildbarn-runner";
               RuntimeDirectoryMode = "0750";
-              ReadWritePaths = [ "${workerRoot}/build" ];
+              StateDirectory = [
+                "buildbarn/worker"
+                "buildbarn/worker/build"
+              ];
               PrivateNetwork = true;
               ProtectKernelTunables = !cfg.worker.allowProcMount;
               Nice = 10;
@@ -419,10 +408,10 @@ in
             (json "worker" workerConfig)
             [ "buildbarn-runner.service" ]
             {
-              SupplementaryGroups = [ "buildbarn-run" ];
-              ReadWritePaths = [
-                "${workerRoot}/build"
-                "${workerRoot}/cache"
+              StateDirectory = [
+                "buildbarn/worker"
+                "buildbarn/worker/build"
+                "buildbarn/worker/cache"
               ];
             }
           // {
