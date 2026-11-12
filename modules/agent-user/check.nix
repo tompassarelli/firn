@@ -12,9 +12,11 @@ let
   broker = e.systemd.services.north-broker.serviceConfig.ExecStart;
   runtimeLink = e.system.activationScripts.agent-runtime-link.text;
   runtime = e.myConfig.modules.agent-runtime-link.path;
-  hookCommands = lib.concatMap (
-    entries: lib.concatMap (entry: map (hook: hook.command) entry.hooks) entries
-  ) (lib.attrValues (import ../agent-claude-managed/hooks.nix runtime));
+  hooks = import ../agent-claude-managed/hooks.nix runtime;
+  commandsOf = entries: lib.concatMap (entry: map (hook: hook.command) entry.hooks) entries;
+  hookCommands = commandsOf (lib.concatMap (event: event) (lib.attrValues hooks));
+  gatedCommands = commandsOf (hooks.PreToolUse ++ hooks.PermissionRequest);
+  brokerService = e.systemd.services.north-broker.serviceConfig;
   agentUnits = lib.filterAttrs (
     name: _: name == "north-broker" || lib.hasPrefix "agent-" name
   ) e.systemd.services;
@@ -37,11 +39,26 @@ let
       && lib.hasPrefix "/nix/store/" (toString e.environment.etc.${managed}.source);
     "the managed hooks run env and north from the runtime link, and dispatch every tool" =
       hookCommands != [ ]
-      && lib.all (command: lib.hasPrefix "${runtime}/env " command) hookCommands
+      && lib.all (command: lib.hasInfix "${runtime}/env " command) hookCommands
       && lib.any (command: lib.hasSuffix " north hook dispatch" command) hookCommands;
+    "every gated hook blocks when the runtime env is missing" =
+      gatedCommands != [ ]
+      && lib.all (command: lib.hasPrefix "test -x ${runtime}/env || exit 2; " command) gatedCommands;
     "the broker serves the agent on its own socket, by the agent's group number" =
       lib.hasInfix "--agent-socket /run/agent-brokers/broker.sock" broker
       && lib.hasInfix "--agent-gid 1500" broker;
+    "the broker runs as its own static user, in the agent group, with no capability" =
+      brokerService.User == "north-broker"
+      && brokerService.Group == "north-broker"
+      && brokerService.SupplementaryGroups == [ "agent" ]
+      && brokerService.CapabilityBoundingSet == [ "" ]
+      && brokerService.NoNewPrivileges
+      && brokerService.ProtectSystem == "strict"
+      && brokerService.PrivateTmp;
+    "the broker loads its credentials from paths, never from an operator's home" =
+      lib.length brokerService.LoadCredential == 2
+      && lib.hasPrefix "github-app.yaml:" (lib.head brokerService.LoadCredential)
+      && lib.hasPrefix "threads-ledger.key:" (lib.last brokerService.LoadCredential);
     "no unit runs as the operator, so the broker sees the agent's own credentials" = !runsAsOperator;
     "the cache seed runs once, behind a stamp only root writes" =
       e.systemd.services.agent-cache-seed.unitConfig.ConditionPathExists
@@ -53,7 +70,8 @@ let
     "a host with no agent login has no agent user" =
       !(d.users.users ? agent) && !(d.users.groups ? agent);
     "a host with no agent login writes no managed Claude settings" = !(d.environment.etc ? ${managed});
-    "a host with no agent login runs no broker for the agent" = !(d.systemd.services ? north-broker);
+    "a host with no agent login runs no broker for the agent" =
+      !(d.systemd.services ? north-broker) && !(d.users.users ? north-broker);
     "a host with no agent login seeds no caches" = !(d.systemd.services ? agent-cache-seed);
     "a host with no agent login lays no runtime link" =
       !(d.system.activationScripts ? agent-runtime-link);

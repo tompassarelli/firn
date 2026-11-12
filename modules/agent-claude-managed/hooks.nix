@@ -1,36 +1,37 @@
 runtime:
 let
-  command =
-    kind:
-    "${runtime}/env -u BASH_ENV -u ENV PATH=${runtime}:/run/current-system/sw/bin north hook ${kind}";
-  hook = kind: {
+  env = "${runtime}/env";
+  run =
+    kind: "${env} -u BASH_ENV -u ENV PATH=${runtime}:/run/current-system/sw/bin north hook ${kind}";
+  failClosed = kind: "test -x ${env} || exit 2; ${run kind}";
+  hook = command: {
     type = "command";
-    command = command kind;
+    inherit command;
     timeout = 60;
   };
   entry = kinds: {
-    hooks = map hook kinds;
+    hooks = map (kind: hook (run kind)) kinds;
   };
-  matched = matcher: kinds: {
+  gated = matcher: kinds: {
     inherit matcher;
-    hooks = map hook kinds;
+    hooks = map (kind: hook (failClosed kind)) kinds;
   };
 in
 {
-  PermissionRequest = [ (matched "Bash" [ "dispatch" ]) ];
+  PermissionRequest = [ (gated "Bash" [ "dispatch" ]) ];
   PostToolUse = [ (entry [ "dispatch" ]) ];
   PreToolUse = [
-    (matched "Write|Edit|MultiEdit|NotebookEdit|Bash" [ "language-guard" ])
-    (matched "Edit|Write|MultiEdit" [ "firn-system-policy" ])
-    (matched "Bash" [
+    (gated "Write|Edit|MultiEdit|NotebookEdit|Bash" [ "language-guard" ])
+    (gated "Edit|Write|MultiEdit" [ "firn-system-policy" ])
+    (gated "Bash" [
       "firn-system-policy"
       "dispatch"
     ])
-    (matched "Agent" [ "dispatch" ])
-    (matched "CronCreate|ScheduleWakeup" [ "dispatch" ])
-    (matched "Edit|Write|MultiEdit|NotebookEdit" [ "dispatch" ])
-    (matched "SendMessage" [ "dispatch" ])
-    (matched "AskUserQuestion" [ "dispatch" ])
+    (gated "Agent" [ "dispatch" ])
+    (gated "CronCreate|ScheduleWakeup" [ "dispatch" ])
+    (gated "Edit|Write|MultiEdit|NotebookEdit" [ "dispatch" ])
+    (gated "SendMessage" [ "dispatch" ])
+    (gated "AskUserQuestion" [ "dispatch" ])
   ];
   SessionStart = [ (entry [ "dispatch" ]) ];
   Stop = [ (entry [ "dispatch" ]) ];

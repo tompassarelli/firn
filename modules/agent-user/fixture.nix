@@ -13,6 +13,8 @@
         enable = true;
         package = pkgs.coreutils;
         policy = "/etc/north-broker/policy.toml";
+        githubAppFile = "/run/secrets/github-app.yaml";
+        threadsLedgerKeyFile = "/run/secrets/threads-ledger.key";
       };
       agent-cache-seed = {
         enable = true;
