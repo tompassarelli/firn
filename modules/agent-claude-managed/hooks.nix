@@ -3,7 +3,7 @@ let
   env = "${runtime}/env";
   run =
     kind: "${env} -u BASH_ENV -u ENV PATH=${runtime}:/run/current-system/sw/bin north hook ${kind}";
-  failClosed = kind: "test -x ${env} || exit 2; ${run kind}";
+  failClosed = kind: "test -x ${env} && test -x ${runtime}/north || exit 2; ${run kind}";
   hook = command: {
     type = "command";
     inherit command;

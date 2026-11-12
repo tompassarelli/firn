@@ -13,8 +13,10 @@
         enable = true;
         package = pkgs.coreutils;
         policy = "/etc/north-broker/policy.toml";
-        githubAppFile = "/run/secrets/github-app.yaml";
+        githubInstallationTokenFile = "/run/secrets/github-installation-token";
         threadsLedgerKeyFile = "/run/secrets/threads-ledger.key";
+        threadsLedgerHost = "ledger.fixture.invalid";
+        threadsLedgerHostKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFixtureHostKeyNotARealKey";
       };
       agent-cache-seed = {
         enable = true;

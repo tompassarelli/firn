@@ -43,7 +43,9 @@ let
       && lib.any (command: lib.hasSuffix " north hook dispatch" command) hookCommands;
     "every gated hook blocks when the runtime env is missing" =
       gatedCommands != [ ]
-      && lib.all (command: lib.hasPrefix "test -x ${runtime}/env || exit 2; " command) gatedCommands;
+      && lib.all (
+        command: lib.hasPrefix "test -x ${runtime}/env && test -x ${runtime}/north || exit 2; " command
+      ) gatedCommands;
     "the broker serves the agent on its own socket, by the agent's group number" =
       lib.hasInfix "--agent-socket /run/agent-brokers/broker.sock" broker
       && lib.hasInfix "--agent-gid 1500" broker;
@@ -54,11 +56,18 @@ let
       && brokerService.CapabilityBoundingSet == [ "" ]
       && brokerService.NoNewPrivileges
       && brokerService.ProtectSystem == "strict"
-      && brokerService.PrivateTmp;
+      && brokerService.ProtectHome
+      && brokerService.PrivateTmp
+      && brokerService.PrivateDevices;
+    "the broker's runtime directories are 0750, the mode its own socket directory check requires" =
+      brokerService.RuntimeDirectoryMode == "0750";
     "the broker loads its credentials from paths, never from an operator's home" =
       lib.length brokerService.LoadCredential == 2
-      && lib.hasPrefix "github-app.yaml:" (lib.head brokerService.LoadCredential)
+      && lib.hasPrefix "github-installation-token:" (lib.head brokerService.LoadCredential)
       && lib.hasPrefix "threads-ledger.key:" (lib.last brokerService.LoadCredential);
+    "the ledger host's key is in the system known-hosts file, so the broker's ssh needs no home" =
+      e.programs.ssh.knownHosts ? threads-ledger
+      && lib.elem "ledger.fixture.invalid" e.programs.ssh.knownHosts.threads-ledger.hostNames;
     "no unit runs as the operator, so the broker sees the agent's own credentials" = !runsAsOperator;
     "the cache seed runs once, behind a stamp only root writes" =
       e.systemd.services.agent-cache-seed.unitConfig.ConditionPathExists

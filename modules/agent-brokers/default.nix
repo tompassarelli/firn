@@ -18,13 +18,21 @@ in
       type = lib.types.str;
       description = "Absolute path of the broker's policy file, which names the grants of each caller";
     };
-    githubAppFile = lib.mkOption {
+    githubInstallationTokenFile = lib.mkOption {
       type = lib.types.str;
-      description = "Absolute path of the GitHub App key file the broker mints the agent's tokens from, loaded by systemd as a credential so the broker never reads an operator's home";
+      description = "Absolute path of the token file the broker reads fresh on each use for the GitHub credential, loaded by systemd as a credential so the broker never reads an operator's home";
     };
     threadsLedgerKeyFile = lib.mkOption {
       type = lib.types.str;
       description = "Absolute path of the threads ledger key, loaded by systemd as a credential for the ledger forward";
+    };
+    threadsLedgerHost = lib.mkOption {
+      type = lib.types.str;
+      description = "Host name of the threads ledger, whose key the broker's ssh trusts from the system known-hosts file";
+    };
+    threadsLedgerHostKey = lib.mkOption {
+      type = lib.types.str;
+      description = "Public host key of the threads ledger, in the form ssh_known_hosts reads";
     };
   };
   config = lib.mkIf cfg.enable {
@@ -45,6 +53,10 @@ in
       description = "north credential broker";
     };
     users.groups.${user} = { };
+    programs.ssh.knownHosts.threads-ledger = {
+      hostNames = [ cfg.threadsLedgerHost ];
+      publicKey = cfg.threadsLedgerHostKey;
+    };
     systemd.services.north-broker = {
       description = "north credential broker: the system socket for operator tools and the agent socket for the agent user";
       wantedBy = [ "multi-user.target" ];
@@ -55,16 +67,24 @@ in
         Group = user;
         SupplementaryGroups = [ agent.name ];
         LoadCredential = [
-          "github-app.yaml:${cfg.githubAppFile}"
+          "github-installation-token:${cfg.githubInstallationTokenFile}"
           "threads-ledger.key:${cfg.threadsLedgerKeyFile}"
         ];
         RuntimeDirectory = [
           "north-broker"
           "agent-brokers"
         ];
+        RuntimeDirectoryMode = "0750";
         NoNewPrivileges = true;
         ProtectSystem = "strict";
+        ProtectHome = true;
         PrivateTmp = true;
+        PrivateDevices = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
         CapabilityBoundingSet = [ "" ];
         ExecStart = "${cfg.package}/bin/north broker serve --socket ${systemSocket} --policy ${cfg.policy} --agent-socket ${agentSocket} --agent-gid ${toString agent.gid}";
       };
