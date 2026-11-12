@@ -47,17 +47,18 @@ let
   resetBuildDirectory = pkgs.writeShellScript "buildbarn-reset-build-directory" ''
     set -eu
     marker=/var/lib/buildbarn/build-directory-reset
-    if [ ! -e "$marker" ]; then
-      if [ -L ${buildDirectory} ]; then
-        echo "refusing to reset ${buildDirectory}: it is a symlink" >&2
-        exit 1
-      fi
-      rm -rf -- ${buildDirectory}
-      mkdir -m 2770 -- ${buildDirectory}
-      chown ${runnerUser}:${runnerUser} ${buildDirectory}
-      chmod 2770 ${buildDirectory}
-      touch "$marker"
+    if [ -e "$marker" ]; then
+      exit 0
     fi
+    cd -P -- ${buildDirectory}
+    if [ "$(${pkgs.coreutils}/bin/pwd -P)" != ${buildDirectory} ]; then
+      echo "refusing to reset ${buildDirectory}: it resolves through a symlink" >&2
+      exit 1
+    fi
+    find . -xdev -mindepth 1 -delete
+    chown ${runnerUser}:${runnerUser} .
+    chmod 2770 .
+    touch "$marker"
   '';
   runnerSocket = "/run/buildbarn-runner/runner.sock";
   frontendPort = 8980;
@@ -415,6 +416,21 @@ in
         "d ${cacheDirectory} 0700 buildbarn buildbarn -"
         "d ${buildDirectory} 2770 ${runnerUser} ${runnerUser} -"
       ];
+      systemd.services.buildbarn-build-directory-reset = {
+        description = "Empty the Buildbarn build directory once and give it to the runner user, before the runner and the worker start";
+        before = [
+          "buildbarn-runner.service"
+          "buildbarn-worker.service"
+        ];
+        requiredBy = [
+          "buildbarn-runner.service"
+          "buildbarn-worker.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = resetBuildDirectory;
+        };
+      };
     })
     (lib.mkIf cfg.worker.enable {
       systemd.services = {
@@ -441,7 +457,6 @@ in
                     Group = runnerUser;
                     UMask = "0007";
                     ReadWritePaths = [ buildDirectory ];
-                    ExecStartPre = "+${resetBuildDirectory}";
                   }
                 else
                   {
@@ -462,6 +477,7 @@ in
               if cfg.worker.runnerUser then
                 {
                   SupplementaryGroups = [ runnerUser ];
+                  UMask = "0002";
                   ReadWritePaths = [ workerRoot ];
                 }
               else
