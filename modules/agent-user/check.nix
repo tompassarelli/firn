@@ -128,6 +128,38 @@ let
   failed = lib.attrNames (lib.filterAttrs (_: ok: !ok) checks);
 in
 if failed == [ ] then
-  pkgs.runCommand "firn-agent-login" { } "touch $out"
+  pkgs.runCommand "firn-agent-login"
+    {
+      nativeBuildInputs = [
+        pkgs.git
+        pkgs.coreutils
+      ];
+    }
+    ''
+      export HOME=$TMPDIR GIT_CONFIG_GLOBAL=/dev/null
+      git init -q upstream
+      git -C upstream -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
+      run() { bash ${./checkout.sh} "$1" "file://$PWD/upstream"; }
+
+      run work/fresh
+      test -d work/fresh/.git
+
+      git -C upstream -c user.name=t -c user.email=t@t commit -q --allow-empty -m two
+      run work/fresh
+      test "$(git -C work/fresh rev-parse origin/HEAD)" = "$(git -C upstream rev-parse HEAD)"
+
+      mkdir -p work/plain && echo keep > work/plain/note
+      run work/plain && exit 1
+      test "$(cat work/plain/note)" = keep
+      test ! -e work/plain/.git
+
+      mkdir -p work/worktree && echo "gitdir: /elsewhere" > work/worktree/.git && echo keep > work/worktree/note
+      run work/worktree && exit 1
+      test "$(cat work/worktree/note)" = keep
+      test "$(cat work/worktree/.git)" = "gitdir: /elsewhere"
+
+      test -z "$(ls -A work | grep '^\.checkout\.' || true)"
+      touch $out
+    ''
 else
   throw "agent login check failed: ${lib.concatStringsSep "; " failed}"

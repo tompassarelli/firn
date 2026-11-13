@@ -8,24 +8,15 @@
 let
   cfg = config.myConfig.modules.agent-user;
   inherit (cfg) checkout;
-  git = "${pkgs.git}/bin/git";
-  path = lib.escapeShellArg checkout.path;
-  coreutils = "${pkgs.coreutils}/bin";
   script = pkgs.writeShellScript "agent-north-checkout" ''
-    set -eu
-    export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_ASKPASS=${coreutils}/false
-    parent=$(${coreutils}/dirname ${path})
-    ${coreutils}/mkdir -p "$parent"
-    if [ -d ${path}/.git ]; then
-      exec ${git} -C ${path} -c credential.helper= fetch --prune origin
-    fi
-    staging=$(${coreutils}/mktemp -d "$parent/.checkout.XXXXXX")
-    trap '${coreutils}/rm -rf "$staging"' EXIT
-    ${git} -c credential.helper= clone ${lib.escapeShellArg checkout.url} "$staging/clone"
-    if [ -e ${path} ]; then
-      ${coreutils}/mv ${path} "$staging/leftover"
-    fi
-    ${coreutils}/mv "$staging/clone" ${path}
+    export PATH=${
+      lib.makeBinPath [
+        pkgs.git
+        pkgs.coreutils
+        pkgs.bash
+      ]
+    }
+    exec bash ${./checkout.sh} ${lib.escapeShellArg checkout.path} ${lib.escapeShellArg checkout.url}
   '';
 in
 {
