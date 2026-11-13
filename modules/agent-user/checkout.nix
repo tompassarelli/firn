@@ -9,14 +9,23 @@ let
   cfg = config.myConfig.modules.agent-user;
   inherit (cfg) checkout;
   git = "${pkgs.git}/bin/git";
+  path = lib.escapeShellArg checkout.path;
+  coreutils = "${pkgs.coreutils}/bin";
   script = pkgs.writeShellScript "agent-north-checkout" ''
     set -eu
-    export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_ASKPASS=${pkgs.coreutils}/bin/false
-    ${pkgs.coreutils}/bin/mkdir -p "$(${pkgs.coreutils}/bin/dirname ${lib.escapeShellArg checkout.path})"
-    if [ -d ${lib.escapeShellArg checkout.path}/.git ]; then
-      exec ${git} -C ${lib.escapeShellArg checkout.path} -c credential.helper= fetch --prune origin
+    export GIT_TERMINAL_PROMPT=0 GIT_CONFIG_NOSYSTEM=1 GIT_ASKPASS=${coreutils}/false
+    parent=$(${coreutils}/dirname ${path})
+    ${coreutils}/mkdir -p "$parent"
+    if [ -d ${path}/.git ]; then
+      exec ${git} -C ${path} -c credential.helper= fetch --prune origin
     fi
-    exec ${git} -c credential.helper= clone ${lib.escapeShellArg checkout.url} ${lib.escapeShellArg checkout.path}
+    staging=$(${coreutils}/mktemp -d "$parent/.checkout.XXXXXX")
+    trap '${coreutils}/rm -rf "$staging"' EXIT
+    ${git} -c credential.helper= clone ${lib.escapeShellArg checkout.url} "$staging/clone"
+    if [ -e ${path} ]; then
+      ${coreutils}/mv ${path} "$staging/leftover"
+    fi
+    ${coreutils}/mv "$staging/clone" ${path}
   '';
 in
 {
@@ -55,7 +64,7 @@ in
         RemainAfterExit = true;
         User = cfg.name;
         Group = cfg.name;
-        ExecStart = script;
+        ExecStart = "-${script}";
         NoNewPrivileges = true;
         PrivateTmp = true;
       };

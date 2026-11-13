@@ -34,6 +34,7 @@ let
     "the north checkout is a oneshot as the agent user, cloning a credential-free https URL into the agent home" =
       e.systemd.services.agent-north-checkout.serviceConfig.Type == "oneshot"
       && e.systemd.services.agent-north-checkout.serviceConfig.User == "agent"
+      && lib.hasPrefix "-" e.systemd.services.agent-north-checkout.serviceConfig.ExecStart
       && lib.hasPrefix "/home/agent/" e.myConfig.modules.agent-user.checkout.path
       && !(lib.hasInfix "@" e.myConfig.modules.agent-user.checkout.url)
       && !(e.systemd.services.agent-north-checkout.serviceConfig ? EnvironmentFile);
