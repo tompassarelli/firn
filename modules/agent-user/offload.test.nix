@@ -77,7 +77,44 @@ let
     plant authorized-keys sh -c 'mkdir -p "$HOME/.ssh" && echo "ssh-ed25519 AAAAplanted lane" >>"$HOME/.ssh/authorized_keys"'
     plant slot-gitdir sh -c 'mkdir -p evil && printf "gitdir: %s/evil\n" "$PWD" >.git'
     plant commondir sh -c 'printf "%s/evil\n" "$PWD" >"$(git rev-parse --absolute-git-dir)/commondir"'
+    plant cargo-registry sh -c 'mkdir -p "$HOME/.cargo/registry/src/planted" && touch "$HOME/.cargo/registry/src/planted/lib.rs"'
+    plant sccache sh -c 'mkdir -p "$HOME/.cache/sccache/p" && touch "$HOME/.cache/sccache/p/planted"'
+    plant nix-cache touch "$HOME/.cache/nix/planted"
+    plant tmp touch /tmp/planted-tmp
+    plant runtime touch "/run/user/$(id -u)/planted-run"
+    plant capacity touch "/run/user/$(id -u)/agent-capacity-v1/planted"
+    plant locked-upper sh -c 'mkdir -p "$HOME/.cargo/locked/inner" && touch "$HOME/.cargo/locked/inner/file" && chmod 000 "$HOME/.cargo/locked/inner" "$HOME/.cargo/locked"'
+    setsid sleep 3031 </dev/null >/dev/null 2>&1 &
     touch planted
+  '';
+  crateManifest = pkgs.writeText "Cargo.toml" ''
+    [package]
+    name = "answer"
+    version = "0.1.0"
+    edition = "2021"
+  '';
+  crateMain = pkgs.writeText "main.rs" ''
+    fn main() {
+        println!("42");
+    }
+  '';
+  crateCheck = pkgs.writeText "crate-check.sh" ''
+    echo "uid $(id -u)"
+    echo "dir $(pwd)"
+    RUSTC_WRAPPER=sccache cargo build --offline -q
+    echo "built $(./target/debug/answer)"
+    sccache --show-stats | grep -E "Compile requests +[1-9]"
+  '';
+  lateCheck = pkgs.writeText "late-check.sh" ''
+    echo "uid $(id -u)"
+    echo "dir $(pwd)"
+    touch started
+    for _ in $(seq 40); do
+      if [ -e "/run/user/$(id -u)/late-marker" ]; then echo "sees the late runtime directory"; exit 0; fi
+      [ -e "$HOME/.cache/land-offload/late-mounted" ] && { echo "saw the mount"; break; }
+      sleep 0.25
+    done
+    test ! -e "/run/user/$(id -u)/late-marker" || echo "sees the late runtime directory"
   '';
   plantedCheck = pkgs.writeText "planted-check.sh" ''
     echo "uid $(id -u)"
@@ -87,6 +124,9 @@ let
     test ! -e "$HOME/hook-ran" || { echo "a hook lane A planted ran in lane B's offload"; exit 1; }
     test ! -e "$HOME/filter-ran" || { echo "a filter driver lane A planted ran in lane B's offload"; exit 1; }
     test ! -e "$HOME/git-ran" || { echo "a git lane A planted in the agent's home ran in lane B's offload"; exit 1; }
+    for p in "$HOME/.cargo/registry/src/planted" "$HOME/.cache/sccache/p/planted" "$HOME/.cache/nix/planted" /tmp/planted-tmp "/run/user/$(id -u)/planted-run"; do
+      test ! -e "$p" || { echo "lane B sees $p, which lane A planted"; exit 1; }
+    done
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -111,6 +151,10 @@ pkgs.testers.runNixOSTest {
         environment.systemPackages = [
           pkgs.git
           pkgs.bubblewrap
+          pkgs.cargo
+          pkgs.rustc
+          pkgs.sccache
+          pkgs.gcc
         ];
         programs.git = {
           enable = true;
@@ -119,7 +163,10 @@ pkgs.testers.runNixOSTest {
               name = "fixture";
               email = "fixture@example.invalid";
             };
-            safe.directory = "/srv/public/proj.git";
+            safe.directory = [
+              "/srv/public/proj.git"
+              "/srv/public/crate.git"
+            ];
           };
         };
       };
@@ -189,7 +236,7 @@ pkgs.testers.runNixOSTest {
         "install -d -o operator -g users -m 0755 /srv/public",
         "install -d -o operator -g users -m 0700 /srv/private",
     )
-    for project, forge in [("proj", "/srv/public/proj.git"), ("vault", "/srv/private/vault.git")]:
+    for project, forge in [("proj", "/srv/public/proj.git"), ("vault", "/srv/private/vault.git"), ("crate", "/srv/public/crate.git")]:
         operator(
             f"git init -q --bare -b main {forge} && mkdir -p {checkout(project)} && chmod 0700 ~/code ~/code/{project} {checkout(project)}"
             f" && cd {checkout(project)} && git init -q -b main && git remote add origin {forge}"
@@ -204,6 +251,8 @@ pkgs.testers.runNixOSTest {
     lane = commit("proj", "lane", {"check.sh": "cat ${plantingCheck}", "answer": "echo 42"})
     operator(f"git -C {checkout('proj')} checkout -q -b next")
     following = commit("proj", "next", {"check.sh": "cat ${plantedCheck}"})
+    operator(f"git -C {checkout('proj')} checkout -q -b late")
+    late_head = commit("proj", "late", {"check.sh": "cat ${lateCheck}"})
     operator(f"git -C {checkout('proj')} checkout -q main")
 
     vbase = commit("vault", "base", {"check.sh": "cat ${check}", "answer": "echo 41"})
@@ -218,6 +267,14 @@ pkgs.testers.runNixOSTest {
     operator(f"git -C {checkout('vault')} checkout -q main")
     agent("mkdir -p ~/code/vault && git init -q -b main ~/code/vault/main")
 
+    operator(f"mkdir -p {checkout('crate')}/src")
+    cbase = commit("crate", "base", {"Cargo.toml": "cat ${crateManifest}", "src/main.rs": "cat ${crateMain}", "check.sh": "cat ${crateCheck}"})
+    operator(f"git -C {checkout('crate')} push -q origin main && git -C {checkout('crate')} checkout -q -b lane")
+    clane = commit("crate", "lane", {"note": "echo lane"})
+    operator(f"git -C {checkout('crate')} checkout -q main")
+    agent("mkdir -p ~/code/crate && git clone -q /srv/public/crate.git ~/code/crate/main")
+    agent("mkdir -p /run/user/$(id -u)/agent-capacity-v1")
+
     host.fail(
         "runuser -l agent -c 'ls ${operatorHome}'",
         f"runuser -l agent -c 'cat {checkout('proj')}/check.sh'",
@@ -228,10 +285,26 @@ pkgs.testers.runNixOSTest {
     before = operator_state()
 
     planting = shipped("proj", "lane", base, lane)
-    for store in ["hooks", "object", "config", "attributes", "global-config", "global-attributes", "local-bin", "shell-rc", "authorized-keys", "slot-gitdir", "commondir"]:
+    for store in ["hooks", "object", "config", "attributes", "global-config", "global-attributes", "local-bin", "shell-rc", "authorized-keys", "slot-gitdir", "commondir", "capacity"]:
         assert f"refused {store}" in planting, f"lane A's check could write the shared {store}:\n{planting}"
+    assert "planted locked-upper" in planting, f"lane A could not leave an unreadable directory in its cache layer:\n{planting}"
+    host.succeed("sleep 1")
+    host.fail("pgrep -f '[s]leep 3031'")
     shipped("proj", "next", lane, following)
     host.succeed("test ! -e ~agent/hook-ran", "test ! -e ~agent/filter-ran", "test ! -e ~agent/git-ran", "test ! -e ~agent/rc-ran", "test ! -e ~agent/.ssh/authorized_keys")
+    host.succeed(
+        "test ! -e ~agent/.cargo/registry/src/planted",
+        "test ! -e ~agent/.cache/sccache/p/planted",
+        "test ! -e ~agent/.cache/nix/planted",
+        "test ! -e /tmp/planted-tmp",
+        f"test ! -e /run/user/{agent_uid}/planted-run",
+        f"test ! -e /run/user/{agent_uid}/agent-capacity-v1/planted",
+        "test -z \"$(find ~agent/.cache/land-offload -maxdepth 1 -name '*.own')\"",
+    )
+
+    crated = shipped("crate", "lane", cbase, clane)
+    assert "built 42" in crated, f"cargo with sccache did not build the crate confined:\n{crated}"
+    host.succeed("test -z \"$(find ~agent/.cache/sccache ~agent/.cargo -mindepth 1 -print -quit)\"")
 
     shipped("vault", "lane", vbase, vlane)
     assert held("vault") == [vlane], f"the agent's vault checkout holds {held('vault')}, not the lane it was shipped"
@@ -240,6 +313,27 @@ pkgs.testers.runNixOSTest {
     host.fail("runuser -l agent -c 'cat /etc/north/operator'")
     shipped("vault", "lane3", vlane2, vlane3)
     host.succeed("test ! -e ~agent/escaped")
+
+    host.succeed(f"systemctl stop user@{agent_uid}.service user-runtime-dir@{agent_uid}.service", f"test ! -e /run/user/{agent_uid}")
+    bundle = f"runuser -l operator -c {shlex.quote(f'${bundleFor} proj late {following}')}"
+    late = f"setpriv --reuid=agent --regid=agent --init-groups env -i HOME=/home/agent USER=agent PATH=/run/current-system/sw/bin ${remote} code/proj/main {following} {late_head} proj-late late"
+    job = shlex.quote(f"( {bundle} | {late} ) </dev/null >/tmp/late.out 2>&1; echo $? >/tmp/late.status")
+    host.succeed(f"systemd-run --collect --unit late-offload --setenv=PATH=/run/current-system/sw/bin sh -c {job}")
+    started, _ = host.execute("sh -c 'for _ in $(seq 240); do test -e ~agent/.cache/land-offload/proj-late/started && exit 0; test -s /tmp/late.status && exit 1; sleep 0.5; done; exit 2'")
+    if started != 0:
+        print(host.execute("cat /tmp/late.out; systemctl status --no-pager late-offload; journalctl --no-pager -u late-offload; ps -eo pid,user,stat,wchan:20,args")[1])
+    assert host.execute("test -e ~agent/.cache/land-offload/proj-late/started")[0] == 0, f"the check started without a runtime directory never ran:\n{host.execute('cat /tmp/late.out')[1]}"
+    host.succeed(
+        f"mkdir -p /run/user/{agent_uid} && mount -t tmpfs tmpfs /run/user/{agent_uid} && touch /run/user/{agent_uid}/late-marker && chown -R agent /run/user/{agent_uid}",
+        "touch ~agent/.cache/land-offload/late-mounted",
+    )
+    host.wait_until_succeeds("test -s /tmp/late.status", timeout=60)
+    status, output = host.succeed("cat /tmp/late.status").strip(), host.succeed("cat /tmp/late.out")
+    print(f"the check started before the runtime directory appeared exited {status}:\n{output}")
+    assert status == "0", f"a check on a host with no runtime directory failed:\n{output}"
+    assert "sees the late runtime directory" not in output, f"a runtime directory mounted mid-check showed through into the sandbox:\n{output}"
+    assert "saw the mount" in output, f"the check ended before the runtime directory was mounted, so the case tested nothing:\n{output}"
+    host.succeed("rm -f ~agent/.cache/land-offload/late-mounted")
 
     host.succeed(
         "test \"$(stat -c '%U %a' /home/agent)\" = 'agent 700'",
