@@ -7,6 +7,7 @@
       agent-user = {
         enable = true;
         gid = 1500;
+        checkout.enable = true;
         localStarts = {
           enable = true;
           package = pkgs.coreutils;

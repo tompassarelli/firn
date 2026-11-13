@@ -31,6 +31,13 @@ let
     flag: lib.elemAt starterWords (lib.lists.findFirstIndex (word: word == flag) 0 starterWords + 1);
   rule = builtins.unsafeDiscardStringContext e.security.polkit.extraConfig;
   checks = {
+    "the north checkout is a oneshot as the agent user, cloning a credential-free https URL into the agent home" =
+      e.systemd.services.agent-north-checkout.serviceConfig.Type == "oneshot"
+      && e.systemd.services.agent-north-checkout.serviceConfig.User == "agent"
+      && lib.hasPrefix "/home/agent/" e.myConfig.modules.agent-user.checkout.path
+      && !(lib.hasInfix "@" e.myConfig.modules.agent-user.checkout.url)
+      && !(e.systemd.services.agent-north-checkout.serviceConfig ? EnvironmentFile);
+    "a host with no agent login runs no north checkout" = !(d.systemd.services ? agent-north-checkout);
     "the agent user has a 0700 home and lingers" =
       e.users.users.agent.homeMode == "0700"
       && e.users.users.agent.home == "/home/agent"
