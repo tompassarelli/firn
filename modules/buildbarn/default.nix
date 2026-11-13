@@ -61,27 +61,6 @@ let
     touch "$marker"
   '';
   runnerSocket = "/run/buildbarn-runner/runner.sock";
-  identityDirectory = "/var/lib/buildbarn/identity";
-  inherit (config.networking) hostName;
-  makeIdentity = pkgs.writeShellScript "buildbarn-make-identity" ''
-    set -eu
-    umask 077
-    install -d -m 0755 -o root -g root ${identityDirectory}
-    cd ${identityDirectory}
-    if [ ! -s key.pem ] || [ ! -s cert.pem ]; then
-      ${pkgs.openssl}/bin/openssl req -x509 -newkey ed25519 -nodes -days 3650 \
-        -subj /CN=${hostName} \
-        -addext subjectAltName=DNS:${hostName} \
-        -addext extendedKeyUsage=serverAuth,clientAuth \
-        -keyout key.pem.new -out cert.pem.new
-      mv cert.pem.new cert.pem
-      mv key.pem.new key.pem
-    fi
-    chown root:root cert.pem
-    chmod 0444 cert.pem
-    chown root:buildbarn key.pem
-    chmod 0440 key.pem
-  '';
   frontendPort = 8980;
   storagePort = 8981;
   schedulerClientPort = 8982;
@@ -274,7 +253,7 @@ let
             endpoint.address = "unix://${runnerSocket}";
             inherit (cfg.worker) concurrency;
             platform.properties = platformProperties;
-            workerId.hostname = hostName;
+            workerId.hostname = config.networking.hostName;
             environmentVariables.PATH = "/run/current-system/sw/bin";
           }
         ];
@@ -390,16 +369,6 @@ in
         group = "buildbarn";
       };
       users.groups.buildbarn = { };
-      systemd.tmpfiles.rules = [ "d /var/lib/buildbarn 0755 root root -" ];
-      systemd.services.buildbarn-identity = {
-        description = "Make this host's Buildbarn key and certificate once, the key readable by root and the buildbarn user only";
-        wantedBy = [ "multi-user.target" ];
-        serviceConfig = {
-          Type = "oneshot";
-          RemainAfterExit = true;
-          ExecStart = makeIdentity;
-        };
-      };
     })
     (lib.mkIf cfg.server.enable {
       systemd.services = {
@@ -442,6 +411,7 @@ in
       };
       users.groups.${runnerUser} = { };
       systemd.tmpfiles.rules = [
+        "d /var/lib/buildbarn 0755 root root -"
         "d ${workerRoot} 0751 buildbarn buildbarn -"
         "d ${cacheDirectory} 0700 buildbarn buildbarn -"
         "d ${buildDirectory} 2770 ${runnerUser} ${runnerUser} -"
