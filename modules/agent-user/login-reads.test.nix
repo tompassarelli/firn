@@ -4,7 +4,7 @@
 }:
 
 let
-  keys = import "${pkgs.path}/nixos/tests/ssh-keys.nix" pkgs;
+  keys = import (pkgs.path + "/nixos/tests/ssh-keys.nix") pkgs;
   plant = pkgs.writeShellScript "plant-login-reads" ''
     set -eu
     for rc in .bashrc .bash_profile .bash_login .profile; do
