@@ -60,12 +60,13 @@ let
       && lib.hasPrefix "/nix/store/" (toString e.environment.etc.${managed}.source);
     "the managed hooks run env and north from the runtime link, and dispatch every tool" =
       hookCommands != [ ]
-      && lib.all (command: lib.hasInfix "${runtime}/env " command) hookCommands
+      && lib.all (command: lib.hasInfix "/run/current-system/sw/bin/env " command) hookCommands
       && lib.any (command: lib.hasSuffix " north hook dispatch" command) hookCommands;
     "every gated hook blocks when the runtime env is missing" =
       gatedCommands != [ ]
       && lib.all (
-        command: lib.hasPrefix "test -x ${runtime}/env && test -x ${runtime}/north || exit 2; " command
+        command:
+        lib.hasPrefix "test -x /run/current-system/sw/bin/env && test -x ${runtime}/north || exit 2; " command
       ) gatedCommands;
     "the broker serves the agent on its own socket, by the agent's group number" =
       lib.hasInfix "--agent-socket /run/agent-brokers/broker.sock" broker
