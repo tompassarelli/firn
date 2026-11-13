@@ -7,7 +7,6 @@ let
   storeCertificate = pkgs.writeText "store.pem" listed.store;
   key = "/var/lib/buildbarn/identity/key.pem";
   certificate = "/var/lib/buildbarn/identity/cert.pem";
-  buildDirectory = "/var/lib/buildbarn/worker/build";
   actionCache = "/var/lib/buildbarn/storage/ac";
   generationRecord = "/var/lib/buildbarn/action-cache-generation";
   generationFile = "/etc/buildbarn/store-generation";
@@ -231,8 +230,6 @@ pkgs.testers.runNixOSTest {
           for machine in [store, builder]:
               machine.succeed("${setpriv} --reuid=buildbarn --regid=buildbarn --groups=buildbarn-run ${connect runnerSocket}")
               print(machine.fail("${as "agent"} ${connect runnerSocket} 2>&1"))
-              status, output = machine.execute("${as "buildbarn-run"} ${connect runnerSocket} 2>&1")
-              print(f"observation: the runner user opening the runner's own socket on {machine.name} exits {status} {output}")
 
       with subtest("a client cannot write an action result, a holder of a listed key can"):
           refused(action_cache(client, "-plaintext", 8980, "UpdateActionResult", action_result={"exit_code": 7}), "PermissionDenied")
@@ -336,22 +333,5 @@ pkgs.testers.runNixOSTest {
           assert store.succeed("cat ${generationFile} ${generationRecord}") == "2\n2\n"
           store.succeed("test -s /var/lib/buildbarn/storage/cas/blocks")
 
-      with subtest("observation, asserted by north#1115 box 7b-runner-isolation: one action rewriting another's input"):
-          builder.succeed(workers.format("start"))
-          client.succeed("printf 'honest\\n' > /root/work/victim")
-          meddle = (
-              "end=$((SECONDS + 25)); while [ $SECONDS -lt $end ]; do"
-              " for f in $(find ${buildDirectory} -name victim 2>/dev/null); do rm -f $f; echo forged > $f; done;"
-              " sleep 0.2; done"
-          )
-          client.succeed(
-              f"cd /root/work && ({trexe} {uncached} --input-path=input -- sh -c {shlex.quote(meddle)} > /root/meddle.log 2>&1 &)"
-          )
-          status, output = client.execute(
-              f"cd /root/work && timeout 120 {trexe} {uncached} --input-path=victim --output-path=read --d=/root/victim"
-              " -- sh -c 'sleep 8; cat victim > read' 2>&1"
-          )
-          read = client.execute("cat /root/victim/read")[1].strip()
-          print(f"observation: with another action meddling, the victim action exited {status} and read: {read}")
     '';
 }

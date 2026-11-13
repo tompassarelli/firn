@@ -604,8 +604,13 @@
             (betterleaksRelease pkgs pkgs.betterleaks)
           ];
           shellHook = ''
-            pre-commit install -f --allow-missing-config 2>/dev/null
-
+            hooks=$(git rev-parse --git-common-dir 2>/dev/null)/hooks
+            for hook in pre-commit pre-push; do
+              if ! [ -x "$(sed -n 's/^INSTALL_PYTHON=//p' "$hooks/$hook" 2>/dev/null)" ]; then
+                pre-commit install -f --allow-missing-config 2>/dev/null
+                break
+              fi
+            done
           '';
         };
     };
