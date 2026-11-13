@@ -38,6 +38,12 @@ let
       && lib.hasPrefix "/home/agent/" e.myConfig.modules.agent-user.checkout.path
       && !(lib.hasInfix "@" e.myConfig.modules.agent-user.checkout.url)
       && !(e.systemd.services.agent-north-checkout.serviceConfig ? EnvironmentFile);
+    "the agent owns a worktrees directory beside the north checkout, made by tmpfiles" =
+      let
+        parent = dirOf e.myConfig.modules.agent-user.checkout.path;
+      in
+      lib.elem "d ${parent}/worktrees 0755 agent agent -" e.systemd.tmpfiles.rules
+      && lib.elem "d ${parent} 0755 agent agent -" e.systemd.tmpfiles.rules;
     "a host with no agent login runs no north checkout" = !(d.systemd.services ? agent-north-checkout);
     "the agent user has a 0700 home and lingers" =
       e.users.users.agent.homeMode == "0700"

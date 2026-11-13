@@ -41,6 +41,10 @@ in
         message = "the agent's north checkout must lie under ${cfg.home}";
       }
     ];
+    systemd.tmpfiles.rules = [
+      "d ${dirOf checkout.path} 0755 ${cfg.name} ${cfg.name} -"
+      "d ${dirOf checkout.path}/worktrees 0755 ${cfg.name} ${cfg.name} -"
+    ];
     systemd.services.agent-north-checkout = {
       description = "Clone or fetch the public north repository into the agent user's home, as the agent user, with no credential";
       wantedBy = [ "multi-user.target" ];
