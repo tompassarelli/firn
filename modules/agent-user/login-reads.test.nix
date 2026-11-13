@@ -63,5 +63,8 @@ pkgs.testers.runNixOSTest {
 
     probed = login("head -n 1 /etc/north/operator")
     assert probed == "operator", f"a bare head over the agent login ran a copy the agent can write:\n{probed}"
+
+    versioned = login("git --version")
+    assert versioned.startswith("git version "), f"git over the agent login did not run the system git:\n{versioned}"
   '';
 }

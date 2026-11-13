@@ -46,6 +46,7 @@ in
   };
   config = lib.mkIf cfg.enable {
     environment.etc."north/operator".text = operator;
+    environment.systemPackages = [ pkgs.git ];
     services.openssh.extraConfig = lib.mkIf config.services.openssh.enable (
       lib.mkAfter ''
         Match User ${cfg.name}
