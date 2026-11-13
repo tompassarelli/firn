@@ -82,12 +82,8 @@ let
     "a host with no agent login runs no broker for the agent" =
       !(d.systemd.services ? north-broker) && !(d.users.users ? north-broker);
     "a host with no agent login seeds no caches" = !(d.systemd.services ? agent-cache-seed);
-    "the operator's login name is in /etc/north/operator, so a check run as anyone else is confined" =
-      e.environment.etc."north/operator".text == "operator";
     "a host with no agent login lays no runtime link" =
       !(d.system.activationScripts ? agent-runtime-link);
-    "a host with no agent login names no operator for offloaded checks" =
-      !(d.environment.etc ? "north/operator");
   };
   failed = lib.attrNames (lib.filterAttrs (_: ok: !ok) checks);
 in

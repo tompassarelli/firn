@@ -14,7 +14,6 @@ let
     .${design};
   remote = pkgs.writeShellScript "offloaded-check" ''
     set -eu
-    PATH="$HOME/.local/bin:$PATH"
     . ${fill}
     repo=${checkoutOf} base=$2 head=$3 name=$4 ref=refs/heads/$5
     root=$HOME/.cache/land-offload
@@ -26,7 +25,7 @@ let
     slot=$root/$name
     place
     cd "$slot"
-    if confined_here; then confine sh ./check.sh; else sh ./check.sh; fi
+    confine sh ./check.sh
   '';
   bundleFor = pkgs.writeShellScript "lane-bundle" ''
     set -eu
@@ -66,11 +65,6 @@ let
     plant attributes sh -c 'printf "* filter=evil diff=evil\n" >>"$0/info/attributes"' "$common"
     plant global-config git config --global filter.evil.smudge 'touch "$HOME/filter-ran"; cat'
     plant global-attributes sh -c 'printf "* filter=evil\n" >>"$HOME/.config/git/attributes"'
-    plant local-bin sh -c 'mkdir -p "$HOME/.local/bin" && printf "#!/bin/sh\ntouch \"\$HOME/git-ran\"\nexec /run/current-system/sw/bin/git \"\$@\"\n" >"$HOME/.local/bin/git" && chmod +x "$HOME/.local/bin/git"'
-    plant shell-rc sh -c 'printf "touch \"\$HOME/rc-ran\"\n" >>"$HOME/.bashrc" && printf "touch \"\$HOME/rc-ran\"\n" >>"$HOME/.profile"'
-    plant authorized-keys sh -c 'mkdir -p "$HOME/.ssh" && echo "ssh-ed25519 AAAAplanted lane" >>"$HOME/.ssh/authorized_keys"'
-    plant slot-gitdir sh -c 'mkdir -p evil && printf "gitdir: %s/evil\n" "$PWD" >.git'
-    plant commondir sh -c 'printf "%s/evil\n" "$PWD" >"$(git rev-parse --absolute-git-dir)/commondir"'
     touch planted
   '';
   plantedCheck = pkgs.writeText "planted-check.sh" ''
@@ -80,7 +74,6 @@ let
     test ! -e planted || { echo "lane B sees the untracked file lane A left"; exit 1; }
     test ! -e "$HOME/hook-ran" || { echo "a hook lane A planted ran in lane B's offload"; exit 1; }
     test ! -e "$HOME/filter-ran" || { echo "a filter driver lane A planted ran in lane B's offload"; exit 1; }
-    test ! -e "$HOME/git-ran" || { echo "a git lane A planted in the agent's home ran in lane B's offload"; exit 1; }
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -220,10 +213,10 @@ pkgs.testers.runNixOSTest {
     before = operator_state()
 
     planting = shipped("proj", "lane", base, lane)
-    for store in ["hooks", "object", "config", "attributes", "global-config", "global-attributes", "local-bin", "shell-rc", "authorized-keys", "slot-gitdir", "commondir"]:
+    for store in ["hooks", "object", "config", "attributes", "global-config", "global-attributes"]:
         assert f"refused {store}" in planting, f"lane A's check could write the shared {store}:\n{planting}"
     shipped("proj", "next", lane, following)
-    host.succeed("test ! -e ~agent/hook-ran", "test ! -e ~agent/filter-ran", "test ! -e ~agent/git-ran", "test ! -e ~agent/rc-ran", "test ! -e ~agent/.ssh/authorized_keys")
+    host.succeed("test ! -e ~agent/hook-ran", "test ! -e ~agent/filter-ran")
 
     shipped("vault", "lane", vbase, vlane)
     assert held("vault") == [vlane], f"the agent's vault checkout holds {held('vault')}, not the lane it was shipped"

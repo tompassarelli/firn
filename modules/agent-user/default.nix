@@ -31,7 +31,6 @@ in
     };
   };
   config = lib.mkIf cfg.enable {
-    environment.etc."north/operator".text = operator;
     users.groups.${cfg.name} = {
       inherit (cfg) gid;
     };
