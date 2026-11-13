@@ -1,10 +1,13 @@
 {
   pkgs,
   fill,
+  source,
+  rustPlatform,
   design ? "agent-owned",
 }:
 
 let
+  runtime = import ./north-runtime.nix { inherit pkgs rustPlatform source; };
   operatorHome = "/home/operator";
   checkoutOf =
     {
@@ -135,13 +138,22 @@ pkgs.testers.runNixOSTest {
   nodes.host =
     { lib, ... }:
     {
-      imports = [ ./default.nix ];
+      imports = [
+        ./default.nix
+        ../agent-runtime-link
+      ];
       options.myConfig.modules.users.username = lib.mkOption { type = lib.types.str; };
       config = {
-        myConfig.modules.users.username = "operator";
-        myConfig.modules.agent-user = {
-          enable = true;
-          gid = 1500;
+        myConfig.modules = {
+          users.username = "operator";
+          agent-user = {
+            enable = true;
+            gid = 1500;
+          };
+          agent-runtime-link = {
+            enable = true;
+            target = "${runtime}";
+          };
         };
         users.users.operator = {
           isNormalUser = true;
@@ -173,6 +185,7 @@ pkgs.testers.runNixOSTest {
     };
 
   testScript = ''
+    import json
     import shlex
 
 
@@ -334,6 +347,38 @@ pkgs.testers.runNixOSTest {
     assert "sees the late runtime directory" not in output, f"a runtime directory mounted mid-check showed through into the sandbox:\n{output}"
     assert "saw the mount" in output, f"the check ended before the runtime directory was mounted, so the case tested nothing:\n{output}"
     host.succeed("rm -f ~agent/.cache/land-offload/late-mounted")
+
+    def sandboxed(command):
+        line = "/var/lib/agent-runtime/current/worker-sandbox " + shlex.quote(command)
+        return host.execute(f"runuser -l agent -c {shlex.quote(line)}")
+
+
+    north = "/var/lib/agent-runtime/current/north"
+    agent("mkdir -p ~/stash-scratch && cd ~/stash-scratch && git init -q && echo a > file && git add file && git -c user.name=agent -c user.email=agent@example.invalid commit -qm init && echo b > file")
+    tool_server_initialize = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "vm-check", "version": "0"}}})
+    stash_hook_input = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": "/home/agent/stash-scratch", "tool_input": {"command": "git stash"}})
+    commands = {
+        "prefix uid": "id -u",
+        "runtime health": f"{north} runtime health",
+        "stash guard": f"cd ~/stash-scratch && printf '%s' {shlex.quote(stash_hook_input)} | AGENT_NO_AUTHORING_HOOKS=0 {north} hook pre-bash",
+        "stash guard without the setting (observed, not asserted)": f"cd ~/stash-scratch && printf '%s' {shlex.quote(stash_hook_input)} | {north} hook pre-bash; echo hook-exit=$?",
+        "capacity status": f"{north} capacity host status",
+        "capacity backlog": f"{north} capacity host backlog",
+        "fleet send help": f"{north} fleet send --help",
+        "tool server startup": f"printf '%s\\n' '{tool_server_initialize}' | timeout 10 {north} --tool-server finish; echo tool-server-exit=$?",
+    }
+    results = {}
+    for name, command in commands.items():
+        results[name] = sandboxed(command)
+        print(f"{name}: exit {results[name][0]}\n{results[name][1]}")
+    print("per-command exit codes: " + ", ".join(f"{name}={status}" for name, (status, _) in results.items()))
+    assert results["prefix uid"][0] == 0 and results["prefix uid"][1].strip() == agent_uid, f"the sandboxed id -u was {results['prefix uid']}, not the agent's uid {agent_uid}"
+    assert results["stash guard"][0] == 0 and '"deny"' in results["stash guard"][1], f"the pre-bash hook did not refuse git stash: {results['stash guard']}"
+    assert agent("cat ~/stash-scratch/file") == "b", "the stash refusal left the modified file changed"
+    assert results["runtime health"][0] != 0 and "/home/operator" not in results["runtime health"][1] and ".local/state/north" not in results["runtime health"][1], f"the agent login answered runtime health from an operator path: {results['runtime health']}"
+    for name in ["capacity status", "capacity backlog", "fleet send help"]:
+        assert results[name][0] == 0, f"{name} failed under the published runtime's prefix: {results[name]}"
+    assert '"result"' in results["tool server startup"][1], f"the tool server did not answer an initialize request: {results['tool server startup']}"
 
     host.succeed(
         "test \"$(stat -c '%U %a' /home/agent)\" = 'agent 700'",

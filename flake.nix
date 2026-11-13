@@ -525,9 +525,16 @@
         buildbarn-runner-isolation = import ./modules/buildbarn/runner-isolation.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
         };
+        agent-north-runtime = import ./modules/agent-user/north-runtime.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          source = inputs.north-source;
+          rustPlatform = nixpkgs-unstable.legacyPackages.x86_64-linux.rustPlatform;
+        };
         agent-offload = import ./modules/agent-user/offload.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
           fill = "${inputs.north-source}/crates/north-runtime/src/land_offload/ship/fill.sh";
+          source = inputs.north-source;
+          rustPlatform = nixpkgs-unstable.legacyPackages.x86_64-linux.rustPlatform;
         };
         agent-login-reads = import ./modules/agent-user/login-reads.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
