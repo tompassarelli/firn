@@ -58,6 +58,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:0xc000022070/zen-browser-flake";
     };
+    north-source = {
+      url = "github:tompassarelli/north";
+      flake = false;
+    };
   };
   outputs =
     inputs@{
@@ -513,6 +517,7 @@
         };
         agent-offload = import ./modules/agent-user/offload.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          fill = "${inputs.north-source}/crates/north-runtime/src/land_offload/ship/fill.sh";
         };
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;

@@ -1,40 +1,64 @@
 {
   pkgs,
+  fill,
   design ? "agent-owned",
 }:
 
 let
-  origin = "/srv/origin/proj.git";
-  relative = "code/proj/main";
-  operatorCheckout = "/home/operator/${relative}";
+  operatorHome = "/home/operator";
   checkoutOf =
     {
       agent-owned = "\"$HOME/$1\"";
-      operator-checkout = operatorCheckout;
+      operator-checkout = "${operatorHome}/$1";
     }
     .${design};
   remote = pkgs.writeShellScript "offloaded-check" ''
     set -eu
-    repo=${checkoutOf} base=$2 head=$3 name=$4 branch=$5 ref=refs/land-offload/$4
+    . ${fill}
+    repo=${checkoutOf} base=$2 head=$3 name=$4 ref=refs/heads/$5
     root=$HOME/.cache/land-offload
     mkdir -p "$root"
     bundle=$(mktemp "$root/$name.bundle.XXXXXX")
     trap 'rm -f "$bundle"; git -C "$repo" update-ref -d "$ref" 2>/dev/null || true' EXIT
     cat >"$bundle"
-    if ! git -C "$repo" bundle verify -q "$bundle"; then
-      git -C "$repo" fetch -q --no-auto-maintenance origin || true
-      git -C "$repo" bundle verify -q "$bundle" || { echo "offload: $repo lacks the commits under $base" >&2; exit 97; }
-    fi
-    git -C "$repo" fetch -q --no-auto-maintenance "$bundle" "+refs/heads/$branch:$ref"
+    fill
     slot=$root/$name
-    if [ -e "$slot/.git" ]; then git -C "$slot" checkout -q --detach -f "$head"; else git -C "$repo" worktree add -q --detach "$slot" "$head"; fi
+    place
     cd "$slot"
     sh ./check.sh
   '';
   bundleFor = pkgs.writeShellScript "lane-bundle" ''
     set -eu
-    cd ${operatorCheckout}
-    git bundle create -q - refs/heads/"$1" "^$2"
+    cd ${operatorHome}/code/"$1"/main
+    branch=$2
+    shift 2
+    cuts=
+    for commit in "$@"; do cuts="$cuts ^$commit"; done
+    git bundle create -q - refs/heads/"$branch" $cuts
+  '';
+  check = pkgs.writeText "check.sh" ''
+    echo "uid $(id -u)"
+    echo "dir $(pwd)"
+    test "$(cat answer)" = 42
+  '';
+  plantingCheck = pkgs.writeText "planting-check.sh" ''
+    echo "uid $(id -u)"
+    echo "dir $(pwd)"
+    test "$(cat answer)" = 42
+    hooks=$(git rev-parse --git-common-dir)/hooks
+    mkdir -p "$hooks"
+    for hook in post-checkout reference-transaction; do
+      printf '#!/bin/sh\ntouch "$HOME/hook-ran"\n' >"$hooks/$hook"
+      chmod +x "$hooks/$hook"
+    done
+    touch planted
+  '';
+  plantedCheck = pkgs.writeText "planted-check.sh" ''
+    echo "uid $(id -u)"
+    echo "dir $(pwd)"
+    test "$(cat answer)" = 42
+    test ! -e planted || { echo "lane B sees the untracked file lane A left"; exit 1; }
+    test ! -e "$HOME/hook-ran" || { echo "a hook lane A planted ran in lane B's offload"; exit 1; }
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -64,7 +88,7 @@ pkgs.testers.runNixOSTest {
               name = "fixture";
               email = "fixture@example.invalid";
             };
-            safe.directory = origin;
+            safe.directory = "/srv/public/proj.git";
           };
         };
       };
@@ -72,8 +96,6 @@ pkgs.testers.runNixOSTest {
 
   testScript = ''
     import shlex
-
-    checkout = "${operatorCheckout}"
 
 
     def operator(command):
@@ -84,68 +106,106 @@ pkgs.testers.runNixOSTest {
         return host.succeed(f"runuser -l agent -c {shlex.quote(command)}").strip()
 
 
-    def offload(branch, base, head):
-        bundle = f"runuser -l operator -c {shlex.quote(f'${bundleFor} {branch} {base}')}"
-        check = f"runuser -l agent -c {shlex.quote(f'${remote} ${relative} {base} {head} proj-lane {branch}')}"
+    def checkout(project):
+        return f"${operatorHome}/code/{project}/main"
+
+
+    def offload(project, branch, base, head, cuts):
+        bundle = f"runuser -l operator -c {shlex.quote(f'${bundleFor} {project} {branch} ' + ' '.join(cuts))}"
+        check = f"runuser -l agent -c {shlex.quote(f'${remote} code/{project}/main {base} {head} {project}-lane {branch}')}"
         status, output = host.execute(f"{bundle} | {check} 2>&1")
-        print(f"the offloaded check of {branch} exited {status}:\n{output}")
+        print(f"the offloaded check of {project} {branch} cut at {cuts} exited {status}:\n{output}")
+        return status, output
+
+
+    def held(project):
+        tips = agent(f"git -C ~/code/{project}/main for-each-ref --format='%(objectname)'").split()
+        known = operator(
+            f"printf '%s\\n' {' '.join(tips)} | git -C {checkout(project)} cat-file --batch-check='%(objectname) %(objecttype)'"
+        ) if tips else ""
+        return [line.split()[0] for line in known.splitlines() if line.endswith(" commit")]
+
+
+    def shipped(project, branch, base, head):
+        status, output = offload(project, branch, base, head, [base])
+        if status == 97:
+            status, output = offload(project, branch, base, head, held(project))
         ran = dict(line.split(" ", 1) for line in output.splitlines() if line.startswith(("uid ", "dir ")))
-        return status, output, ran
+        assert status == 0, f"the offloaded check of {project} {branch} failed as the agent:\n{output}"
+        assert ran.get("uid") == agent_uid, f"the check ran as uid {ran.get('uid')}, not the agent's {agent_uid}"
+        assert ran.get("dir", "").startswith("/home/agent/"), f"the check ran in {ran.get('dir')}, outside the agent's home"
 
 
     def operator_state():
         return operator(
-            f"cd {checkout} && git rev-parse HEAD && git --no-optional-locks status --porcelain"
-            f" && find {checkout} -printf '%p %T@ %m %u\\n' | sort"
+            "for c in ~/code/*/main; do git -C $c rev-parse HEAD && git -C $c --no-optional-locks status --porcelain"
+            " && find $c -printf '%p %T@ %m %u\\n' | sort; done"
         )
+
+
+    def commit(project, message, files):
+        steps = " && ".join(f"{source} > {name}" for name, source in files.items())
+        operator(f"cd {checkout(project)} && {steps} && git add -A && git commit -q -m {message}")
+        return operator(f"git -C {checkout(project)} rev-parse HEAD")
 
 
     host.start()
     host.wait_for_unit("multi-user.target")
     agent_uid = host.succeed("id -u agent").strip()
 
-    host.succeed("install -d -o operator -g users -m 0755 /srv/origin ${origin}")
-    operator(f"git init -q --bare -b main ${origin} && mkdir -p {checkout} && chmod 0700 ~/code ~/code/proj {checkout}")
-    operator(
-        f"cd {checkout} && git init -q -b main && git remote add origin ${origin}"
-        " && printf 'echo uid $(id -u)\\necho dir $(pwd)\\ntest \"$(cat answer)\" = 42\\n' > check.sh && echo 40 > answer"
-        " && git add -A && git commit -q -m old && git push -q origin main"
+    host.succeed(
+        "install -d -o operator -g users -m 0755 /srv/public",
+        "install -d -o operator -g users -m 0700 /srv/private",
     )
-    agent("mkdir -p ~/code/proj && git clone -q ${origin} ~/${relative}")
-    operator(
-        f"cd {checkout} && echo 41 > answer && git commit -q -am base && git push -q origin main"
-        " && git checkout -q -b lane && echo 42 > answer && git commit -q -am lane"
-        " && git checkout -q -b next && echo next > note && git add note && git commit -q -m next"
-        " && git checkout -q main"
-    )
-    base = operator(f"git -C {checkout} rev-parse main")
-    lane = operator(f"git -C {checkout} rev-parse lane")
-    following = operator(f"git -C {checkout} rev-parse next")
-    host.succeed("test \"$(stat -c '%a' /home/operator)\" = 700", f"test \"$(stat -c '%a' {checkout})\" = 700")
-    host.fail(f"runuser -l agent -c 'git -C ~/${relative} cat-file -e {base}'")
-    before = operator_state()
+    for project, forge in [("proj", "/srv/public/proj.git"), ("vault", "/srv/private/vault.git")]:
+        operator(
+            f"git init -q --bare -b main {forge} && mkdir -p {checkout(project)} && chmod 0700 ~/code ~/code/{project} {checkout(project)}"
+            f" && cd {checkout(project)} && git init -q -b main && git remote add origin {forge}"
+        )
+    host.succeed("test \"$(stat -c '%a' ${operatorHome})\" = 700")
+
+    commit("proj", "old", {"check.sh": "cat ${check}", "answer": "echo 40"})
+    operator(f"git -C {checkout('proj')} push -q origin main")
+    agent("mkdir -p ~/code/proj && git clone -q /srv/public/proj.git ~/code/proj/main")
+    base = commit("proj", "base", {"answer": "echo 41"})
+    operator(f"git -C {checkout('proj')} push -q origin main && git -C {checkout('proj')} checkout -q -b lane")
+    lane = commit("proj", "lane", {"check.sh": "cat ${plantingCheck}", "answer": "echo 42"})
+    operator(f"git -C {checkout('proj')} checkout -q -b next")
+    following = commit("proj", "next", {"check.sh": "cat ${plantedCheck}"})
+    operator(f"git -C {checkout('proj')} checkout -q main")
+
+    vbase = commit("vault", "base", {"check.sh": "cat ${check}", "answer": "echo 41"})
+    operator(f"git -C {checkout('vault')} push -q origin main && git -C {checkout('vault')} checkout -q -b lane")
+    vlane = commit("vault", "lane", {"answer": "echo 42"})
+    operator(f"git -C {checkout('vault')} checkout -q main")
+    vbase2 = commit("vault", "base2", {"note": "echo second"})
+    operator(f"git -C {checkout('vault')} push -q origin main && git -C {checkout('vault')} checkout -q -b lane2")
+    vlane2 = commit("vault", "lane2", {"answer": "echo 42"})
+    operator(f"git -C {checkout('vault')} checkout -q main")
+    agent("mkdir -p ~/code/vault && git init -q -b main ~/code/vault/main")
 
     host.fail(
-        "runuser -l agent -c 'ls /home/operator'",
-        f"runuser -l agent -c 'cat {checkout}/check.sh'",
-        f"runuser -l agent -c 'git -C {checkout} cat-file -e {base}'",
+        "runuser -l agent -c 'ls ${operatorHome}'",
+        f"runuser -l agent -c 'cat {checkout('proj')}/check.sh'",
+        f"runuser -l agent -c 'git -C {checkout('proj')} cat-file -e {base}'",
+        "runuser -l agent -c 'ls /srv/private'",
+        f"runuser -l agent -c 'git -C ~/code/proj/main cat-file -e {base}'",
     )
+    before = operator_state()
 
-    status, output, ran = offload("lane", base, lane)
-    assert status == 0, f"the offloaded check of a lane failed as the agent:\n{output}"
-    assert ran.get("uid") == agent_uid, f"the check ran as uid {ran.get('uid')}, not the agent's {agent_uid}"
-    assert ran.get("dir", "").startswith("/home/agent/"), f"the check ran in {ran.get('dir')}, outside the agent's home"
+    shipped("proj", "lane", base, lane)
+    shipped("proj", "next", lane, following)
+    host.succeed("test -x ~agent/code/proj/main/.git/hooks/post-checkout", "test ! -e ~agent/hook-ran")
 
-    status, output, ran = offload("next", lane, following)
-    assert status == 0, f"the agent's object store kept no commit of the lane it was shipped:\n{output}"
-    assert ran.get("uid") == agent_uid, f"the next check ran as uid {ran.get('uid')}"
+    shipped("vault", "lane", vbase, vlane)
+    assert held("vault") == [vlane], f"the agent's vault checkout holds {held('vault')}, not the lane it was shipped"
+    shipped("vault", "lane2", vbase2, vlane2)
 
     host.succeed(
         "test \"$(stat -c '%U %a' /home/agent)\" = 'agent 700'",
-        "test \"$(stat -c %U /home/agent/${relative}/.git/objects)\" = agent",
         "test -z \"$(find /home/agent -not -user agent -print)\"",
     )
     after = operator_state()
-    assert after == before, f"the operator's checkout changed:\n{before}\n---\n{after}"
+    assert after == before, f"the operator's checkouts changed:\n{before}\n---\n{after}"
   '';
 }

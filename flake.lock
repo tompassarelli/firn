@@ -405,6 +405,22 @@
         "type": "github"
       }
     },
+    "north-source": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794534491,
+        "narHash": "sha256-XxnZ+wWJm0g0wvQBk5s1B2L9S3Hm5ISvPar07gYR4zY=",
+        "owner": "tompassarelli",
+        "repo": "north",
+        "rev": "954a21398acf921ae5fd503e19719f66a00f0ddd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "tompassarelli",
+        "repo": "north",
+        "type": "github"
+      }
+    },
     "nur": {
       "inputs": {
         "flake-parts": "flake-parts",
@@ -482,6 +498,7 @@
         "nixpkgs": "nixpkgs",
         "nixpkgs-master": "nixpkgs-master",
         "nixpkgs-unstable": "nixpkgs-unstable",
+        "north-source": "north-source",
         "nur": "nur",
         "quickshell": "quickshell",
         "slippi": "slippi",
