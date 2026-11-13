@@ -622,6 +622,7 @@
         in
         pkgs.mkShell {
           packages = [
+            pkgs.git
             pkgs.pre-commit
             (betterleaksRelease pkgs pkgs.betterleaks)
           ];
