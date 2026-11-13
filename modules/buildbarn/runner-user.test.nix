@@ -5,6 +5,8 @@ let
   buildDirectory = "${workerRoot}/build";
   cacheDirectory = "${workerRoot}/cache";
   marker = "/var/lib/buildbarn/build-directory-reset";
+  identity = "/var/lib/buildbarn/identity";
+  openssl = "${pkgs.openssl}/bin/openssl";
   as = user: "${pkgs.util-linux}/bin/setpriv --reuid=${user} --regid=${user} --init-groups";
 in
 pkgs.testers.runNixOSTest {
@@ -19,6 +21,16 @@ pkgs.testers.runNixOSTest {
         diskSize = 4096;
       };
       environment.systemPackages = [ pkgs.buildbox ];
+      users.users.agent = {
+        isNormalUser = true;
+        group = "agent";
+      };
+      users.users.operator = {
+        isNormalUser = true;
+        group = "operator";
+      };
+      users.groups.agent = { };
+      users.groups.operator = { };
       myConfig.modules.buildbarn = {
         server = {
           enable = true;
@@ -119,6 +131,28 @@ pkgs.testers.runNixOSTest {
               f"systemctl show -P {dependency} buildbarn-worker.service | tr ' ' '\\n' | grep -qx buildbarn-build-directory-reset.service"
           )
 
+      def identity_fingerprint():
+          return host.succeed("sha256sum ${identity}/key.pem ${identity}/cert.pem")
+
+
+      host.wait_for_unit("buildbarn-identity.service")
+      host.succeed(
+          "test \"$(stat -c '%a %U %G' ${identity}/key.pem)\" = '440 root buildbarn'",
+          "test \"$(stat -c '%a %U %G' ${identity}/cert.pem)\" = '444 root root'",
+          "test \"$(stat -c '%a %U %G' ${identity})\" = '755 root root'",
+          "${as "buildbarn"} cat ${identity}/key.pem > /dev/null",
+          "${openssl} x509 -in ${identity}/cert.pem -noout -checkhost host | grep -F 'does match'",
+          "${openssl} x509 -in ${identity}/cert.pem -noout -checkend 300000000",
+          "${openssl} x509 -in ${identity}/cert.pem -noout -ext extendedKeyUsage | grep -F 'TLS Web Client Authentication'",
+          "test \"$(${openssl} pkey -in ${identity}/key.pem -pubout)\" = \"$(${openssl} x509 -in ${identity}/cert.pem -noout -pubkey)\"",
+      )
+      for user in ["buildbarn-run", "agent", "operator"]:
+          print(host.fail(f"${pkgs.util-linux}/bin/setpriv --reuid={user} --regid={user} --init-groups cat ${identity}/key.pem 2>&1"))
+      made = identity_fingerprint()
+      host.succeed("chmod 0644 ${identity}/key.pem", "chown buildbarn-run ${identity}/key.pem", "systemctl restart buildbarn-identity")
+      host.succeed("test \"$(stat -c '%a %U %G' ${identity}/key.pem)\" = '440 root buildbarn'")
+      assert identity_fingerprint() == made, "a restart of the identity unit replaced the key"
+
       host.succeed("systemctl restart buildbarn-runner")
       settled("a runner restart with the marker present")
 
@@ -148,6 +182,16 @@ pkgs.testers.runNixOSTest {
       host.succeed(f"test \"$(sha256sum < /root/outputs/copy | cut -d' ' -f1)\" = {digest}")
       host.succeed("test \"$(cat /root/outputs/ls-status)\" != 0")
       host.fail("journalctl --no-pager -u buildbarn-runner -u buildbarn-worker | grep -F 'Failed to add cached file'")
+
+      host.succeed("mkdir -p /root/key-probe")
+      status, output = remote(
+          "cat ${identity}/key.pem > key-copy 2> key-error; echo $? > key-status",
+          "--input-path=input", "--output-path=key-copy", "--output-path=key-error", "--output-path=key-status",
+          "--d=/root/key-probe",
+      )
+      assert status == 0, f"the key-reading action did not run:\n{output}\n{journal()}"
+      print(host.succeed("cat /root/key-probe/key-status /root/key-probe/key-error"))
+      host.succeed("test \"$(cat /root/key-probe/key-status)\" != 0", "test ! -s /root/key-probe/key-copy")
 
 
       def enable_after_off(tmpfiles_first):
