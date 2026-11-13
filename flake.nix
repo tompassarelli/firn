@@ -511,6 +511,9 @@
         buildbarn-runner-user = import ./modules/buildbarn/runner-user.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
         };
+        agent-offload = import ./modules/agent-user/offload.test.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        };
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
