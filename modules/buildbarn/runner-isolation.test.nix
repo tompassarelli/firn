@@ -37,6 +37,7 @@ pkgs.testers.runNixOSTest {
       };
       myConfig.modules.buildbarn = {
         identifiedWorkers = true;
+        storeGeneration = 1;
         identities.host = identified.certificate;
         server = {
           enable = true;
@@ -140,6 +141,35 @@ pkgs.testers.runNixOSTest {
       host.succeed("mkdir -p /root/client", "printf 'original bytes\\n' > /root/client/input")
       digest = host.succeed("sha256sum < /root/client/input").strip()
       print(f"an empty action takes {remote('true'):.2f} s")
+
+      with subtest("the action cache was emptied for generation 1 before the store started, and only root writes the generation"):
+          emptied = int(host.succeed("systemctl show -P ExecMainExitTimestampMonotonic buildbarn-action-cache-generation.service"))
+          stored = int(host.succeed("systemctl show -P ExecMainStartTimestampMonotonic buildbarn-storage.service"))
+          assert 0 < emptied <= stored, f"emptied at {emptied}, store started at {stored}"
+          print(host.succeed("journalctl --no-pager -o cat -u buildbarn-action-cache-generation | grep '^store generation none -> 1: '"))
+          attempts = [
+              "echo 9 > /etc/buildbarn/store-generation",
+              "mv /etc/buildbarn/store-generation /etc/buildbarn/moved",
+              "touch /etc/buildbarn/added",
+          ]
+          remote(
+              "\n".join(f"({attempt}) 2>> refusals; echo $? >> statuses" for attempt in attempts) + "\nid -un > who",
+              outputs=("refusals", "statuses", "who"),
+          )
+          print(f"{output('who').strip()} in an action on the generation file:\n{output('refusals')}")
+          assert output("who").strip() in slot_users, output("who")
+          statuses = output("statuses").split()
+          assert len(statuses) == len(attempts) and "0" not in statuses, statuses
+          for user in slot_users + ["agent"]:
+              for attempt in attempts:
+                  host.fail(
+                      f"${pkgs.util-linux}/bin/setpriv --reuid={user} --regid={user} --init-groups sh -c {shlex.quote(attempt)}"
+                  )
+          host.succeed(
+              "test \"$(cat /etc/buildbarn/store-generation)\" = 1",
+              "test ! -e /etc/buildbarn/moved",
+              "test ! -e /etc/buildbarn/added",
+          )
 
       with subtest("an action cannot touch the files or the processes of one running beside it"):
           background(
@@ -260,6 +290,50 @@ pkgs.testers.runNixOSTest {
           assert set(holders) == set(slot_users), holders
           host.succeed(f"kill {' '.join(holders.values())}")
 
+      with subtest("an action in either slot reaches no listener and no inner socket of the store"):
+          address = "${nodes.host.networking.primaryIPAddress}"
+          inner = ["/run/buildbarn-storage/storage.sock", "/run/buildbarn-scheduler/client.sock"]
+          reaches = [
+              (f"{target}:{port}", f"TCP:{target}:{port},connect-timeout=3")
+              for target in [address, "127.0.0.1"]
+              for port in [8980, 8983, 8984]
+          ] + [(path, f"UNIX-CONNECT:{path}") for path in inner]
+          reach = "\n".join(
+              f"socat -u OPEN:/dev/null {to} 2>> refusals; echo \"{name} $?\" >> statuses" for name, to in reaches
+          )
+          for port in [8980, 8983, 8984]:
+              host.succeed(f"socat -u OPEN:/dev/null TCP:{address}:{port},connect-timeout=3")
+          for path in inner:
+              host.succeed(f"socat -u OPEN:/dev/null UNIX-CONNECT:{path}")
+          for number, user in enumerate(slot_users):
+              host.wait_until_fails(f"pgrep -x sleep -u {','.join(slot_users)}", timeout=60)
+              holders = dict([occupy(3150 + 2 * number)[::-1], occupy(3151 + 2 * number)[::-1]])
+              assert set(holders) == set(slot_users), holders
+              host.succeed(f"kill {holders[user]}")
+              host.wait_until_fails(f"pgrep -u {user} -x sleep", timeout=60)
+              control = "\n".join([
+                  "socat UNIX-LISTEN:/tmp/control.sock OPEN:/dev/null &",
+                  "tries=0; until [ -S /tmp/control.sock ] || [ $tries -ge 50 ]; do tries=$((tries + 1)); sleep 0.1; done",
+                  "socat -u OPEN:/dev/null UNIX-CONNECT:/tmp/control.sock; echo \"control $?\" > statuses",
+              ])
+              remote(f"{control}\n{reach}\nid -un > who", outputs=("refusals", "statuses", "who"))
+              assert output("who").strip() == user, output("who")
+              print(f"what an action of {user} reaches:\n{output('statuses')}{output('refusals')}")
+              statuses = output("statuses").splitlines()
+              assert statuses[0] == "control 0", f"the action's own connection failed: {statuses}"
+              assert len(statuses) == 1 + len(reaches) and all(line.endswith(" 1") for line in statuses[1:]), statuses
+              errors = [line for line in output("refusals").splitlines() if " E " in line]
+              assert len(errors) == len(reaches), output("refusals")
+              for line in errors:
+                  assert line.endswith(("Connection refused", "Network is unreachable", "Permission denied")), line
+              host.succeed(f"kill {' '.join(pid for holder, pid in holders.items() if holder != user)}")
+              for path in inner:
+                  message = host.fail(
+                      f"${pkgs.util-linux}/bin/setpriv --reuid={user} --regid={user} --init-groups"
+                      f" socat -u OPEN:/dev/null UNIX-CONNECT:{path} 2>&1"
+                  )
+                  assert "Permission denied" in message, message
+
       with subtest("only the worker opens a runner's socket"):
           for path in sockets:
               host.succeed(f"${as "buildbarn"} socat -u OPEN:/dev/null UNIX-CONNECT:{path}")
@@ -270,6 +344,20 @@ pkgs.testers.runNixOSTest {
                   )
                   print(f"{user} on {path}: {message.strip()}")
                   assert "Permission denied" in message, message
+
+      with subtest("a link a slot's user puts where its runner's socket goes is refused and its target keeps its owner"):
+          close = "${nodes.host.systemd.services.buildbarn-runner-0.serviceConfig.ExecStartPost}".lstrip("+").split()[0]
+          host.succeed(
+              "systemd-run --unit=link-target socat UNIX-LISTEN:/run/link-target.sock,fork OPEN:/dev/null",
+              "install -d -o buildbarn-run-0 -g buildbarn-run-0 -m 0750 /run/planted",
+          )
+          host.wait_until_succeeds("test -S /run/link-target.sock", timeout=60)
+          before = host.succeed("stat -c '%a %U %G' /run/link-target.sock")
+          host.succeed("${as "buildbarn-run-0"} ln -s /run/link-target.sock /run/planted/runner.sock")
+          print(f"closing a planted link: {host.fail(f'{close} planted 2>&1').strip()}")
+          assert host.succeed("stat -c '%a %U %G' /run/link-target.sock") == before, before
+          host.succeed("test \"$(stat -c '%a %U' /run/planted)\" = '700 buildbarn'")
+          host.fail("${as "buildbarn-run-0"} rm /run/planted/runner.sock")
 
       for unit in units:
           host.succeed(f"systemctl is-active {unit}")

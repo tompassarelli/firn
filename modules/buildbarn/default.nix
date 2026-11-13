@@ -224,8 +224,13 @@ let
       [ "$tries" -lt 300 ] || exit 1
       ${pkgs.coreutils}/bin/sleep 0.1
     done
-    ${pkgs.coreutils}/bin/chown buildbarn:buildbarn "$directory" "$directory/runner.sock"
+    ${pkgs.coreutils}/bin/chown -h buildbarn:buildbarn "$directory"
     ${pkgs.coreutils}/bin/chmod 0700 "$directory"
+    if [ -L "$directory/runner.sock" ] || [ ! -S "$directory/runner.sock" ]; then
+      echo "$directory/runner.sock is not a socket the runner made" >&2
+      exit 1
+    fi
+    ${pkgs.coreutils}/bin/chown -h buildbarn:buildbarn "$directory/runner.sock"
     ${pkgs.coreutils}/bin/chmod 0600 "$directory/runner.sock"
   '';
   identityDirectory = "/var/lib/buildbarn/identity";
