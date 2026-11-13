@@ -54,6 +54,8 @@ in
     systemd = {
       services.state-backup = {
         description = "Encrypted nexus state backup (ledger dumps and state archives)";
+        restartIfChanged = false;
+        stopIfChanged = false;
         serviceConfig = {
           Type = "oneshot";
           User = username;
