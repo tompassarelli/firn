@@ -59,8 +59,10 @@ in
           User = username;
           StateDirectory = "nexus-backup";
           StateDirectoryMode = "0700";
-          Nice = 10;
+          Nice = 19;
           IOSchedulingClass = "idle";
+          IOSchedulingPriority = 7;
+          CPUWeight = 1;
           ExecStart = jobRun "state-backup" "${stateBackup}/bin/state-backup";
         };
       };
