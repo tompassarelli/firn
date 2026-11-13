@@ -276,6 +276,10 @@
                     doCheck = false;
                     doInstallCheck = false;
                   });
+                  north-agent-starts = final.callPackage ./modules/agent-user/starts-package.nix {
+                    inherit (final.unstable) rustPlatform;
+                    source = inputs.north-source;
+                  };
                   glide = final.unstable.rustPlatform.buildRustPackage {
                     pname = "glide";
                     version = "git";
@@ -527,6 +531,14 @@
         };
         agent-login-reads = import ./modules/agent-user/login-reads.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        };
+        agent-local-starts = import ./modules/agent-user/starts.test.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          package =
+            nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage ./modules/agent-user/starts-package.nix
+              {
+                source = inputs.north-source;
+              };
         };
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;

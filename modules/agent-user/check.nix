@@ -23,6 +23,13 @@ let
   runsAsOperator = lib.any (unit: (unit.serviceConfig.User or null) == "operator") (
     lib.attrValues agentUnits
   );
+  starter = e.systemd.services.north-agent-starts;
+  starterWords = lib.splitString " " (
+    builtins.unsafeDiscardStringContext starter.serviceConfig.ExecStart
+  );
+  starterValue =
+    flag: lib.elemAt starterWords (lib.lists.findFirstIndex (word: word == flag) 0 starterWords + 1);
+  rule = builtins.unsafeDiscardStringContext e.security.polkit.extraConfig;
   checks = {
     "the agent user has a 0700 home and lingers" =
       e.users.users.agent.homeMode == "0700"
@@ -76,6 +83,27 @@ let
       lib.hasInfix "/var/lib/agent-runtime/current" runtimeLink
       && lib.hasInfix "install -d -o operator" runtimeLink
       && lib.hasInfix "[ ! -L /var/lib/agent-runtime/current ]" runtimeLink;
+    "the starter runs as the operator, only store paths, with no environment file and no PATH outside the store, and reads requests from its own 0700 state directory" =
+      starter.serviceConfig.User == "operator"
+      && lib.all (lib.hasPrefix "/nix/store/") [
+        (lib.head starterWords)
+        (starterValue "--entry")
+        (starterValue "--machinectl")
+      ]
+      && !(starter.serviceConfig ? EnvironmentFile)
+      && !(starter.serviceConfig ? WorkingDirectory)
+      && lib.all (lib.hasPrefix "/nix/store/") (lib.splitString ":" starter.environment.PATH)
+      && starterValue "--requests" == "/var/lib/${starter.serviceConfig.StateDirectory}"
+      && starter.serviceConfig.StateDirectoryMode == "0700";
+    "no process but the starter's ancestors can ptrace it" =
+      e.boot.kernel.sysctl."kernel.yama.ptrace_scope" >= 1;
+    "polkit admits the agent's host shell only to the starter unit, its fixed entry and a checked caller, and refuses every other" =
+      lib.hasInfix "subject.system_unit == \"north-agent-starts.service\"" rule
+      && lib.hasInfix "subject.user == \"operator\"" rule
+      && lib.hasInfix "action.lookup(\"command_line\") == \"${starterValue "--entry"}\"" rule
+      && lib.hasInfix "polkit.spawn(" rule
+      && lib.hasInfix "return polkit.Result.NO;" rule;
+    "a host with no agent login runs no starter" = !(d.systemd.services ? north-agent-starts);
     "a host with no agent login has no agent user" =
       !(d.users.users ? agent) && !(d.users.groups ? agent);
     "a host with no agent login writes no managed Claude settings" = !(d.environment.etc ? ${managed});

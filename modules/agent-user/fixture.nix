@@ -7,6 +7,10 @@
       agent-user = {
         enable = true;
         gid = 1500;
+        localStarts = {
+          enable = true;
+          package = pkgs.coreutils;
+        };
       };
       agent-claude-managed.enable = true;
       agent-brokers = {

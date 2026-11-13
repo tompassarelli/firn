@@ -25,6 +25,7 @@ let
   };
 in
 {
+  imports = [ ./starts.nix ];
   options.myConfig.modules.agent-user = {
     enable = lib.mkEnableOption "the agent Unix user that runs every agent session on this host: its own home, no supplementary groups, and no membership of the operator's account";
     name = lib.mkOption {
