@@ -112,28 +112,6 @@ in
   config = lib.mkMerge [
     (lib.mkIf cfg.enable {
       environment.systemPackages = [ pkgs.sccache ];
-      systemd.user.services.sccache-server = {
-        description = "Shared sccache server on port 4226, outside every session and lease scope";
-        wantedBy = [ "default.target" ];
-        environment = {
-          SCCACHE_START_SERVER = "1";
-          SCCACHE_NO_DAEMON = "1";
-          SCCACHE_IDLE_TIMEOUT = "0";
-          SCCACHE_SERVER_PORT = "4226";
-          SCCACHE_DIR = lib.replaceStrings [ "$HOME" ] [ "%h" ] cfg.cacheDir;
-          SCCACHE_CACHE_SIZE = cfg.cacheSize;
-          SCCACHE_BASEDIRS = "%h/code";
-        }
-        // lib.optionalAttrs (cfg.remote != null) {
-          SCCACHE_MULTILEVEL_CHAIN = "disk,webdav";
-          SCCACHE_WEBDAV_ENDPOINT = "http://127.0.0.1:${toString relayPort}";
-        };
-        serviceConfig = {
-          ExecStart = sccache;
-          Restart = "always";
-          RestartSec = 2;
-        };
-      };
       environment.sessionVariables = {
         SCCACHE_DIR = cfg.cacheDir;
         SCCACHE_CACHE_SIZE = cfg.cacheSize;
