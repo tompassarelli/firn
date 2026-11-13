@@ -14,14 +14,12 @@ let
   runtime = e.myConfig.modules.agent-runtime-link.path;
   hooks = import ../agent-claude-managed/hooks.nix runtime;
   env = "/run/current-system/sw/bin/env";
-  settingsOf =
-    system: builtins.fromJSON (builtins.readFile system.config.environment.etc.${managed}.source);
-  managedSettings = settingsOf enabled;
-  guardedSettings = settingsOf (
-    enabled.extendModules {
-      modules = [ { myConfig.modules.agent-claude-managed.allowBypass = lib.mkForce false; } ];
-    }
-  );
+  claude = e.myConfig.modules.agent-claude-managed;
+  managedSettingsOf = system: system.config.environment.etc.${managed}.source;
+  guarded = enabled.extendModules {
+    modules = [ { myConfig.modules.agent-claude-managed.allowBypass = lib.mkForce false; } ];
+  };
+  bypassKeyPresent = lib.boolToString (!claude.allowBypass);
   commandsOf = entries: lib.concatMap (entry: map (hook: hook.command) entry.hooks) entries;
   hookCommands = commandsOf (lib.concatMap (event: event) (lib.attrValues hooks));
   gatedCommands = commandsOf (hooks.PreToolUse ++ hooks.PermissionRequest);
@@ -76,10 +74,10 @@ let
       && lib.all (
         command: lib.hasPrefix "test -x ${env} && test -x ${runtime}/north || exit 2; " command
       ) gatedCommands;
-    "the managed settings carry the permissions agent sessions need and leave bypass mode available when the host allows it" =
-      managedSettings.permissions.allow != [ ] && !(managedSettings ? disableBypassPermissionsMode);
-    "the managed settings disable bypass mode unless the host allows it" =
-      guardedSettings.disableBypassPermissionsMode == "disable";
+    "the managed Claude settings carry the permissions agent sessions need" =
+      (claude.settings.permissions.allow or [ ]) != [ ];
+    "the managed Claude settings leave bypass mode to allowBypass, not to a key of their own" =
+      !(claude.settings ? disableBypassPermissionsMode);
     "the broker serves the agent on its own socket, by the agent's group number" =
       lib.hasInfix "--agent-socket /run/agent-brokers/broker.sock" broker
       && lib.hasInfix "--agent-gid 1500" broker;
@@ -152,9 +150,12 @@ if failed == [ ] then
       nativeBuildInputs = [
         pkgs.git
         pkgs.coreutils
+        pkgs.jq
       ];
     }
     ''
+      jq -e '(.permissions.allow | length) > 0 and (has("disableBypassPermissionsMode") == ${bypassKeyPresent})' ${managedSettingsOf enabled}
+      jq -e '.disableBypassPermissionsMode == "disable"' ${managedSettingsOf guarded}
       export HOME=$TMPDIR GIT_CONFIG_GLOBAL=/dev/null
       git init -q upstream
       git -C upstream -c user.name=t -c user.email=t@t commit -q --allow-empty -m one
