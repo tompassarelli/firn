@@ -525,6 +525,9 @@
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
           fill = "${inputs.north-source}/crates/north-runtime/src/land_offload/ship/fill.sh";
         };
+        agent-login-reads = import ./modules/agent-user/login-reads.test.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        };
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;
           pkgs = nixpkgs.legacyPackages.x86_64-linux;

@@ -10,6 +10,19 @@ let
   operator = config.myConfig.modules.users.username;
   operatorGroups = lib.attrByPath [ operator "extraGroups" ] [ ] config.users.users;
   operatorGroup = lib.attrByPath [ operator "group" ] "" config.users.users;
+  loginShell = pkgs.writeTextFile {
+    name = "agent-login-shell";
+    executable = true;
+    destination = "/bin/agent-login-shell";
+    text = ''
+      #!${pkgs.dash}/bin/dash
+      if [ "$#" -eq 2 ] && [ "$1" = -c ]; then
+        exec ${pkgs.coreutils}/bin/env -u BASH_ENV -u ENV ${pkgs.bashInteractive}/bin/bash --norc --noprofile -c '. /etc/profile; PATH=/run/wrappers/bin:/run/current-system/sw/bin:/var/lib/agent-runtime/current; eval "$1"' bash "$2"
+      fi
+      exec ${pkgs.bashInteractive}/bin/bash -l "$@"
+    '';
+    passthru.shellPath = "/bin/agent-login-shell";
+  };
 in
 {
   options.myConfig.modules.agent-user = {
@@ -32,6 +45,12 @@ in
   };
   config = lib.mkIf cfg.enable {
     environment.etc."north/operator".text = operator;
+    services.openssh.extraConfig = lib.mkIf config.services.openssh.enable (
+      lib.mkAfter ''
+        Match User ${cfg.name}
+          PermitUserRC no
+      ''
+    );
     users.groups.${cfg.name} = {
       inherit (cfg) gid;
     };
@@ -43,7 +62,7 @@ in
       createHome = true;
       homeMode = "0700";
       linger = true;
-      shell = pkgs.bashInteractive;
+      shell = loginShell;
       hashedPassword = "!";
       description = "north agent sessions";
     };
