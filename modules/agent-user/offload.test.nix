@@ -25,7 +25,7 @@ let
     slot=$root/$name
     place
     cd "$slot"
-    sh ./check.sh
+    confine sh ./check.sh
   '';
   bundleFor = pkgs.writeShellScript "lane-bundle" ''
     set -eu
@@ -45,12 +45,26 @@ let
     echo "uid $(id -u)"
     echo "dir $(pwd)"
     test "$(cat answer)" = 42
-    hooks=$(git rev-parse --git-common-dir)/hooks
-    mkdir -p "$hooks"
-    for hook in post-checkout reference-transaction; do
-      printf '#!/bin/sh\ntouch "$HOME/hook-ran"\n' >"$hooks/$hook"
-      chmod +x "$hooks/$hook"
-    done
+    common=$(git rev-parse --path-format=absolute --git-common-dir)
+    plant() {
+      name=$1
+      shift
+      if "$@" 2>/dev/null; then echo "planted $name"; else echo "refused $name"; fi
+    }
+    hooks() {
+      for hook in post-checkout reference-transaction; do
+        printf '#!/bin/sh\ntouch "$HOME/hook-ran"\n' >"$common/hooks/$hook" && chmod +x "$common/hooks/$hook" || return 1
+      done
+    }
+    objects() {
+      find "$common/objects" -type f | while read -r object; do printf x >>"$object" || exit 1; done
+    }
+    plant hooks hooks
+    plant object objects
+    plant config git config filter.evil.smudge 'touch "$HOME/filter-ran"; cat'
+    plant attributes sh -c 'printf "* filter=evil diff=evil\n" >>"$0/info/attributes"' "$common"
+    plant global-config git config --global filter.evil.smudge 'touch "$HOME/filter-ran"; cat'
+    plant global-attributes sh -c 'printf "* filter=evil\n" >>"$HOME/.config/git/attributes"'
     touch planted
   '';
   plantedCheck = pkgs.writeText "planted-check.sh" ''
@@ -59,6 +73,7 @@ let
     test "$(cat answer)" = 42
     test ! -e planted || { echo "lane B sees the untracked file lane A left"; exit 1; }
     test ! -e "$HOME/hook-ran" || { echo "a hook lane A planted ran in lane B's offload"; exit 1; }
+    test ! -e "$HOME/filter-ran" || { echo "a filter driver lane A planted ran in lane B's offload"; exit 1; }
   '';
 in
 pkgs.testers.runNixOSTest {
@@ -80,7 +95,10 @@ pkgs.testers.runNixOSTest {
           uid = 1000;
           homeMode = "0700";
         };
-        environment.systemPackages = [ pkgs.git ];
+        environment.systemPackages = [
+          pkgs.git
+          pkgs.bubblewrap
+        ];
         programs.git = {
           enable = true;
           config = {
@@ -134,6 +152,7 @@ pkgs.testers.runNixOSTest {
         assert status == 0, f"the offloaded check of {project} {branch} failed as the agent:\n{output}"
         assert ran.get("uid") == agent_uid, f"the check ran as uid {ran.get('uid')}, not the agent's {agent_uid}"
         assert ran.get("dir", "").startswith("/home/agent/"), f"the check ran in {ran.get('dir')}, outside the agent's home"
+        return output
 
 
     def operator_state():
@@ -193,9 +212,11 @@ pkgs.testers.runNixOSTest {
     )
     before = operator_state()
 
-    shipped("proj", "lane", base, lane)
+    planting = shipped("proj", "lane", base, lane)
+    for store in ["hooks", "object", "config", "attributes", "global-config", "global-attributes"]:
+        assert f"refused {store}" in planting, f"lane A's check could write the shared {store}:\n{planting}"
     shipped("proj", "next", lane, following)
-    host.succeed("test -x ~agent/code/proj/main/.git/hooks/post-checkout", "test ! -e ~agent/hook-ran")
+    host.succeed("test ! -e ~agent/hook-ran", "test ! -e ~agent/filter-ran")
 
     shipped("vault", "lane", vbase, vlane)
     assert held("vault") == [vlane], f"the agent's vault checkout holds {held('vault')}, not the lane it was shipped"
