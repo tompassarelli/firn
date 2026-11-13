@@ -148,6 +148,86 @@ let
   '';
   runnerSocket = "/run/buildbarn-runner/runner.sock";
   generationFile = "buildbarn/store-generation";
+  slots = lib.genList toString cfg.worker.concurrency;
+  slotUser = slot: "buildbarn-run-${slot}";
+  slotUnit = slot: "buildbarn-runner-${slot}.service";
+  slotRuntime = slot: "buildbarn-runner-${slot}";
+  slotSocket = slot: "/run/${slotRuntime slot}/runner.sock";
+  slotBuild = slot: "${buildDirectory}/${slot}";
+  slotCache = slot: "${cacheDirectory}/${slot}";
+  runnerUnits = map slotUnit slots;
+  resetSlotDirectories = pkgs.writeShellScript "buildbarn-reset-slot-directories" ''
+    set -eu
+    marker=/var/lib/buildbarn/build-directory-reset
+    layout='${toString cfg.worker.concurrency} slots'
+    cd -P -- ${buildDirectory}
+    if [ "$(${pkgs.coreutils}/bin/pwd -P)" != ${buildDirectory} ]; then
+      echo "refusing to reset ${buildDirectory}: it resolves through a symlink" >&2
+      exit 1
+    fi
+    current() {
+      [ "$(cat "$marker" 2>/dev/null)" = "$layout" ] || return 1
+      [ "$(stat -c '%U:%G %a' .)" = "buildbarn:buildbarn 711" ] || return 1
+      for slot in ${toString slots}; do
+        [ "$(stat -c '%U:%G %a' "$slot" 2>/dev/null)" = "${slotUser "$slot"}:${slotUser "$slot"} 2770" ] || return 1
+      done
+    }
+    if current; then
+      exit 0
+    fi
+    find . ${cacheDirectory} -xdev -mindepth 1 -delete
+    chown buildbarn:buildbarn .
+    chmod 0711 .
+    for slot in ${toString slots}; do
+      install -d -m 2770 -o ${slotUser "$slot"} -g ${slotUser "$slot"} "$slot"
+      install -d -m 0700 -o buildbarn -g buildbarn ${cacheDirectory}/"$slot"
+    done
+    echo "$layout" > "$marker"
+  '';
+  cleanSlot = pkgs.writeShellScript "buildbarn-clean-slot" ''
+    set -u
+    IFS=: read -r _ _ group < /proc/self/cgroup
+    procs=/sys/fs/cgroup$group/cgroup.procs
+    round=0
+    while :; do
+      mapfile -t pids < "$procs" || exit 1
+      others=()
+      for pid in "''${pids[@]}"; do
+        [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ] || others+=("$pid")
+      done
+      [ "''${#others[@]}" -gt 0 ] || break
+      if [ "$round" -ge 100 ]; then
+        echo "processes of the last action outlive the cleaning: ''${others[*]}" >&2
+        exit 1
+      fi
+      kill -STOP "''${others[@]}" 2> /dev/null
+      kill -KILL "''${others[@]}" 2> /dev/null
+      round=$((round + 1))
+      ${pkgs.coreutils}/bin/sleep 0.05
+    done
+    ${pkgs.util-linux}/bin/ipcrm --all || exit 1
+    for directory in /tmp /var/tmp /dev/shm /dev/mqueue; do
+      ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -type d ! -perm -700 -exec ${pkgs.coreutils}/bin/chmod u+rwx {} \;
+      ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -delete
+      if [ -n "$(${pkgs.coreutils}/bin/ls -A "$directory")" ]; then
+        echo "files of the last action outlive the cleaning in $directory" >&2
+        exit 1
+      fi
+    done
+  '';
+  closeSocket = pkgs.writeShellScript "buildbarn-close-runner-socket" ''
+    set -eu
+    directory=/run/$1
+    tries=0
+    until [ -S "$directory/runner.sock" ]; do
+      tries=$((tries + 1))
+      [ "$tries" -lt 300 ] || exit 1
+      ${pkgs.coreutils}/bin/sleep 0.1
+    done
+    ${pkgs.coreutils}/bin/chown buildbarn:buildbarn "$directory" "$directory/runner.sock"
+    ${pkgs.coreutils}/bin/chmod 0700 "$directory"
+    ${pkgs.coreutils}/bin/chmod 0600 "$directory/runner.sock"
+  '';
   identityDirectory = "/var/lib/buildbarn/identity";
   inherit (config.networking) hostName;
   makeIdentity = pkgs.writeShellScript "buildbarn-make-identity" ''
@@ -374,6 +454,41 @@ let
     ];
   };
 
+  slotWorkerConfig = workerConfig // {
+    buildDirectories = map (slot: {
+      native = {
+        buildDirectoryPath = slotBuild slot;
+        cacheDirectoryPath = slotCache slot;
+        maximumCacheFileCount = 200000 / cfg.worker.concurrency;
+        maximumCacheSizeBytes = gib cfg.worker.cacheSizeGiB / cfg.worker.concurrency;
+        cacheReplacementPolicy = "LEAST_RECENTLY_USED";
+      };
+      runners = [
+        {
+          endpoint.address = "unix://${slotSocket slot}";
+          concurrency = 1;
+          platform.properties = platformProperties;
+          workerId = {
+            hostname = hostName;
+            inherit slot;
+          };
+          environmentVariables.PATH = "/run/current-system/sw/bin";
+        }
+      ];
+    }) slots;
+  };
+
+  slotRunnerConfig = slot: {
+    buildDirectoryPath = slotBuild slot;
+    grpcServers = [
+      {
+        listenPaths = [ (slotSocket slot) ];
+        authenticationPolicy = allow;
+      }
+    ];
+    runCommandCleaner = [ "${cleanSlot}" ];
+  };
+
   json = name: value: pkgs.writeText "buildbarn-${name}.json" (builtins.toJSON value);
 
   hardened = {
@@ -463,6 +578,11 @@ in
         default = false;
         description = "runs the runner's actions as buildbarn-run, which owns neither the worker's cache nor the inputs it hardlinks, so an action cannot chmod or append a store copy; off keeps the runner as buildbarn";
       };
+      runnerPerSlot = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "runs one runner per unit of `concurrency`, each as its own user buildbarn-run-N with its own build directory, input cache, /tmp and shared memory, one action at a time, and ends every process and temporary file of an action before the next starts there, so one action cannot change another's inputs or outputs; off keeps the one runner `runnerUser` describes";
+      };
     };
     client = {
       enable = lib.mkEnableOption "/etc/buckconfig.d/remote-execution, which points every Buck2 project on this host at the Buildbarn store and scheduler at `client.server`";
@@ -482,7 +602,7 @@ in
       users.groups.buildbarn = { };
       assertions = lib.optionals (identified && cfg.worker.enable) [
         {
-          assertion = cfg.worker.runnerUser;
+          assertion = cfg.worker.runnerUser || cfg.worker.runnerPerSlot;
           message = "myConfig.modules.buildbarn.identifiedWorkers needs worker.runnerUser, so that an action does not run as the user that reads the worker's key";
         }
         {
@@ -562,7 +682,7 @@ in
         text = "${generation}\n";
       };
     })
-    (lib.mkIf (cfg.worker.enable && cfg.worker.runnerUser) {
+    (lib.mkIf (cfg.worker.enable && cfg.worker.runnerUser && !cfg.worker.runnerPerSlot) {
       users.users.${runnerUser} = {
         isSystemUser = true;
         group = runnerUser;
@@ -589,7 +709,7 @@ in
         };
       };
     })
-    (lib.mkIf cfg.worker.enable {
+    (lib.mkIf (cfg.worker.enable && !cfg.worker.runnerPerSlot) {
       systemd.services = {
         buildbarn-runner =
           service
@@ -650,6 +770,85 @@ in
             bindsTo = [ "buildbarn-runner.service" ];
           };
       };
+    })
+    (lib.mkIf cfg.worker.enable {
+      assertions = [
+        {
+          assertion = (config.boot.kernel.sysctl."kernel.yama.ptrace_scope" or 1) >= 1;
+          message = "myConfig.modules.buildbarn.worker needs kernel.yama.ptrace_scope at 1 or above, the kernel's default: a remote action must not trace the runner that started it";
+        }
+      ];
+    })
+    (lib.mkIf (cfg.worker.enable && cfg.worker.runnerPerSlot) {
+      boot.kernel.sysctl."kernel.yama.ptrace_scope" = lib.mkDefault 1;
+      users.users = lib.genAttrs (map slotUser slots) (user: {
+        isSystemUser = true;
+        group = user;
+      });
+      users.groups = lib.genAttrs (map slotUser slots) (_: { });
+      systemd.tmpfiles.rules = [
+        "d ${workerRoot} 0751 buildbarn buildbarn -"
+        "d ${cacheDirectory} 0700 buildbarn buildbarn -"
+        "d ${buildDirectory} 0711 buildbarn buildbarn -"
+      ]
+      ++ lib.concatMap (slot: [
+        "d ${slotCache slot} 0700 buildbarn buildbarn -"
+        "d ${slotBuild slot} 2770 ${slotUser slot} ${slotUser slot} -"
+      ]) slots;
+      systemd.services = {
+        buildbarn-build-directory-reset = {
+          description = "Empty the Buildbarn build and cache directories when their layout changes and give each slot's build directory to its runner user, before the runners and the worker start";
+          before = runnerUnits ++ [ "buildbarn-worker.service" ];
+          requiredBy = runnerUnits ++ [ "buildbarn-worker.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = resetSlotDirectories;
+          };
+        };
+        buildbarn-worker =
+          service
+            "Buildbarn worker: fetches action inputs from the shared store, hands each action to its slot's runner and uploads its outputs"
+            bin.worker
+            (json "worker" slotWorkerConfig)
+            runnerUnits
+            {
+              SupplementaryGroups = map slotUser slots;
+              UMask = "0002";
+              ReadWritePaths = [ workerRoot ];
+            }
+          // {
+            bindsTo = runnerUnits;
+            upheldBy = runnerUnits;
+          };
+      }
+      // lib.listToAttrs (
+        map (
+          slot:
+          lib.nameValuePair (lib.removeSuffix ".service" (slotUnit slot)) (
+            service
+              "Buildbarn runner of slot ${slot}: executes one remote action at a time as its own user, with no network, no home directories and a /tmp, shared memory and process table emptied between actions"
+              bin.runner
+              (json "runner-${slot}" (slotRunnerConfig slot))
+              [ ]
+              {
+                User = slotUser slot;
+                Group = slotUser slot;
+                UMask = "0007";
+                ReadWritePaths = [ (slotBuild slot) ];
+                RuntimeDirectory = slotRuntime slot;
+                RuntimeDirectoryMode = "0750";
+                ExecStartPost = "+${closeSocket} ${slotRuntime slot}";
+                PrivateNetwork = true;
+                PrivateIPC = true;
+                TemporaryFileSystem = "/dev/shm:mode=1777";
+                ProtectKernelTunables = !cfg.worker.allowProcMount;
+                Nice = 10;
+                CPUWeight = 50;
+                IOWeight = 50;
+              }
+          )
+        ) slots
+      );
     })
     (lib.mkIf cfg.client.enable {
       environment.etc."buckconfig.d/remote-execution" = {

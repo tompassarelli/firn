@@ -518,6 +518,9 @@
         buildbarn-store-writes = import ./modules/buildbarn/store-writes.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
         };
+        buildbarn-runner-isolation = import ./modules/buildbarn/runner-isolation.test.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+        };
         agent-offload = import ./modules/agent-user/offload.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
           fill = "${inputs.north-source}/crates/north-runtime/src/land_offload/ship/fill.sh";
