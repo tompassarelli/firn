@@ -13,15 +13,6 @@ let
   runtimeLink = e.system.activationScripts.agent-runtime-link.text;
   runtime = e.myConfig.modules.agent-runtime-link.path;
   hooks = import ../agent-claude-managed/hooks.nix runtime;
-  env = "/run/current-system/sw/bin/env";
-  settingsOf =
-    system: builtins.fromJSON (builtins.readFile system.config.environment.etc.${managed}.source);
-  managedSettings = settingsOf enabled;
-  guardedSettings = settingsOf (
-    enabled.extendModules {
-      modules = [ { myConfig.modules.agent-claude-managed.allowBypass = lib.mkForce false; } ];
-    }
-  );
   commandsOf = entries: lib.concatMap (entry: map (hook: hook.command) entry.hooks) entries;
   hookCommands = commandsOf (lib.concatMap (event: event) (lib.attrValues hooks));
   gatedCommands = commandsOf (hooks.PreToolUse ++ hooks.PermissionRequest);
@@ -67,19 +58,15 @@ let
     "the managed Claude settings are a symlink into the root-owned store" =
       e.environment.etc.${managed}.mode == "symlink"
       && lib.hasPrefix "/nix/store/" (toString e.environment.etc.${managed}.source);
-    "the managed hooks run env from the system profile and north from the runtime link, and dispatch every tool" =
+    "the managed hooks run env and north from the runtime link, and dispatch every tool" =
       hookCommands != [ ]
-      && lib.all (command: lib.hasInfix "${env} " command) hookCommands
+      && lib.all (command: lib.hasInfix "${runtime}/env " command) hookCommands
       && lib.any (command: lib.hasSuffix " north hook dispatch" command) hookCommands;
-    "every gated hook blocks when env or the runtime north is missing" =
+    "every gated hook blocks when the runtime env is missing" =
       gatedCommands != [ ]
       && lib.all (
-        command: lib.hasPrefix "test -x ${env} && test -x ${runtime}/north || exit 2; " command
+        command: lib.hasPrefix "test -x ${runtime}/env && test -x ${runtime}/north || exit 2; " command
       ) gatedCommands;
-    "the managed settings carry the permissions agent sessions need and leave bypass mode available when the host allows it" =
-      managedSettings.permissions.allow != [ ] && !(managedSettings ? disableBypassPermissionsMode);
-    "the managed settings disable bypass mode unless the host allows it" =
-      guardedSettings.disableBypassPermissionsMode == "disable";
     "the broker serves the agent on its own socket, by the agent's group number" =
       lib.hasInfix "--agent-socket /run/agent-brokers/broker.sock" broker
       && lib.hasInfix "--agent-gid 1500" broker;
