@@ -9,6 +9,7 @@
 }:
 
 let
+  budget = import ./start-budget.nix;
   cfg = config.myConfig.modules.fleet-tick;
   username = config.myConfig.modules.users.username;
   description = "fleet-tick: flush this host's north fleet spool, publish its sessions and deliver the rows addressed to them, and run again the sessions a reboot stranded";
@@ -35,7 +36,7 @@ in
           Service = {
             Type = "oneshot";
             Slice = "control.slice";
-            TimeoutStartSec = "50s";
+            TimeoutStartSec = "${toString budget.startSeconds}s";
             Environment = [ path ];
             ExecStart = jobRun "fleet-tick" "${northBin}/north fleet tick";
           };

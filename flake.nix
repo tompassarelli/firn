@@ -557,6 +557,10 @@
           };
           disabled = self.nixosConfigurations.whiterabbit;
         };
+        fleet-tick-start-budget = import ./modules/fleet-tick/start-budget.test.nix {
+          pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          whiterabbit = self.nixosConfigurations.whiterabbit;
+        };
         nix-syntax =
           let
             pkgs = nixpkgs.legacyPackages.x86_64-linux;
