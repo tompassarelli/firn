@@ -13,7 +13,16 @@
           package = pkgs.coreutils;
         };
       };
-      agent-claude-managed.enable = true;
+      agent-claude-managed = {
+        enable = true;
+        allowBypass = true;
+        settings.permissions.allow = [
+          "Bash"
+          "Read"
+          "Edit"
+          "Write"
+        ];
+      };
       agent-brokers = {
         enable = true;
         package = pkgs.coreutils;
