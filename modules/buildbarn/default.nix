@@ -39,7 +39,93 @@ let
   allow = {
     allow = { };
   };
+  identified = cfg.identifiedWorkers;
+  workerRole = "worker";
+  workersOnly.jmespathExpression.expression = "authenticationMetadata.private.role == '${workerRole}'";
+  workerAuthorizer = if identified then workersOnly else allow;
+  identityFiles = {
+    certificatePath = "${identityDirectory}/cert.pem";
+    privateKeyPath = "${identityDirectory}/key.pem";
+    refreshInterval = "3600s";
+  };
+  workerListener =
+    port:
+    {
+      listenAddresses = [ "${cfg.server.address}:${toString port}" ];
+    }
+    // (
+      if identified then
+        {
+          tls.serverKeyPair.files = identityFiles;
+          authenticationPolicy.tlsClientCertificate = {
+            clientCertificateAuthorities = lib.concatStrings (lib.attrValues cfg.identities);
+            validationJmespathExpression.expression = "`true`";
+            metadataExtractionJmespathExpression.expression = "{\"private\": {\"role\": '${workerRole}'}}";
+          };
+        }
+      else
+        { authenticationPolicy = allow; }
+    );
+  asWorker =
+    openPort: identifiedPort:
+    if identified then
+      {
+        address = "${cfg.worker.server}:${toString identifiedPort}";
+        tls = {
+          serverCertificateAuthorities = cfg.identities.${cfg.worker.serverName} or "";
+          inherit (cfg.worker) serverName;
+          clientKeyPair.files = identityFiles;
+        };
+      }
+    else
+      { address = "${cfg.worker.server}:${toString openPort}"; };
+  identityUsers = lib.optionals identified (
+    lib.optionals cfg.server.enable [
+      "buildbarn-frontend.service"
+      "buildbarn-scheduler.service"
+    ]
+    ++ lib.optional cfg.worker.enable "buildbarn-worker.service"
+  );
+  inner =
+    name: port:
+    if identified then
+      {
+        server.listenPaths = [ "/run/buildbarn-${name}.sock" ];
+        client.address = "unix:///run/buildbarn-${name}.sock";
+      }
+    else
+      {
+        server.listenAddresses = [ "127.0.0.1:${toString port}" ];
+        client.address = "127.0.0.1:${toString port}";
+      };
+  storageEndpoint = inner "storage/storage" storagePort;
+  schedulerClientEndpoint = inner "scheduler/client" schedulerClientPort;
+  innerDirectory =
+    name:
+    lib.optionalAttrs identified {
+      RuntimeDirectory = "buildbarn-${name}";
+      RuntimeDirectoryMode = "0700";
+    };
   storageRoot = "/var/lib/buildbarn/storage";
+  actionCacheDirectory = "${storageRoot}/ac";
+  generationRecord = "/var/lib/buildbarn/action-cache-generation";
+  generation = toString cfg.storeGeneration;
+  emptyActionCache = pkgs.writeShellScript "buildbarn-action-cache-generation" ''
+    set -eu
+    recorded=$(cat ${generationRecord} 2>/dev/null || echo none)
+    if [ "$recorded" = ${generation} ]; then
+      echo "store generation ${generation} is the recorded one: removed nothing under ${actionCacheDirectory}"
+      exit 0
+    fi
+    count=0
+    if [ -d ${actionCacheDirectory} ]; then
+      count=$(find ${actionCacheDirectory} -xdev -type f | wc -l)
+      find ${actionCacheDirectory} -xdev -type f -delete
+    fi
+    echo ${generation} > ${generationRecord}.new
+    mv ${generationRecord}.new ${generationRecord}
+    echo "store generation $recorded -> ${generation}: removed $count files under ${actionCacheDirectory}"
+  '';
   workerRoot = "/var/lib/buildbarn/worker";
   cacheDirectory = "${workerRoot}/cache";
   buildDirectory = "${workerRoot}/build";
@@ -61,6 +147,7 @@ let
     touch "$marker"
   '';
   runnerSocket = "/run/buildbarn-runner/runner.sock";
+  generationFile = "buildbarn/store-generation";
   identityDirectory = "/var/lib/buildbarn/identity";
   inherit (config.networking) hostName;
   makeIdentity = pkgs.writeShellScript "buildbarn-make-identity" ''
@@ -86,10 +173,11 @@ let
   storagePort = 8981;
   schedulerClientPort = 8982;
   schedulerWorkerPort = 8983;
+  workerStorePort = 8984;
 
-  grpc = address: {
+  grpc = client: {
     grpc = {
-      client.address = address;
+      inherit client;
       enableCompression = true;
     };
   };
@@ -98,14 +186,14 @@ let
     cacheDuration = "60s";
     cacheReplacementPolicy = "LEAST_RECENTLY_USED";
   };
-  remoteBlobstore = address: {
+  remoteBlobstore = client: {
     actionCache.completenessChecking = {
-      backend = grpc address;
+      backend = grpc client;
       maximumTotalTreeSizeBytes = 64 * 1024 * 1024;
     };
     contentAddressableStorage = {
-      chunkStorage = grpc address;
-      chunkMappingStorage.chunkMappingValidating.backend = grpc address;
+      chunkStorage = grpc client;
+      chunkMappingStorage.chunkMappingValidating.backend = grpc client;
       inherit cdcParameterCache;
     };
   };
@@ -142,10 +230,7 @@ let
 
   storageConfig = {
     grpcServers = [
-      {
-        listenAddresses = [ "127.0.0.1:${toString storagePort}" ];
-        authenticationPolicy = allow;
-      }
+      (storageEndpoint.server // { authenticationPolicy = allow; })
     ];
     maximumMessageSizeBytes = messageSize;
     supportedCompressors = [ "ZSTD" ];
@@ -181,16 +266,16 @@ let
       };
     };
   };
-  storageAddress = "127.0.0.1:${toString storagePort}";
+  storageAddress = storageEndpoint.client;
   frontendConfig = {
     grpcServers = [
       {
         listenAddresses = [ "${cfg.server.address}:${toString frontendPort}" ];
         authenticationPolicy = allow;
       }
-    ];
-    schedulers."".endpoint = {
-      address = "127.0.0.1:${toString schedulerClientPort}";
+    ]
+    ++ lib.optional identified (workerListener workerStorePort);
+    schedulers."".endpoint = schedulerClientEndpoint.client // {
       addMetadataJmespathExpression.expression = ''{"build.bazel.remote.execution.v2.requestmetadata-bin": incomingGRPCMetadata."build.bazel.remote.execution.v2.requestmetadata-bin"}'';
     };
     maximumMessageSizeBytes = messageSize;
@@ -214,24 +299,14 @@ let
         maximumTotalTreeSizeBytes = 64 * 1024 * 1024;
       };
       getAuthorizer = allow;
-      putAuthorizer = allow;
+      putAuthorizer = workerAuthorizer;
     };
     executeAuthorizer = allow;
   };
 
   schedulerConfig = {
-    clientGrpcServers = [
-      {
-        listenAddresses = [ "127.0.0.1:${toString schedulerClientPort}" ];
-        authenticationPolicy = allow;
-      }
-    ];
-    workerGrpcServers = [
-      {
-        listenAddresses = [ "${cfg.server.address}:${toString schedulerWorkerPort}" ];
-        authenticationPolicy = allow;
-      }
-    ];
+    clientGrpcServers = [ (schedulerClientEndpoint.server // { authenticationPolicy = allow; }) ];
+    workerGrpcServers = [ (workerListener schedulerWorkerPort) ];
     contentAddressableStorage = {
       chunkStorage = grpc storageAddress;
       chunkMappingStorage.chunkMappingValidating.backend = grpc storageAddress;
@@ -241,7 +316,7 @@ let
     executeAuthorizer = allow;
     modifyDrainsAuthorizer = allow;
     killOperationsAuthorizer = allow;
-    synchronizeAuthorizer = allow;
+    synchronizeAuthorizer = workerAuthorizer;
     actionRouter.simple = {
       platformKeyExtractor.static.properties = platformProperties;
       invocationKeyExtractors = [
@@ -257,9 +332,9 @@ let
   };
 
   workerConfig = {
-    blobstore = remoteBlobstore "${cfg.worker.server}:${toString frontendPort}";
+    blobstore = remoteBlobstore (asWorker frontendPort workerStorePort);
     maximumMessageSizeBytes = messageSize;
-    scheduler.address = "${cfg.worker.server}:${toString schedulerWorkerPort}";
+    scheduler = asWorker schedulerWorkerPort schedulerWorkerPort;
     buildDirectories = [
       {
         native = {
@@ -332,6 +407,17 @@ in
       default.OSFamily = "linux";
       description = "remote execution platform properties every worker advertises; a Buck2 execution platform's remote_execution_properties must equal them for its actions to be scheduled";
     };
+    storeGeneration = lib.mkOption {
+      type = lib.types.nullOr lib.types.ints.positive;
+      default = null;
+      description = "number of the action cache's generation. The host with `server.enable` empties the action cache, never the content store, before the store starts whenever this differs from the number recorded in ${generationRecord}, and a host with `client.enable` gets the number and a newline in /etc/${generationFile}, a file only root writes, for a build tool to keep its own state apart per generation. Unset: no unit and no file";
+    };
+    identifiedWorkers = lib.mkEnableOption "identified workers: the store takes action results and worker registrations only from a holder of a key whose certificate `identities` lists, on listeners of their own, and the store and scheduler talk to each other over sockets only their own user opens";
+    identities = lib.mkOption {
+      type = lib.types.attrsOf lib.types.str;
+      default = { };
+      description = "host name to the PEM certificate that host's buildbarn-identity unit wrote to ${identityFiles.certificatePath}, read when `identifiedWorkers` is on; a worker requires the store to hold the entry named `worker.serverName`. Public data: each key stays on its host";
+    };
     server = {
       enable = lib.mkEnableOption "the Buildbarn content-addressed store, action cache and scheduler that every build host's workers and Buck2 clients share, so an action built once anywhere is fetched, not rebuilt";
       address = lib.mkOption {
@@ -353,6 +439,10 @@ in
       server = lib.mkOption {
         type = lib.types.str;
         description = "private-network address of the host with `server.enable`";
+      };
+      serverName = lib.mkOption {
+        type = lib.types.str;
+        description = "host name of the host with `server.enable`, whose certificate in `identities` this worker requires of the store when `identifiedWorkers` is on";
       };
       concurrency = lib.mkOption {
         type = lib.types.ints.positive;
@@ -390,10 +480,22 @@ in
         group = "buildbarn";
       };
       users.groups.buildbarn = { };
+      assertions = lib.optionals (identified && cfg.worker.enable) [
+        {
+          assertion = cfg.worker.runnerUser;
+          message = "myConfig.modules.buildbarn.identifiedWorkers needs worker.runnerUser, so that an action does not run as the user that reads the worker's key";
+        }
+        {
+          assertion = cfg.identities ? ${cfg.worker.serverName};
+          message = "myConfig.modules.buildbarn.identities has no certificate for the store host ${cfg.worker.serverName}";
+        }
+      ];
       systemd.tmpfiles.rules = [ "d /var/lib/buildbarn 0755 root root -" ];
       systemd.services.buildbarn-identity = {
         description = "Make this host's Buildbarn key and certificate once, the key readable by root and the buildbarn user only";
         wantedBy = [ "multi-user.target" ];
+        before = identityUsers;
+        requiredBy = identityUsers;
         serviceConfig = {
           Type = "oneshot";
           RemainAfterExit = true;
@@ -407,21 +509,24 @@ in
           service "Buildbarn content-addressed store and action cache, loopback only" bin.storage
             (json "storage" storageConfig)
             [ ]
-            {
-              StateDirectory = map (d: "buildbarn/storage/${d}") [
-                "cas"
-                "cas/persistent_state"
-                "cms"
-                "cms/persistent_state"
-                "ac"
-                "ac/persistent_state"
-              ];
-            };
+            (
+              innerDirectory "storage"
+              // {
+                StateDirectory = map (d: "buildbarn/storage/${d}") [
+                  "cas"
+                  "cas/persistent_state"
+                  "cms"
+                  "cms/persistent_state"
+                  "ac"
+                  "ac/persistent_state"
+                ];
+              }
+            );
         buildbarn-scheduler =
           service "Buildbarn scheduler: queues remote actions for the build hosts' workers" bin.scheduler
             (json "scheduler" schedulerConfig)
             [ "buildbarn-storage.service" ]
-            { };
+            (innerDirectory "scheduler");
         buildbarn-frontend =
           service
             "Buildbarn frontend: the store, action cache and execution endpoint Buck2 clients and workers reach over the private network"
@@ -433,7 +538,29 @@ in
       networking.firewall.interfaces.${cfg.server.interface}.allowedTCPPorts = [
         frontendPort
         schedulerWorkerPort
-      ];
+      ]
+      ++ lib.optional identified workerStorePort;
+    })
+    (lib.mkIf (cfg.server.enable && cfg.storeGeneration != null) {
+      systemd.services = {
+        buildbarn-action-cache-generation = {
+          description = "Empty the Buildbarn action cache once per store generation, before the store starts";
+          before = [ "buildbarn-storage.service" ];
+          requiredBy = [ "buildbarn-storage.service" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = emptyActionCache;
+          };
+        };
+        buildbarn-storage.restartTriggers = [ generation ];
+      };
+    })
+    (lib.mkIf (cfg.client.enable && cfg.storeGeneration != null) {
+      environment.etc.${generationFile} = {
+        mode = "0444";
+        text = "${generation}\n";
+      };
     })
     (lib.mkIf (cfg.worker.enable && cfg.worker.runnerUser) {
       users.users.${runnerUser} = {

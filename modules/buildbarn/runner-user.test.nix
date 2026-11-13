@@ -7,6 +7,7 @@ let
   marker = "/var/lib/buildbarn/build-directory-reset";
   identity = "/var/lib/buildbarn/identity";
   openssl = "${pkgs.openssl}/bin/openssl";
+  identified = import ./test-identity.nix { inherit pkgs; } "host";
   as = user: "${pkgs.util-linux}/bin/setpriv --reuid=${user} --regid=${user} --init-groups";
 in
 pkgs.testers.runNixOSTest {
@@ -15,7 +16,10 @@ pkgs.testers.runNixOSTest {
   nodes.host =
     { config, ... }:
     {
-      imports = [ ./default.nix ];
+      imports = [
+        ./default.nix
+        identified.install
+      ];
       virtualisation = {
         memorySize = 2048;
         diskSize = 4096;
@@ -38,6 +42,8 @@ pkgs.testers.runNixOSTest {
         };
       };
       myConfig.modules.buildbarn = {
+        identifiedWorkers = true;
+        identities.host = identified.certificate;
         server = {
           enable = true;
           address = config.networking.primaryIPAddress;
@@ -47,6 +53,7 @@ pkgs.testers.runNixOSTest {
         worker = {
           enable = true;
           server = config.networking.primaryIPAddress;
+          serverName = "host";
           concurrency = 2;
           cacheSizeGiB = 1;
           runnerUser = true;
