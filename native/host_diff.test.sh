@@ -65,6 +65,7 @@ FIRN_BUILD_HOST=beta bash "$repo/.github/scripts/host-diff.sh" build | tee other
 rg -q 'host check: evaluated only nixosConfigurations.alpha; its closure is built when landing from alpha' other.log
 drv=$(awk '/host check: changed / {print $NF}' other.log)
 nix-store --check-validity "$(nix-store --query --outputs "$drv")" 2>/dev/null && exit 1
+FIRN_BUILD_HOST=beta bash "$repo/.github/scripts/host-diff.sh" offload >/dev/null; nix-store --check-validity "$(nix-store --query --outputs "$drv")"
 printf '{ outputs = _: throw "injected evaluation fault"; }\n' > flake.nix
 git commit -qam "injected evaluation fault"
 SAFE_PUSH_LAND_HEAD=$(git rev-parse HEAD)
@@ -76,4 +77,4 @@ bash "$repo/.github/scripts/host-diff.sh" build | tee rerun.log
 rg -q "base drvPaths reused from cache" rerun.log
 rg -q "evaluated 3 base and 3 head hosts; 0 changed, 3 reused" rerun.log
 ! rg -q "host check: changed" fault.log || { printf "host diff built before all evaluations passed\n" >&2; exit 1; }
-printf 'ok: real Git/Nix host diff builds one changed derivation, reuses docs and rejects an evaluation fault, and passes the base tree checked out under a failing lane\n'
+printf 'ok: real Git/Nix host diff builds one changed derivation, builds another host change in offload mode, reuses docs and rejects an evaluation fault, and passes the base tree checked out under a failing lane\n'

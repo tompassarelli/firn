@@ -19,6 +19,7 @@ if ! "$flock_bin" -n 9; then
   printf 'firn-liveness-floor: another floor check is already running\n' >&2
   exit 75
 fi
+"$north_bin" land host-gate --repo "$repo" --host "$host" --fact "$state_file" || { [[ $? != 3 ]] || exit 0; }
 observed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 revision=""
 candidate_path=""

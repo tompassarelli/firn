@@ -1,10 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mode=${1:?native|dotfiles|drift|scripts}
+mode=${1:?native|dotfiles|drift|scripts|flake|host}
+gated() { [ "$(north land host-gate --switch 2>/dev/null)" = on ]; }
 if [ "$mode" = drift ]; then
   FIRN_REPO="$PWD" dotfiles/bin/firn-check
-  bash .github/scripts/host-diff.sh build
+  if gated; then bash .github/scripts/host-diff.sh offload; else bash .github/scripts/host-diff.sh build; fi
   exit
+fi
+if [ "$mode" = host ]; then
+  if gated; then
+    printf 'host check: this host builds its own toplevel in its delivery-liveness floor once the landing queues are empty; a changed toplevel is built by the drift line on a build host\n'
+    exit 0
+  fi
+  exec nix flake check --no-update-lock-file
+fi
+if [ "$mode" = flake ]; then
+  json=$(nix eval --no-update-lock-file --json "path:$PWD#checks.x86_64-linux" --apply builtins.attrNames)
+  mapfile -t names < <(jq -r '.[] | select(startswith("host-") | not)' <<<"$json")
+  printf 'flake check: building checks %s\n' "${names[*]}"
+  exec nix build --no-update-lock-file --no-link "${names[@]/#/path:$PWD#checks.x86_64-linux.}"
 fi
 if [ "$mode" = scripts ]; then
   git diff --name-only --no-renames -z "${SAFE_PUSH_LAND_BASE:?}" "${SAFE_PUSH_LAND_HEAD:?}" -- modules/ |

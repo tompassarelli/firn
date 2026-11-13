@@ -3,7 +3,7 @@ set -euo pipefail
 declare -A revisions=([base]=${SAFE_PUSH_LAND_BASE:?} [head]=$(git rev-parse HEAD))
 lane=${SAFE_PUSH_LAND_HEAD:?}
 action=${1:-build}
-case "$action" in select|build) ;; *) printf 'usage: host-diff.sh [select|build]\n' >&2; exit 64 ;; esac
+case "$action" in select|build|offload) ;; *) printf 'usage: host-diff.sh [select|build|offload]\n' >&2; exit 64 ;; esac
 reaching=$(git diff --name-only --no-renames "${revisions[base]}" "$lane" |
   grep -Ev '^docs/|\.test\.(sh|py)$' || true)
 if [ -z "$reaching" ]; then
@@ -67,13 +67,11 @@ while IFS=$'\t' read -r kind host drv status; do
     reused=$((reused + 1))
   else
     changed=$((changed + 1))
-    if [ "$action" = build ]; then
-      if [ "$kind" = nixosConfigurations ] && [ "$host" = "$build_host" ]; then
-        nix build --no-link "${drv}^*"
-      else
-        printf 'host check: evaluated only %s.%s; its closure is built when landing from %s\n' "$kind" "$host" "$host"
-      fi
-    fi
+    case "$action:$kind:$([ "$host" = "$build_host" ] && echo here)" in
+      build:nixosConfigurations:here | offload:nixosConfigurations:) nix build --no-link "${drv}^*" ;;
+      select:*) ;;
+      *) printf 'host check: evaluated only %s.%s; its closure is built when landing from %s\n' "$kind" "$host" "$host" ;;
+    esac
   fi
 done < "$scratch/hosts.tsv"
 printf 'host check: evaluated %s base and %s head hosts; %s changed, %s reused\n' \
