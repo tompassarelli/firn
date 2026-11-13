@@ -190,14 +190,14 @@ let
     procs=/sys/fs/cgroup$group/cgroup.procs
     round=0
     while :; do
-      mapfile -t pids < "$procs" || exit 1
+      mapfile -t pids < "$procs" || { echo "buildbarn-clean-slot exit 1: cannot read $procs" >&2; exit 1; }
       others=()
       for pid in "''${pids[@]}"; do
         [ "$pid" = "$$" ] || [ "$pid" = "$PPID" ] || others+=("$pid")
       done
       [ "''${#others[@]}" -gt 0 ] || break
       if [ "$round" -ge 100 ]; then
-        echo "processes of the last action outlive the cleaning: ''${others[*]}" >&2
+        echo "buildbarn-clean-slot exit 2: processes of the last action outlive the cleaning: ''${others[*]}" >&2
         exit 1
       fi
       kill -STOP "''${others[@]}" 2> /dev/null
@@ -205,12 +205,12 @@ let
       round=$((round + 1))
       ${pkgs.coreutils}/bin/sleep 0.05
     done
-    ${pkgs.util-linux}/bin/ipcrm --all || exit 1
+    ${pkgs.util-linux}/bin/ipcrm --all || { echo "buildbarn-clean-slot exit 3: ipcrm --all failed" >&2; exit 1; }
     for directory in /tmp /var/tmp /dev/shm /dev/mqueue; do
       ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -type d ! -perm -700 -exec ${pkgs.coreutils}/bin/chmod u+rwx {} \;
       ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -delete
       if [ -n "$(${pkgs.coreutils}/bin/ls -A "$directory")" ]; then
-        echo "files of the last action outlive the cleaning in $directory" >&2
+        echo "buildbarn-clean-slot exit 4: files of the last action outlive the cleaning in $directory" >&2
         exit 1
       fi
     done
