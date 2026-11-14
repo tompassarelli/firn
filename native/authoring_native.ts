@@ -72,7 +72,7 @@ function loadSecretNames(bridge: AuthoringBridge, root: string): string[] | stri
     }
     if (inspected.kind === 1) names.push(stripYamlSuffix(entry));
   }
-  return names;
+  return names.sort();
 }
 function runSecret(bridge: AuthoringBridge, root: string, action: AuthoringAction): number {
   if (action._tag !== 'SecretList' && !safeSecretName((action as {name: string}).name)) return emitError(bridge, 'firn secret: invalid secret name\n');
