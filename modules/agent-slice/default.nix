@@ -45,7 +45,8 @@ in
       '';
     };
     diskCaps = lib.mkEnableOption ''
-      a read and a write rate cap for agent.slice and control.slice on the disk under the user's home.
+      a read and a write rate cap for agent.slice, control.slice and nix-daemon on the disk under the user's home.
+      nix-daemon is held too: on 2026-11-15 at 12:13 AM its nix-store --gc in system.slice kept the disk at 100% while agent.slice sat at 50 MiB/s and app.slice waited on disk 30% of the time.
       The disk runs no IO scheduler and io.cost is off, so IOWeight shares nothing; only io.max bounds fleet disk work, and dm-crypt charges its writes to the issuing cgroup on the whole disk, which systemd resolves from the home path.
       The caps name the home path, as north's capacity tick does for its runtime write cap, because systemd keeps one io.max entry per named path and a second name for the same disk overwrites the first one's rates (north#1553)'';
     diskReadMiBps = lib.mkOption {
@@ -72,31 +73,36 @@ in
         message = "every user unit that runs north must declare Slice = \"agent.slice\" (or \"control.slice\" for the control plane), so the kernel's CPU envelope covers it (north#834): ${lib.concatStringsSep ", " escapedUnits}";
       }
     ];
-    systemd.services."user@".serviceConfig.Delegate = "cpu cpuset io memory pids";
-    systemd.user.slices = {
-      agent = {
-        description = "Agent lanes — yielding compute class";
-        sliceConfig = {
-          CPUWeight = 20;
-          CPUQuota = "${toString cfg.cpuQuotaPercent}%";
-          IOWeight = 20;
-          MemoryHigh = "61G";
-        }
-        // diskCaps;
+    systemd = {
+      services = {
+        "user@".serviceConfig.Delegate = "cpu cpuset io memory pids";
+        nix-daemon.serviceConfig = diskCaps;
       };
-      control = {
-        description = "North control timers — placement, pace, relay and ledger run ahead of the agent work they control";
-        sliceConfig = {
-          CPUWeight = 250;
-          CPUQuota = "${toString cfg.controlCpuQuotaPercent}%";
-          IOWeight = 250;
-        }
-        // diskCaps;
-      };
-      app.sliceConfig.MemoryLow = "12G";
-      session.sliceConfig = {
-        CPUWeight = 300;
-        IOWeight = 300;
+      user.slices = {
+        agent = {
+          description = "Agent lanes — yielding compute class";
+          sliceConfig = {
+            CPUWeight = 20;
+            CPUQuota = "${toString cfg.cpuQuotaPercent}%";
+            IOWeight = 20;
+            MemoryHigh = "61G";
+          }
+          // diskCaps;
+        };
+        control = {
+          description = "North control timers — placement, pace, relay and ledger run ahead of the agent work they control";
+          sliceConfig = {
+            CPUWeight = 250;
+            CPUQuota = "${toString cfg.controlCpuQuotaPercent}%";
+            IOWeight = 250;
+          }
+          // diskCaps;
+        };
+        app.sliceConfig.MemoryLow = "12G";
+        session.sliceConfig = {
+          CPUWeight = 300;
+          IOWeight = 300;
+        };
       };
     };
   };
