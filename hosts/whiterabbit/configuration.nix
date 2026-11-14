@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }:
+{ lib, ... }:
 
 {
   myConfig.modules = {
@@ -149,42 +149,7 @@
     "vm.dirty_background_bytes" = 67108864;
     "vm.dirty_bytes" = 268435456;
   };
-  systemd.services = {
-    home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
-    disk-gens-1545 = {
-      description = "Delete NixOS system generations beyond the newest five, as box 1 of north#1545 allows; the weekly nix-gc timer then collects what they held";
-      wantedBy = [ "multi-user.target" ];
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        Nice = 19;
-        IOSchedulingClass = "idle";
-      };
-      script = ''
-        ${pkgs.nix}/bin/nix-env --profile /nix/var/nix/profiles/system --delete-generations +5
-      '';
-    };
-    disk-images-1545 = {
-      description = "Delete Tom's user Nix profile generations beyond the newest five and podman images no container uses, as box 1 of north#1545 allows; named volumes are never touched";
-      wantedBy = [ "multi-user.target" ];
-      path = [
-        "/run/wrappers"
-        pkgs.podman
-      ];
-      environment.XDG_RUNTIME_DIR = "/run/user/1000";
-      serviceConfig = {
-        Type = "oneshot";
-        RemainAfterExit = true;
-        User = "tom";
-        Nice = 19;
-        IOSchedulingClass = "idle";
-      };
-      script = ''
-        ${pkgs.nix}/bin/nix-env --profile /home/tom/.local/state/nix/profiles/profile --delete-generations +5
-        podman image prune --all --force
-      '';
-    };
-  };
+  systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = ''
     evdev:input:b0018v32ACp0006*
      KEYBOARD_KEY_100c6=f10
