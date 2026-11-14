@@ -83,7 +83,7 @@ in
     remote = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      example = "10.77.0.1:8379";
+      example = "192.0.2.1:8080";
       description = "host:port of the shared cache that a host with `server.enable` serves, read and written as the level behind the local disk through a local relay that answers every upstream failure as a miss within 3 s, so an outage leaves builds on the local disk";
     };
     server = {
