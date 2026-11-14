@@ -78,6 +78,8 @@ in
       services = {
         nexus-checks = {
           description = "Run the nexus standing checks and push alerts on change";
+          restartIfChanged = false;
+          stopIfChanged = false;
           serviceConfig = {
             Type = "oneshot";
             StateDirectory = "nexus-checks";
