@@ -82,6 +82,7 @@ in
           stopIfChanged = false;
           serviceConfig = {
             Type = "oneshot";
+            SuccessExitStatus = 1;
             StateDirectory = "nexus-checks";
             ExecStart = jobRun "nexus-checks" "${checks}/bin/nexus-checks run";
           };
