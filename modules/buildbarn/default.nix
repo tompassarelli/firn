@@ -495,6 +495,32 @@ let
     runCommandCleaner = [ "${cleanSlot}" ];
   };
 
+  executorUnits = [
+    "buildbarn-worker.service"
+  ]
+  ++ (if cfg.worker.runnerPerSlot then runnerUnits else [ "buildbarn-runner.service" ]);
+  followHold = pkgs.writeShellScript "buildbarn-follow-hold" ''
+    set -u
+    systemctl=${pkgs.systemd}/bin/systemctl
+    ${pkgs.util-linux}/bin/runuser -u ${cfg.worker.hold.user} -- ${cfg.worker.hold.command}
+    status=$?
+    case $status in
+      75)
+        if $systemctl is-active --quiet buildbarn-worker.service; then
+          echo "the hold check closed this host: stopping ${toString executorUnits}"
+          $systemctl --no-block stop ${toString executorUnits}
+        fi
+        ;;
+      0)
+        if ! $systemctl is-active --quiet buildbarn-worker.service; then
+          echo "the hold check opened this host: starting ${toString executorUnits}"
+          $systemctl --no-block start ${toString executorUnits}
+        fi
+        ;;
+      *) echo "the hold check exited $status: the executor stays as it is" ;;
+    esac
+  '';
+
   json = name: value: pkgs.writeText "buildbarn-${name}.json" (builtins.toJSON value);
 
   hardened = {
@@ -588,6 +614,18 @@ in
         type = lib.types.bool;
         default = false;
         description = "runs one runner per unit of `concurrency`, each as its own user buildbarn-run-N with its own build directory, input cache, /tmp and shared memory, one action at a time, and ends every process and temporary file of an action before the next starts there, so one action cannot change another's inputs or outputs; off keeps the one runner `runnerUser` describes";
+      };
+      hold = {
+        command = lib.mkOption {
+          type = lib.types.nullOr lib.types.str;
+          default = null;
+          description = "command run as `worker.hold.user` every 30 s while the host runs, which takes the worker and its runners out of the grid at run time, with no deploy: exit 75 stops them, exit 0 starts them, and any other exit leaves them as they are. Null: no check, the worker runs whenever the host does";
+        };
+        user = lib.mkOption {
+          type = lib.types.str;
+          default = "root";
+          description = "user `worker.hold.command` runs as";
+        };
       };
     };
     client = {
@@ -855,6 +893,25 @@ in
           )
         ) slots
       );
+    })
+    (lib.mkIf (cfg.worker.enable && cfg.worker.hold.command != null) {
+      systemd.services.buildbarn-hold = {
+        description = "Stop the Buildbarn worker and its runners while the hold check closes this host, and start them once it opens it";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = followHold;
+          TimeoutStartSec = 25;
+        };
+      };
+      systemd.timers.buildbarn-hold = {
+        description = "Run the Buildbarn hold check every 30 s";
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = 30;
+          OnUnitActiveSec = 30;
+          AccuracySec = 1;
+        };
+      };
     })
     (lib.mkIf cfg.client.enable {
       environment.etc."buckconfig.d/remote-execution" = {
