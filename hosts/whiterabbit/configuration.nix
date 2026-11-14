@@ -144,6 +144,10 @@
     chrome.default = true;
     stylix.chosenTheme = "everforest-dark-hard";
   };
+  boot.kernel.sysctl = {
+    "vm.dirty_background_bytes" = 67108864;
+    "vm.dirty_bytes" = 268435456;
+  };
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
   services.udev.extraHwdb = ''
     evdev:input:b0018v32ACp0006*
