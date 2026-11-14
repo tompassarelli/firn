@@ -619,7 +619,7 @@ in
         command = lib.mkOption {
           type = lib.types.nullOr lib.types.str;
           default = null;
-          description = "command run as `worker.hold.user` every 30 s while the host runs, which takes the worker and its runners out of the grid at run time, with no deploy: exit 75 stops them, exit 0 starts them, and any other exit leaves them as they are. Null: no check, the worker runs whenever the host does";
+          description = "command run as `worker.hold.user` every 30 s while the host runs, which takes the worker and its runners out of the grid at run time, with no deploy: exit 75 stops them, exit 0 starts them, and any other exit leaves them as they are; nothing else starts them, neither boot nor a deploy. Null: no check, the worker runs whenever the host does";
         };
         user = lib.mkOption {
           type = lib.types.str;
@@ -895,14 +895,20 @@ in
       );
     })
     (lib.mkIf (cfg.worker.enable && cfg.worker.hold.command != null) {
-      systemd.services.buildbarn-hold = {
-        description = "Stop the Buildbarn worker and its runners while the hold check closes this host, and start them once it opens it";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = followHold;
-          TimeoutStartSec = 25;
+      systemd.services =
+        lib.genAttrs (map (lib.removeSuffix ".service") executorUnits) (_: {
+          wantedBy = lib.mkForce [ ];
+        })
+        // {
+          buildbarn-hold = {
+            description = "Start the Buildbarn worker and its runners while the hold check opens this host, and stop them while it closes it; nothing else starts them, so neither a deploy nor a boot runs the executor on a held host";
+            serviceConfig = {
+              Type = "oneshot";
+              ExecStart = followHold;
+              TimeoutStartSec = 25;
+            };
+          };
         };
-      };
       systemd.timers.buildbarn-hold = {
         description = "Run the Buildbarn hold check every 30 s";
         wantedBy = [ "timers.target" ];
