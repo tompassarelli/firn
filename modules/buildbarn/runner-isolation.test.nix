@@ -217,6 +217,7 @@ pkgs.testers.runNixOSTest {
               "(setsid sleep 2718 > /dev/null 2>&1 &)",
               "(setsid sh -c 'while :; do sleep 2719; done' > /dev/null 2>&1 &)",
               "for directory in /tmp /var/tmp /dev/shm; do echo left > $directory/left; done",
+              "mkdir /dev/shm/kept",
               "mkdir /tmp/closed; echo left > /tmp/closed/left; chmod 0000 /tmp/closed",
               "ipcmk --shmem 4096 > /dev/null",
               "sleep 8",

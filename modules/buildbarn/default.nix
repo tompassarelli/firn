@@ -206,7 +206,6 @@ let
       round=$((round + 1))
       ${pkgs.coreutils}/bin/sleep 0.05
     done
-    ${pkgs.util-linux}/bin/ipcrm --all || { echo "buildbarn-clean-slot exit 3: ipcrm --all failed" >&2; exit 1; }
     for directory in /tmp /var/tmp /dev/shm /dev/mqueue; do
       ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -type d ! -perm -700 -exec ${pkgs.coreutils}/bin/chmod u+rwx {} \;
       ${pkgs.findutils}/bin/find "$directory" -xdev -mindepth 1 -delete
@@ -215,6 +214,7 @@ let
         exit 1
       fi
     done
+    ${pkgs.util-linux}/bin/ipcrm --all || { echo "buildbarn-clean-slot exit 3: ipcrm --all failed" >&2; exit 1; }
   '';
   closeSocket = pkgs.writeShellScript "buildbarn-close-runner-socket" ''
     set -eu
