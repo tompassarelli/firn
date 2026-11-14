@@ -9,16 +9,16 @@ in
       enable = lib.mkEnableOption "a signed Nix binary cache (Harmonia) that serves this host's store, so every other host substitutes what this build host built instead of building it";
       address = lib.mkOption {
         type = lib.types.str;
-        description = "address the cache listens on, a private-network address of this host";
+        description = "address the cache listens on: a private-network address of this host, or 0.0.0.0 when it serves more than one private link, since the firewall opens its port only on `interfaces`";
       };
       port = lib.mkOption {
         type = lib.types.port;
         default = 5000;
         description = "TCP port the cache listens on";
       };
-      interface = lib.mkOption {
-        type = lib.types.str;
-        description = "network interface whose firewall opens the port, the private link the address belongs to";
+      interfaces = lib.mkOption {
+        type = lib.types.nonEmptyListOf lib.types.str;
+        description = "the private links whose firewall opens the port, such as wg-nexus for Nexus and wg-build for the build hosts that substitute from this cache";
       };
       signingKeyFile = lib.mkOption {
         type = lib.types.str;
@@ -53,7 +53,9 @@ in
       };
       systemd.sockets.harmonia.socketConfig.FreeBind = true;
       nix.settings.secret-key-files = [ cfg.serve.signingKeyFile ];
-      networking.firewall.interfaces.${cfg.serve.interface}.allowedTCPPorts = [ cfg.serve.port ];
+      networking.firewall.interfaces = lib.genAttrs cfg.serve.interfaces (_: {
+        allowedTCPPorts = [ cfg.serve.port ];
+      });
     })
     (lib.mkIf (cfg.substituters != [ ]) {
       nix.settings = {
