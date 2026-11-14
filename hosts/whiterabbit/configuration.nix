@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }:
+{ lib, ... }:
 
 {
   myConfig.modules = {
@@ -150,21 +150,6 @@
     "vm.dirty_bytes" = 268435456;
   };
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
-  systemd.services.home-snapshots-drop = {
-    description = "Delete the two home snapshots btrbk left at 8:32 AM on 2026-11-08 when home-snapshots was turned off, which pin every file deleted from /home since (north#1545)";
-    wantedBy = [ "multi-user.target" ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      for snapshot in /home/.snapshots/home.20261108T0832 /home/.snapshots/home.20261108T0832_1; do
-        if [ -d "$snapshot" ]; then
-          ${pkgs.btrfs-progs}/bin/btrfs subvolume delete "$snapshot"
-        fi
-      done
-    '';
-  };
   services.udev.extraHwdb = ''
     evdev:input:b0018v32ACp0006*
      KEYBOARD_KEY_100c6=f10
