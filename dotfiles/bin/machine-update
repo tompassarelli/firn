@@ -76,8 +76,12 @@ main() {
     nix flake update
     cp -- flake.lock "$state/fresh.lock"
     select_lock "$state/fresh.lock" "$state/running.lock" flake.lock
-    jq -e --argjson now "$(date +%s)" '. as $l | $l.nodes[$l.nodes[$l.root].inputs.nixpkgs].locked.lastModified | type == "number" and ($now - . <= 259200)' flake.lock >/dev/null || {
-      echo 'machine-update: selected nixpkgs is older than three days; refusing a missing security bump' >&2; return 1;
+    jq -e --argjson now "$(date +%s)" --slurpfile running "$state/running.lock" '
+      def nixpkgs_modified: . as $l | $l.nodes[$l.nodes[$l.root].inputs.nixpkgs].locked.lastModified;
+      nixpkgs_modified as $selected | ($running[0] | nixpkgs_modified) as $main |
+      ($selected | type) == "number" and (($now - $selected <= 259200) or ($selected > $main))
+    ' flake.lock >/dev/null || {
+      echo 'machine-update: selected nixpkgs is older than three days and no newer than main; refusing a missing security bump' >&2; return 1;
     }
     north capacity host run \
       --class moderate --owner automatic-machine-update-build --timeout-seconds 1800 -- bash -c 'firn-runtime-update && firn repo build'
