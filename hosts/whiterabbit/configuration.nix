@@ -150,40 +150,19 @@
     "vm.dirty_bytes" = 268435456;
   };
   systemd.services.home-manager-tom.serviceConfig.TimeoutStartSec = lib.mkForce "90s";
-  systemd.services.disk-prune-1545 = {
-    description = "Delete the paths Tom approved on 2026-11-14 to free the home disk (north#1545): World of Warcraft in the Battle.net prefix and 385 Mak'gora evidence folders older than 7 days that no open issue cites, each named in disk-prune-1545.paths, then images no container uses";
+  systemd.services.home-snapshots-drop = {
+    description = "Delete the two home snapshots btrbk left at 8:32 AM on 2026-11-08 when home-snapshots was turned off, which pin every file deleted from /home since (north#1545)";
     wantedBy = [ "multi-user.target" ];
-    path = [
-      pkgs.coreutils
-      pkgs.podman
-    ];
-    environment.XDG_RUNTIME_DIR = "/run/user/1000";
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      User = "tom";
-      Nice = 19;
-      IOSchedulingClass = "idle";
     };
     script = ''
-      while IFS= read -r target; do
-        case "$target" in
-          */..*)
-            echo "disk-prune-1545: refusing $target" >&2
-            exit 1
-            ;;
-          "/home/tom/.local/share/Steam/steamapps/compatdata/3516115571/pfx/drive_c/Program Files (x86)/World of Warcraft" | /home/tom/.local/state/makgora/?*) ;;
-          *)
-            echo "disk-prune-1545: refusing $target" >&2
-            exit 1
-            ;;
-        esac
-        if [ -e "$target" ]; then
-          chmod -R u+w -- "''${target:?}"
-          rm -rf -- "''${target:?}"
+      for snapshot in /home/.snapshots/home.20261108T0832 /home/.snapshots/home.20261108T0832_1; do
+        if [ -d "$snapshot" ]; then
+          ${pkgs.btrfs-progs}/bin/btrfs subvolume delete "$snapshot"
         fi
-      done < ${./disk-prune-1545.paths}
-      podman image prune --all --force
+      done
     '';
   };
   services.udev.extraHwdb = ''
