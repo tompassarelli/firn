@@ -1,11 +1,12 @@
 { config, lib, ... }:
 let
   cfg = config.myConfig.modules.agent-slice;
-  diskCaps = lib.optionalAttrs (cfg.disk != null) {
-    IOReadBandwidthMax = "${cfg.disk} ${toString cfg.diskReadMiBps}M";
-    IOWriteBandwidthMax = "${cfg.disk} ${toString cfg.diskWriteMiBps}M";
-  };
   username = config.myConfig.modules.users.username;
+  home = config.users.users.${username}.home;
+  diskCaps = lib.optionalAttrs cfg.diskCaps {
+    IOReadBandwidthMax = "${home} ${toString cfg.diskReadMiBps}M";
+    IOWriteBandwidthMax = "${home} ${toString cfg.diskWriteMiBps}M";
+  };
   harnessSlices = [
     "agent.slice"
     "control.slice"
@@ -43,19 +44,15 @@ in
         At 200 it throttled 34% of periods under build load, so usage-sample (55 s start limit) timed out 8 times in 12 h on 2026-11-11 (north#1093).
       '';
     };
-    disk = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = ''
-        The whole block device under /home that agent.slice and control.slice are held to a read and a write rate on, or null for none.
-        The disk runs no IO scheduler and io.cost is off, so IOWeight shares nothing; only io.max bounds fleet disk work, and dm-crypt charges its writes to the issuing cgroup on this device, not on the dm device above it (north#1553).
-      '';
-    };
+    diskCaps = lib.mkEnableOption ''
+      a read and a write rate cap for agent.slice and control.slice on the disk under the user's home.
+      The disk runs no IO scheduler and io.cost is off, so IOWeight shares nothing; only io.max bounds fleet disk work, and dm-crypt charges its writes to the issuing cgroup on the whole disk, which systemd resolves from the home path.
+      The caps name the home path, as north's capacity tick does for its runtime write cap, because systemd keeps one io.max entry per named path and a second name for the same disk overwrites the first one's rates (north#1553)'';
     diskReadMiBps = lib.mkOption {
       type = lib.types.ints.positive;
       default = 200;
       description = ''
-        Read rate in MiB/s each of agent.slice and control.slice may draw from `disk`.
+        Read rate in MiB/s each of agent.slice and control.slice may draw from the disk under the home path.
         A guess: on 2026-11-14 at 11:02 PM control.slice read 646 MB/s and agent.slice 67 MB/s while app.slice sat at 79% full IO stall; three app.slice io.pressure readings with full avg300 under 5 at the fleet's evening load settle it (north#1553).
       '';
     };
@@ -63,7 +60,7 @@ in
       type = lib.types.ints.positive;
       default = 200;
       description = ''
-        Write rate in MiB/s each of agent.slice and control.slice may submit to `disk`.
+        Write rate in MiB/s each of agent.slice and control.slice may submit to the disk under the home path.
         The rate north's capacity tick had applied at runtime since a 2026-11-13 capture saw agent.slice writeback bursts of 1 to 2.3 GB/s; it now holds from boot (north#1553).
       '';
     };

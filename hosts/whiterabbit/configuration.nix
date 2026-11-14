@@ -2,7 +2,7 @@
 
 {
   myConfig.modules = {
-    agent-slice.disk = "/dev/disk/by-id/nvme-WD_BLACK_SN7100_4TB_25274D801949";
+    agent-slice.diskCaps = true;
     harness-health.enable = true;
     north-land.enable = true;
     north-land-shadow.enable = true;
