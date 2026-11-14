@@ -359,6 +359,28 @@ pkgs.testers.runNixOSTest {
           host.succeed("test \"$(stat -c '%a %U' /run/planted)\" = '700 buildbarn'")
           host.fail("${as "buildbarn-run-0"} rm /run/planted/runner.sock")
 
+      with subtest("a layout reset with both runners running restarts neither and leaves each slot running actions"):
+          host.wait_until_fails(f"pgrep -x sleep -u {','.join(slot_users)}", timeout=60)
+          started = host.succeed(f"systemctl show -P ExecMainStartTimestampMonotonic {units[0]} {units[1]}")
+          host.succeed(
+              "echo '8 slots' > /var/lib/buildbarn/build-directory-reset",
+              f"systemctl restart {units[2]}",
+              "test \"$(cat /var/lib/buildbarn/build-directory-reset)\" = '2 slots'",
+          )
+          for unit in units:
+              host.wait_until_succeeds(f"systemctl is-active {unit}", timeout=120)
+          assert host.succeed(f"systemctl show -P ExecMainStartTimestampMonotonic {units[0]} {units[1]}") == started, started
+          remote("true")
+          for number, user in enumerate(slot_users):
+              host.wait_until_fails(f"pgrep -x sleep -u {','.join(slot_users)}", timeout=60)
+              holders = dict([occupy(3160 + 2 * number)[::-1], occupy(3161 + 2 * number)[::-1]])
+              assert set(holders) == set(slot_users), holders
+              host.succeed(f"kill {holders[user]}")
+              host.wait_until_fails(f"pgrep -u {user} -x sleep", timeout=60)
+              remote("id -un > who", outputs=("who",))
+              assert output("who").strip() == user, output("who")
+              host.succeed(f"kill {' '.join(pid for holder, pid in holders.items() if holder != user)}")
+
       for unit in units:
           host.succeed(f"systemctl is-active {unit}")
     '';

@@ -156,6 +156,7 @@ let
   slotBuild = slot: "${buildDirectory}/${slot}";
   slotCache = slot: "${cacheDirectory}/${slot}";
   runnerUnits = map slotUnit slots;
+  keptSlotBuilds = lib.concatMapStringsSep " -o " (slot: "-path ./${slot}") slots;
   resetSlotDirectories = pkgs.writeShellScript "buildbarn-reset-slot-directories" ''
     set -eu
     marker=/var/lib/buildbarn/build-directory-reset
@@ -175,7 +176,7 @@ let
     if current; then
       exit 0
     fi
-    find . ${cacheDirectory} -xdev -mindepth 1 -delete
+    find . ${cacheDirectory} -xdev -mindepth 1 ! \( -type d \( ${keptSlotBuilds} \) \) -delete
     chown buildbarn:buildbarn .
     chmod 0711 .
     for slot in ${toString slots}; do
