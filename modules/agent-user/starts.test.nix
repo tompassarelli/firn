@@ -45,7 +45,7 @@ pkgs.testers.runNixOSTest {
 
     def worker(command):
         status, output = host.execute(
-            "systemd-run --quiet --machine=operator@.host --user --pipe --wait --collect -- "
+            "systemd-run --quiet --machine=operator@.host --user --pipe --wait --collect --expand-environment=no -- "
             f"/run/current-system/sw/bin/sh -c {shlex.quote(command)} 2>&1"
         )
         print(f"worker command {command!r} exited {status}:\n{output}")
@@ -57,7 +57,7 @@ pkgs.testers.runNixOSTest {
 
 
     def admitted(file, body):
-        host.succeed(f"runuser -u operator -- sh -c {shlex.quote(f'cat > {requests}/{file}')} <<'EOF'\n{body}\nEOF")
+        host.succeed(f"runuser -u operator -- sh -c {shlex.quote(f'cat > {requests}/.{file} && mv {requests}/.{file} {requests}/{file}')} <<'EOF'\n{body}\nEOF")
 
 
     host.start()
@@ -91,9 +91,9 @@ pkgs.testers.runNixOSTest {
     host.sleep(2)
     assert "Access denied" in output and host.execute(f"test -e {records}/f-worker.json")[0] != 0, "a worker command's machinectl shell of the fixed entry ran it as the agent"
     status, output = worker("${pkgs.systemd}/bin/busctl call --system org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager AttachProcessesToUnit ssau north-agent-starts.service / 1 $$")
-    assert status != 0, "a worker command attached itself to the starter unit"
+    assert status != 0 and "Process migration not available on non-delegated units" in output, "a worker command attached itself to the starter unit"
     status, output = worker("echo $$ > /sys/fs/cgroup/system.slice/north-agent-starts.service/cgroup.procs")
-    assert status != 0, "a worker command wrote itself into the starter unit's cgroup"
+    assert status != 0 and "Permission denied" in output, "a worker command wrote itself into the starter unit's cgroup"
     status, output = worker(f"${pkgs.strace}/bin/strace -e trace=none -p {starter} & sleep 2; kill $! 2>/dev/null; wait $!")
     assert "Operation not permitted" in output, "a worker command attached a tracer to the starter"
     status, output = worker(f"exec 3</proc/{starter}/mem")

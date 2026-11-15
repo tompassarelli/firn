@@ -547,6 +547,21 @@
                 source = inputs.north-source;
               };
         };
+        agent-local-starts-unchecked = nixpkgs.legacyPackages.x86_64-linux.testers.testBuildFailure' {
+          drv =
+            (import ./modules/agent-user/starts.test.nix {
+              pkgs = nixpkgs.legacyPackages.x86_64-linux;
+              package =
+                nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage ./modules/agent-user/starts-package.nix
+                  {
+                    source = inputs.north-source;
+                  };
+              caller = false;
+            }).config.rawTestDerivation;
+          expectedBuilderLogEntries = [
+            "a worker command's machinectl shell of the fixed entry ran it as the agent"
+          ];
+        };
         agent-login = import ./modules/agent-user/check.nix {
           inherit (nixpkgs) lib;
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
