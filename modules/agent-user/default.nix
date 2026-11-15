@@ -69,7 +69,7 @@ in
       linger = true;
       shell = loginShell;
       hashedPassword = "!";
-      description = "north agent sessions";
+      description = "agent sessions run by north";
     };
     assertions = [
       {
