@@ -26,6 +26,16 @@ in
       type = lib.types.str;
       description = "Absolute path of the threads ledger key, loaded by systemd as a credential for the ledger forward";
     };
+    githubAppKeyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Absolute path of the North Fleet App key (github-app.yaml), decrypted at system activation and loaded by systemd as a credential, so the broker mints the agent App's installation tokens here; null leaves the broker without the key";
+    };
+    landerAppKeyFile = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      description = "Absolute path of the North Lander App key (north-lander.yaml), decrypted at system activation and loaded by systemd as a credential, so the broker mints the lander's installation tokens here; null leaves the broker without the key";
+    };
     threadsLedgerHost = lib.mkOption {
       type = lib.types.str;
       description = "Host name of the threads ledger, whose key the broker's ssh trusts from the system known-hosts file";
@@ -69,7 +79,9 @@ in
         LoadCredential = [
           "github-installation-token:${cfg.githubInstallationTokenFile}"
           "threads-ledger.key:${cfg.threadsLedgerKeyFile}"
-        ];
+        ]
+        ++ lib.optional (cfg.githubAppKeyFile != null) "github-app.yaml:${cfg.githubAppKeyFile}"
+        ++ lib.optional (cfg.landerAppKeyFile != null) "north-lander.yaml:${cfg.landerAppKeyFile}";
         RuntimeDirectory = [
           "north-broker"
           "agent-brokers"
