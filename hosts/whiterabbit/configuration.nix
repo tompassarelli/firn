@@ -3,6 +3,7 @@
 {
   myConfig.modules = {
     agent-slice.diskCaps = true;
+    job-run.scratchInMemory = 8;
     harness-health.enable = true;
     seat-probe.enable = true;
     north-land.enable = true;

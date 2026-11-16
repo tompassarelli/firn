@@ -6,6 +6,7 @@
 }:
 
 let
+  cfg = config.myConfig.modules.job-run;
   homeDir = config.myConfig.modules.users.homeDir;
   username = config.myConfig.modules.users.username;
   northBin = "${homeDir}/.local/state/north/current/tree/bin";
@@ -71,6 +72,8 @@ let
     lib.filter (job: readsCheckout job.unit) (userTimed ++ systemTimed)
   );
   runner = "${northBin}/north job-run ";
+  scratchRoot = "/run/north-scratch";
+  scratch = lib.optionalString (cfg.scratchInMemory != null) " --scratch ${scratchRoot}";
   bash = "${pkgs.bash}/bin/bash";
   bashDirs = [
     "/run/current-system/sw/bin"
@@ -104,20 +107,59 @@ let
   );
 in
 {
-  _module.args = {
-    inherit northBin unitPath;
-    jobRun =
-      name: cmd:
-      "${bash} ${northBin}/north job-run --path ${recordPath} --user ${username} ${name} -- ${cmd}";
+  options.myConfig.modules.job-run.scratchInMemory = lib.mkOption {
+    type = lib.types.nullOr lib.types.ints.positive;
+    default = null;
+    description = ''
+      When set, /run/north-scratch is a tmpfs of this many GiB owned by the user, and every unit started through jobRun gets a fresh
+      TMPDIR there (/run/north-scratch/NAME, memory), which north job-run empties before the job and removes after it. A mount of its own,
+      not the runtime directory, so a job that fills its scratch cannot fill the desktop's sockets and pipes beside it.
+      On 2026-11-16 the laptop's /tmp was the encrypted btrfs root: runtime follow's canary wrote about 1 GB of scratch a tick there and
+      stalled the desktop, and killed runs had left 106 GB in about 6,000 directories (north#1553).
+      Build hosts leave it unset: they have no desktop to stall, their scratch sits beside builds on a disk the lease reaper trims,
+      and their memory is held for builds.
+      The size is a guess over the canary's 1.3 GB peak a run; a job refused for ENOSPC in its TMPDIR would settle it.
+    '';
   };
-  assertions = [
-    {
-      assertion = checkoutReaders == [ ];
-      message = "scheduled jobs must run north code from the promoted runtime (${northBin}), not the north checkout: ${lib.concatStringsSep ", " checkoutReaders}";
-    }
-    {
-      assertion = bashlessJobs == [ ];
-      message = "a unit running north job-run must find bash on its PATH, since the promoted north tree's programs start with #!/usr/bin/env bash (put ${pkgs.bash}/bin or /run/current-system/sw/bin on it): ${lib.concatStringsSep ", " bashlessJobs}";
-    }
-  ];
+  config = {
+    fileSystems.${scratchRoot} = lib.mkIf (cfg.scratchInMemory != null) {
+      device = "tmpfs";
+      fsType = "tmpfs";
+      options = [
+        "size=${toString cfg.scratchInMemory}G"
+        "mode=0700"
+        "nosuid"
+        "nodev"
+      ];
+    };
+    systemd.services.north-scratch-owner = lib.mkIf (cfg.scratchInMemory != null) {
+      description = "Give the scratch tmpfs to the user as soon as it is mounted, at boot or on a live switch";
+      after = [ "run-north\\x2dscratch.mount" ];
+      bindsTo = [ "run-north\\x2dscratch.mount" ];
+      wantedBy = [ "run-north\\x2dscratch.mount" ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        ExecStart = "${pkgs.coreutils}/bin/chown ${username}:${
+          config.users.users.${username}.group
+        } ${scratchRoot}";
+      };
+    };
+    _module.args = {
+      inherit northBin unitPath;
+      jobRun =
+        name: cmd:
+        "${bash} ${northBin}/north job-run --path ${recordPath} --user ${username}${scratch} ${name} -- ${cmd}";
+    };
+    assertions = [
+      {
+        assertion = checkoutReaders == [ ];
+        message = "scheduled jobs must run north code from the promoted runtime (${northBin}), not the north checkout: ${lib.concatStringsSep ", " checkoutReaders}";
+      }
+      {
+        assertion = bashlessJobs == [ ];
+        message = "a unit running north job-run must find bash on its PATH, since the promoted north tree's programs start with #!/usr/bin/env bash (put ${pkgs.bash}/bin or /run/current-system/sw/bin on it): ${lib.concatStringsSep ", " bashlessJobs}";
+      }
+    ];
+  };
 }

@@ -17,7 +17,10 @@
         "sd_mod"
       ];
       kernelModules = [ ];
-      luks.devices.cryptroot.device = "/dev/disk/by-uuid/0fb2764a-15e7-4e38-bbac-5542c5ca2ac2";
+      luks.devices.cryptroot = {
+        device = "/dev/disk/by-uuid/0fb2764a-15e7-4e38-bbac-5542c5ca2ac2";
+        allowDiscards = true;
+      };
     };
     kernelModules = [ "kvm-amd" ];
     extraModulePackages = [ ];
