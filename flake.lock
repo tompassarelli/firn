@@ -408,11 +408,11 @@
     "north-source": {
       "flake": false,
       "locked": {
-        "lastModified": 1794564212,
-        "narHash": "sha256-YJiuvIBaB5yyOlKbDv1NkxpwB65jq36N8R1I7iLtcE8=",
+        "lastModified": 1794813091,
+        "narHash": "sha256-1DmQVHpNfFIa6eL56XP+sx6RN+NRD+YesmgdZoRgwDs=",
         "owner": "tompassarelli",
         "repo": "north",
-        "rev": "76a7a9c8229fd13114a0065c5aff4f55184b1d7d",
+        "rev": "8547652bbfaff6d2ff9025d6e5bb0aaadce2cee9",
         "type": "github"
       },
       "original": {
