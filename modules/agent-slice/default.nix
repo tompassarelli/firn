@@ -11,6 +11,7 @@ let
     "agent.slice"
     "control.slice"
   ];
+  outsideEnvelope = [ "seat-probe" ];
   runsNorth =
     service:
     lib.any (lib.hasSuffix "/bin/north") (
@@ -18,7 +19,10 @@ let
     );
   escapedUnits = lib.attrNames (
     lib.filterAttrs (
-      _: service: runsNorth service && !lib.elem (service.Service.Slice or null) harnessSlices
+      name: service:
+      runsNorth service
+      && !lib.elem name outsideEnvelope
+      && !lib.elem (service.Service.Slice or null) harnessSlices
     ) config.home-manager.users.${username}.systemd.user.services
   );
 in

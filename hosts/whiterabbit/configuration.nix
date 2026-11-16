@@ -4,6 +4,7 @@
   myConfig.modules = {
     agent-slice.diskCaps = true;
     harness-health.enable = true;
+    seat-probe.enable = true;
     north-land.enable = true;
     north-land-shadow.enable = true;
     system.stateVersion = "25.05";
@@ -45,6 +46,7 @@
           "swaybg.service"
           "swayidle.service"
           "seat-idle-hint.service"
+          "seat-probe.service"
           "wl-clip-persist.service"
           "wl-gammarelay.service"
           "emacs.service"
