@@ -280,6 +280,10 @@
                     inherit (final.unstable) rustPlatform;
                     source = inputs.north-source;
                   };
+                  north-switch = final.callPackage ./modules/north-switch/package.nix {
+                    inherit (final.unstable) rustPlatform;
+                    source = inputs.north-source;
+                  };
                   glide = final.unstable.rustPlatform.buildRustPackage {
                     pname = "glide";
                     version = "git";
@@ -532,7 +536,7 @@
         };
         agent-offload = import ./modules/agent-user/offload.test.nix {
           pkgs = nixpkgs.legacyPackages.x86_64-linux;
-          fill = "${inputs.north-source}/crates/north-runtime/src/land_offload/ship/fill.sh";
+          fill = "${inputs.north-source}/crates/north-offload/src/land_offload/ship/fill.sh";
           source = inputs.north-source;
           rustPlatform = nixpkgs-unstable.legacyPackages.x86_64-linux.rustPlatform;
         };
