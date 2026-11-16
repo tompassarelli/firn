@@ -2,7 +2,6 @@
   config,
   lib,
   pkgs,
-  jobRun,
   northBin,
   unitPath,
   ...
@@ -13,7 +12,6 @@ let
   username = config.myConfig.modules.users.username;
   inherit (cfg) rest;
   description = "capacity-watchdog: sample load, PSI, cgroup CPU and unleased processes every 30 s; log incidents and stop stray git maintenance";
-  nightly = "git-maintenance-nightly: run git maintenance for ~/code/*/main one repo at a time inside a moderate capacity lease";
   path = "PATH=${unitPath}:${
     lib.makeBinPath [
       pkgs.bun
@@ -78,29 +76,6 @@ in
             };
             Install.WantedBy = [ "default.target" ];
           };
-          git-maintenance-nightly = {
-            Unit = {
-              Description = nightly;
-              OnFailure = [ "update-notify@%n.service" ];
-              X-SwitchMethod = "keep-old";
-            };
-            Service = {
-              Slice = "agent.slice";
-              Type = "oneshot";
-              Nice = 10;
-              TimeoutStartSec = "4h";
-              Environment = [ path ];
-              ExecStart = jobRun "git-maintenance-nightly" "${northBin}/north git-maintenance-nightly";
-            };
-          };
-        };
-        timers.git-maintenance-nightly = {
-          Unit.Description = nightly;
-          Timer = {
-            OnCalendar = "*-*-* 03:17:00";
-            Persistent = true;
-          };
-          Install.WantedBy = [ "timers.target" ];
         };
       };
     };

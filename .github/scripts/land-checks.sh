@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mode=${1:?native|dotfiles|drift|scripts|flake|host}
-gated() { [ "$(north land host-gate --switch 2>/dev/null)" = on ]; }
 if [ "$mode" = drift ]; then
   FIRN_REPO="$PWD" dotfiles/bin/firn-check
-  if gated; then bash .github/scripts/host-diff.sh offload; else bash .github/scripts/host-diff.sh build; fi
+  bash .github/scripts/host-diff.sh build
   exit
 fi
 if [ "$mode" = host ]; then
-  if gated; then
-    printf 'host check: this host builds its own toplevel in its delivery-liveness floor once the landing queues are empty; a changed toplevel is built by the drift line on a build host\n'
-    exit 0
-  fi
   exec nix flake check --no-update-lock-file
 fi
 if [ "$mode" = flake ]; then
