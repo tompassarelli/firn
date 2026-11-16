@@ -280,10 +280,6 @@
                     inherit (final.unstable) rustPlatform;
                     source = inputs.north-source;
                   };
-                  north-switch = final.callPackage ./modules/north-switch/package.nix {
-                    inherit (final.unstable) rustPlatform;
-                    source = inputs.north-source;
-                  };
                   glide = final.unstable.rustPlatform.buildRustPackage {
                     pname = "glide";
                     version = "git";
