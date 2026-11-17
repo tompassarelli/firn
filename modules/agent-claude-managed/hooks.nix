@@ -37,7 +37,6 @@ in
   Stop = [ (entry [ "dispatch" ]) ];
   SubagentStop = [ (entry [ "dispatch" ]) ];
   UserPromptSubmit = [
-    (entry [ "prompt-grounding" ])
     (entry [ "dispatch" ])
   ];
 }
