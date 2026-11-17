@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-mode=${1:?native|dotfiles|drift|scripts|flake|host}
+mode=${1:?native|dotfiles|drift|scripts|flake}
 if [ "$mode" = drift ]; then
   FIRN_REPO="$PWD" dotfiles/bin/firn-check
-  bash .github/scripts/host-diff.sh build
+  bash .github/scripts/host-diff.sh offload
   exit
-fi
-if [ "$mode" = host ]; then
-  exec nix flake check --no-update-lock-file
 fi
 if [ "$mode" = flake ]; then
   json=$(nix eval --no-update-lock-file --json "path:$PWD#checks.x86_64-linux" --apply builtins.attrNames)
