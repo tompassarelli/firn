@@ -12,7 +12,6 @@ mkdir -p "$state"
 
 alarm() {
   printf 'firn host follow: %s\n' "$1" >&2
-  north fleet send --from service:firn-host-follow proxy "firn host follow: $1" || printf 'firn host follow: proxy alarm delivery failed\n' >&2
 }
 
 git -C "$firn" fetch --quiet origin main && git -C "$overlay" fetch --quiet origin main || exit 75

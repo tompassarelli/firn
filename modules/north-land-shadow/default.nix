@@ -46,7 +46,6 @@ in
               }"
               "SAFE_PUSH_LAND_RUNNER=gex45"
             ];
-            ExecStartPre = "-${pkgs.coreutils}/bin/timeout 300 ${northBin}/north land doctor";
             ExecStart = jobRun "north-land-shadow" "${northBin}/north land shadow tick";
           };
         };

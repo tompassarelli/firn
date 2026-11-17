@@ -42,7 +42,6 @@ in
               }"
             ];
             ExecStart = jobRun "worker-ledger" "${northBin}/north ledger worker";
-            ExecStartPost = "${northBin}/north fleet usage --refresh";
           };
         };
         timers.worker-ledger = {

@@ -14,9 +14,7 @@ let
   description = "north-runtime-follow: every 20 s promote origin/main of north to the live runtime";
 in
 {
-  options.myConfig.modules.north-runtime-follow.enable = lib.mkEnableOption description // {
-    default = config.myConfig.modules.agent-runtime-update.enable;
-  };
+  options.myConfig.modules.north-runtime-follow.enable = lib.mkEnableOption description;
   config = lib.mkIf cfg.enable {
     home-manager.users.${username} = _: {
       systemd.user = {

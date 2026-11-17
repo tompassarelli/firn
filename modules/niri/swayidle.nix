@@ -8,7 +8,6 @@
 let
   cfg = config.myConfig.modules.niri;
   username = config.myConfig.modules.users.username;
-  busy = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north config agents busy";
   idleState = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north desktop-idle-state";
   capacity = "${config.myConfig.modules.users.homeDir}/.local/share/north/bin/north capacity host mode";
 in
@@ -23,7 +22,7 @@ in
           Requisite = [ "graphical-session.target" ];
         };
         Service = {
-          ExecStart = "${pkgs.swayidle}/bin/swayidle -w timeout 60 '${idleState} idle' resume '${idleState} active' timeout 601 '${busy} || niri msg action power-off-monitors' timeout 600 '${busy} || swaylock -f' timeout 600 '${capacity} away >/dev/null' resume '${capacity} present >/dev/null' before-sleep 'swaylock -f'";
+          ExecStart = "${pkgs.swayidle}/bin/swayidle -w timeout 60 '${idleState} idle' resume '${idleState} active' timeout 601 'niri msg action power-off-monitors' timeout 600 'swaylock -f' timeout 600 '${capacity} away >/dev/null' resume '${capacity} present >/dev/null' before-sleep 'swaylock -f'";
           Restart = "on-failure";
         };
         Install.WantedBy = [ "niri.service" ];

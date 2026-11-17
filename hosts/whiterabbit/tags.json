@@ -104,12 +104,10 @@
   ],
   "adds": {
     "development": [
-      "agent-runtime-update",
+      "north-runtime-follow",
       "alsa-lib",
       "claude",
       "coverage-map-refresh",
-      "north-land-drill",
-      "fleet-tick",
       "gh-broker",
       "laptop-runner",
       "machine-update",
@@ -123,7 +121,6 @@
       "proton-log-watchdog",
       "socat",
       "update-notify",
-      "usage-sample",
       "verify-north"
     ],
     "browsers": [

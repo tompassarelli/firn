@@ -16,7 +16,7 @@ in
       lib.mkEnableOption "north-switch: `north fleet off` and `north fleet on` from the host's own closure, so they answer while north's runtime is missing or broken"
       // {
         default =
-          config.myConfig.modules.agent-runtime-update.enable || config.myConfig.modules.bash.enable;
+          config.myConfig.modules.north-runtime-follow.enable || config.myConfig.modules.bash.enable;
       };
     host = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -34,7 +34,6 @@ in
       default = [
         "north-*"
         "fleet-*"
-        "agent-runtime-update.*"
         "build-time.*"
         "coverage-map-refresh.*"
         "firn-delivery-liveness.*"
@@ -44,10 +43,8 @@ in
         "laptop-runner.*"
         "lease-reaper.*"
         "mutant-sweep.*"
-        "ops-check.*"
         "pace-enforcement.*"
         "proxy-terminal-watch.*"
-        "usage-sample.*"
         "verify-north.*"
         "worker-ledger.*"
       ];
