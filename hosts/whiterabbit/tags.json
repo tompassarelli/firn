@@ -91,8 +91,7 @@
     "users",
     "vscode",
     "windows-vm",
-    "wm-facts",
-    "worker-ledger"
+    "wm-facts"
   ],
   "turnsOff": [
     "bluetooth",
@@ -114,14 +113,12 @@
       "mutant-sweep",
       "north-graph-retain",
       "opencode",
-      "pace-enforcement",
       "pi",
       "procps",
       "proxy-terminal-watch",
       "proton-log-watchdog",
       "socat",
-      "update-notify",
-      "verify-north"
+      "update-notify"
     ],
     "browsers": [
       "chrome",

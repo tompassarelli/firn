@@ -38,15 +38,11 @@ in
         "coverage-map-refresh.*"
         "firn-delivery-liveness.*"
         "firn-host-follow.*"
-        "harness-health.*"
         "lane-gc.*"
         "laptop-runner.*"
         "lease-reaper.*"
         "mutant-sweep.*"
-        "pace-enforcement.*"
         "proxy-terminal-watch.*"
-        "verify-north.*"
-        "worker-ledger.*"
       ];
       description = "Globs of the user units that are the fleet's: `north fleet off` stops the running ones and `north fleet on` starts them again.";
     };

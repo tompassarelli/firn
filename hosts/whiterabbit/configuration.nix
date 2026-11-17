@@ -4,10 +4,8 @@
   myConfig.modules = {
     agent-slice.diskCaps = true;
     job-run.scratchInMemory = 8;
-    harness-health.enable = true;
     seat-probe.enable = true;
     north-land.enable = true;
-    north-land-shadow.enable = true;
     system.stateVersion = "25.05";
 
     capacity-watchdog = {
@@ -71,14 +69,10 @@
           "app-niri-*.scope"
           "init.scope"
           "laptop-runner.timer"
-          "pace-enforcement.timer"
-          "harness-health.timer"
           "proxy-terminal-watch.timer"
-          "worker-ledger.timer"
           "lane-gc.timer"
           "makgora-goals-perf.timer"
           "makgora-retain.timer"
-          "verify-north.timer"
           "nexus-pull.timer"
           "nexus-restore-test.timer"
           "machine-update.timer"
@@ -87,7 +81,6 @@
           "north-graph-retain.timer"
           "north-land@*.service"
           "north-stable-hold.service"
-          "north-land-shadow.timer"
           "firn-delivery-liveness.timer"
           "mutant-sweep.timer"
           "proton-log-watchdog.timer"
