@@ -3,19 +3,13 @@
   lib,
   pkgs,
   northBin,
-  unitPath,
   ...
 }:
 
 let
   cfg = config.myConfig.modules.laptop-runner;
   username = config.myConfig.modules.users.username;
-  notify =
-    if config.myConfig.modules.nexus-alerts.enable then
-      "nexus-notify@%n.service"
-    else
-      "update-notify@%n.service";
-  description = "laptop-runner: each minute and on wake, run jobs queued on the ledger for this host's placement, one at a time";
+  description = "laptop-auto on the laptop: every 30 s apply the capacity mode, battery shedding and battery alerts (the ledger job runner went with the fleet, north#1650)";
 in
 {
   options.myConfig.modules.laptop-runner = {
@@ -23,7 +17,7 @@ in
     placement = lib.mkOption {
       type = lib.types.str;
       default = "laptop";
-      description = "ledger queue placement this host's runner takes jobs for";
+      description = "this host's placement; laptop-auto runs only where it is laptop";
     };
   };
   config = lib.mkIf cfg.enable {
@@ -54,41 +48,6 @@ in
           Timer = {
             OnBootSec = "1min";
             OnUnitActiveSec = "30s";
-          };
-          Install.WantedBy = [ "timers.target" ];
-        };
-        services.laptop-runner = {
-          Unit = {
-            Description = description;
-            OnFailure = [ notify ];
-            X-SwitchMethod = "keep-old";
-          };
-          Service = {
-            Slice = "agent.slice";
-            Type = "oneshot";
-            Environment = [
-              "PATH=${unitPath}:${
-                lib.makeBinPath [
-                  pkgs.bash
-                  pkgs.coreutils
-                  pkgs.jq
-                  pkgs.util-linux
-                  pkgs.openssh
-                  pkgs.python3
-                  pkgs.git
-                  pkgs.bun
-                ]
-              }:/etc/profiles/per-user/${username}/bin:/run/current-system/sw/bin"
-              "LAPTOP_RUNNER_PLACEMENT=${cfg.placement}"
-            ];
-            ExecStart = "${northBin}/north laptop-runner";
-          };
-        };
-        timers.laptop-runner = {
-          Unit.Description = description;
-          Timer = {
-            OnCalendar = "minutely";
-            Persistent = true;
           };
           Install.WantedBy = [ "timers.target" ];
         };

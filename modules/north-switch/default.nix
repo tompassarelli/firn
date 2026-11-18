@@ -39,7 +39,6 @@ in
         "firn-delivery-liveness.*"
         "firn-host-follow.*"
         "lane-gc.*"
-        "laptop-runner.*"
         "lease-reaper.*"
         "mutant-sweep.*"
         "proxy-terminal-watch.*"

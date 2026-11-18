@@ -68,7 +68,6 @@
           "dconf.service"
           "app-niri-*.scope"
           "init.scope"
-          "laptop-runner.timer"
           "proxy-terminal-watch.timer"
           "lane-gc.timer"
           "makgora-goals-perf.timer"
