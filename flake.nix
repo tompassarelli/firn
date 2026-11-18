@@ -62,9 +62,10 @@
       url = "github:tompassarelli/north";
       flake = false;
     };
-    typenix = {
-      url = "github:ryanrasti/typenix";
+    tix = {
+      url = "github:JRMurr/tix";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
     };
   };
   outputs =
@@ -648,8 +649,7 @@
             pkgs.git
             pkgs.pre-commit
             (betterleaksRelease pkgs pkgs.betterleaks)
-            inputs.typenix.packages.x86_64-linux.typenix
-            pkgs.nil
+            inputs.tix.packages.x86_64-linux.default
             pkgs.nixfmt
           ];
           shellHook = ''
