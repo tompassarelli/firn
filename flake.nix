@@ -62,6 +62,10 @@
       url = "github:tompassarelli/north";
       flake = false;
     };
+    typenix = {
+      url = "github:ryanrasti/typenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
   outputs =
     inputs@{
@@ -644,6 +648,9 @@
             pkgs.git
             pkgs.pre-commit
             (betterleaksRelease pkgs pkgs.betterleaks)
+            inputs.typenix.packages.x86_64-linux.typenix
+            pkgs.nil
+            pkgs.nixfmt
           ];
           shellHook = ''
             hooks=$(git rev-parse --git-common-dir 2>/dev/null)/hooks

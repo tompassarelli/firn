@@ -52,6 +52,25 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
+-- LSP setup for Nix: typenix for types, nil for nixfmt formatting
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "nix",
+  callback = function(ev)
+    local root_dir = vim.fs.root(ev.buf, {"flake.nix", ".git"})
+    vim.lsp.start({
+      name = "typenix",
+      cmd = {"typenix", "--lsp", "--stdio"},
+      root_dir = root_dir,
+    })
+    vim.lsp.start({
+      name = "nil",
+      cmd = {"nil"},
+      root_dir = root_dir,
+      settings = { ["nil"] = { formatting = { command = {"nixfmt"} } } },
+    })
+  end,
+})
+
 -- Common leader key mappings
 vim.keymap.set("n", "<leader>w", ":w<CR>", { desc = "Save file" })
 vim.keymap.set("n", "<leader>q", ":q<CR>", { desc = "Quit" })
@@ -72,7 +91,10 @@ vim.api.nvim_create_autocmd("LspAttach", {
     vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, opts)
     vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
     vim.keymap.set("n", "<leader>f", function()
-      vim.lsp.buf.format { async = true }
+      vim.lsp.buf.format {
+        async = true,
+        filter = function(client) return client.name ~= "typenix" end,
+      }
     end, opts)
     vim.keymap.set("n", "<leader>gd", vim.lsp.buf.definition, opts)
     vim.keymap.set("n", "<leader>gr", vim.lsp.buf.references, opts)
