@@ -8,7 +8,6 @@
 (defalias slashshift (tap-hold-order 0 0 / lsft))
 (defalias enteralt (tap-hold-order 0 0 ret ralt))
 (defalias apostrophenum (tap-hold-order 0 0 ' (layer-while-held numbers)))
-(defalias m4shift (tap-hold-order 0 0 mbck lsft))
 (defalias m5ctrl (tap-hold-order 0 0 mfwd lctl))
 (defalias bracketpair (macro [ ] left))
 
@@ -32,7 +31,7 @@
   lctl a    s    d    f    g    ]    h    j    k    l    ;             '    ret
   @lshiftcaps @slashshift z x    c    v    b    /    n    m    ,    .    rsft
   lctl lalt lmet      spc                 @enteralt ralt f20  rctl
-  @m4shift @m5ctrl f10
+  lalt @m5ctrl f10
 )
 
 ;; Numbers layer - qwert=12345, uiop[=67890, jkl;=arrows, m,.=home+-end
