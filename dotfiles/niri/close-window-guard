@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+window="$(niri msg -j focused-window)"
+id="$(jq -r '.id // empty' <<<"$window")"
+[[ -n "$id" ]] || exit 0
+[[ "$(jq -r '.app_id // ""' <<<"$window")" == steam_app_* ]] || exec niri msg action close-window
+
+armed="$XDG_RUNTIME_DIR/close-window-guard"
+now="$(date +%s)"
+armed_id="" armed_at=0
+read -r armed_id armed_at 2>/dev/null <"$armed" || true
+if [[ "$armed_id" == "$id" ]] && ((now - armed_at <= 3)); then
+  rm -f "$armed"
+  exec niri msg action close-window
+fi
+printf '%s %s\n' "$id" "$now" >"$armed"
+notify-send -t 3000 "Press Super+Q again to close" "$(jq -r '.title // ""' <<<"$window")"

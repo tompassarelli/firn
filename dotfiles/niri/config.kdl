@@ -462,7 +462,7 @@ binds {
     // or do a four-finger swipe up on a touchpad.
     Mod+A repeat=false { toggle-overview; }
 
-    Mod+Q repeat=false { close-window; }
+    Mod+Q repeat=false hotkey-overlay-title="Close Window (games need a second press)" { spawn "/home/tom/code/nixos-config/dotfiles/niri/close-window-guard"; }
 
     Mod+Left  { focus-column-left; }
     Mod+Down  { focus-window-down; }
